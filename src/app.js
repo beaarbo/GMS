@@ -172,6 +172,9 @@ function createApp({
       isRegistrationOpen,
       today,
       timeLeft,
+      currentPath: req.path,
+      // "pending" becomes "Pending" for display.
+      statusLabel: (status) => `${String(status).charAt(0).toUpperCase()}${String(status).slice(1)}`,
       documentLabel,
       documentTypeFor,
       eventDatesText: (c) => formatEventDates(getEventDates(db, c.competition_id ?? c.id)),

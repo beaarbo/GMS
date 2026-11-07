@@ -41,7 +41,7 @@
             <tr>
               <td><a href="/club/competitions/<%= r.competition_id %>"><%= r.name %></a></td>
               <td><%= eventDatesText(r) %></td>
-              <td><span class="badge <%= r.status %>"><%= r.status %></span></td>
+              <td><span class="badge <%= r.status %>"><%= statusLabel(r.status) %></span></td>
               <td class="num"><%= r.n %></td>
             </tr>
           <% }) %>

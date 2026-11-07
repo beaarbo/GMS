@@ -69,7 +69,7 @@
               <td><strong><%= r.last_name %>, <%= r.first_name %></strong></td>
               <td><%= GENDERS[r.gender] %> · <%= r.age_group %> · <%= r.belt_group %> · <%= r.weight_class %></td>
               <td>
-                <span class="badge <%= r.status %>"><%= r.status %></span>
+                <span class="badge <%= r.status %>"><%= statusLabel(r.status) %></span>
                 <% if (r.review_note) { %><div class="hint"><%= r.review_note %></div><% } %>
               </td>
               <td>

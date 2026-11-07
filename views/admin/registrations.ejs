@@ -93,7 +93,7 @@
                     <span class="badge rejected">No document</span>
                   <% } %>
                 </td>
-                <td><span class="badge <%= r.status %>"><%= r.status %></span></td>
+                <td><span class="badge <%= r.status %>"><%= statusLabel(r.status) %></span></td>
                 <td><input class="note-input" name="note_<%= r.id %>" value="<%= r.review_note %>" maxlength="300" aria-label="Rejection reason for <%= r.first_name %> <%= r.last_name %>"></td>
                 <td>
                   <div class="actions">

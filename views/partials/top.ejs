@@ -11,18 +11,27 @@
 <header class="topbar">
   <div class="corner-stripe"></div>
   <div class="topbar-inner">
-    <a class="brand" href="/">Game Management System</a>
+    <a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span>Game Management System</a>
+    <%
+      // Marks the section the visitor is in. Admin sub-pages belong to the dashboard.
+      const current = (href) => {
+        if (href === '/') return currentPath === '/' || currentPath.startsWith('/competitions');
+        if (href === '/admin') return currentPath === '/admin' || currentPath.startsWith('/admin/competitions') || currentPath.startsWith('/admin/fighters');
+        return currentPath === href || currentPath.startsWith(`${href}/`);
+      };
+      const link = (href, label) => `<a href="${href}"${current(href) ? ' aria-current="page"' : ''}>${label}</a>`;
+    %>
     <nav class="nav" aria-label="Main">
-      <a href="/">Competitions</a>
+      <%- link('/', 'Competitions') %>
       <% if (user && user.role === 'admin') { %>
-        <a href="/admin">Admin dashboard</a>
-        <a href="/admin/clubs">Clubs and coaches</a>
-        <a href="/admin/accounts">Accounts</a>
-        <a href="/admin/activity">Activity log</a>
+        <%- link('/admin', 'Dashboard') %>
+        <%- link('/admin/clubs', 'Clubs and coaches') %>
+        <%- link('/admin/accounts', 'Accounts') %>
+        <%- link('/admin/activity', 'Activity log') %>
       <% } else if (user && user.club_id) { %>
-        <a href="/club">Club dashboard</a>
+        <%- link('/club', 'Club dashboard') %>
       <% } else if (user) { %>
-        <a href="/coach">Join a club</a>
+        <%- link('/coach', 'Join a club') %>
       <% } %>
       <% if (user) { %>
         <span class="who"><%= user.club_name || user.full_name || 'Host admin' %></span>
@@ -31,8 +40,8 @@
           <button class="link-button" type="submit">Log out</button>
         </form>
       <% } else { %>
-        <a href="/login">Log in</a>
-        <a href="/register">Coach sign up</a>
+        <%- link('/login', 'Log in') %>
+        <%- link('/register', 'Coach sign up') %>
       <% } %>
     </nav>
   </div>

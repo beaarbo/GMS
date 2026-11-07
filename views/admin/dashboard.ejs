@@ -24,7 +24,7 @@
   <section class="card">
     <div class="page-head">
       <div>
-        <h2><%= c.name %> <span class="badge <%= c.status %>"><%= c.status %></span></h2>
+        <h2><%= c.name %> <span class="badge <%= c.status %>"><%= statusLabel(c.status) %></span></h2>
         <p class="sub"><%= eventDatesText(c) %> · <%= c.venue %> · Registration deadline: <%= deadlineText(c) %><% if (isRegistrationOpen(c)) { %> (<%= timeLeft(c) %>)<% } %></p>
       </div>
     </div>
@@ -36,7 +36,7 @@
     <div class="actions">
       <a class="btn small" href="/admin/competitions/<%= c.id %>/registrations">Review registrations</a>
       <a class="btn secondary small" href="/admin/competitions/<%= c.id %>/divisions">Divisions</a>
-      <% if (c.status === 'closed') { %><a class="btn small" href="/admin/competitions/<%= c.id %>/bouts">Bout list</a><a class="btn small" href="/admin/competitions/<%= c.id %>/results">Results</a><% } %>
+      <% if (c.status === 'closed') { %><a class="btn secondary small" href="/admin/competitions/<%= c.id %>/bouts">Bout list</a><a class="btn secondary small" href="/admin/competitions/<%= c.id %>/results">Results</a><% } %>
       <a class="btn secondary small" href="/admin/competitions/<%= c.id %>/setup">Division setup</a>
       <a class="btn secondary small" href="/admin/competitions/<%= c.id %>/edit">Edit</a>
       <form method="post" action="/admin/competitions/<%= c.id %>/status">
