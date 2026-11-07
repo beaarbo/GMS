@@ -17,6 +17,7 @@
       <% if (user && user.role === 'admin') { %>
         <a href="/admin">Admin dashboard</a>
         <a href="/admin/clubs">Clubs and coaches</a>
+        <a href="/admin/accounts">Accounts</a>
         <a href="/admin/activity">Activity log</a>
       <% } else if (user && user.club_id) { %>
         <a href="/club">Club dashboard</a>

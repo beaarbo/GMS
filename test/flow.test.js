@@ -1321,6 +1321,35 @@ test('only admins can read the activity log, which filters and exports', async (
   assert.ok(csv.text.includes(`"'=cmd"`), 'spreadsheet formulas are neutralised');
 });
 
+test('admins can list every account and filter by type or search', async () => {
+  const { db, app } = await setup();
+  await signUpClub(app, 'Tigers', 'tigers@test.test');
+  const waiting = await signUpCoach(app, 'waiting@test.test');
+  await signUpCoach(app, 'loose@test.test');
+  await post(waiting, '/coach/apply', { club_id: String(db.prepare('SELECT id FROM clubs').get().id) }, '/coach');
+  const admin = await login(app, 'admin@test.test');
+  const emailsOn = async (query) => [...(await admin.get(`/admin/accounts${query}`)).text.matchAll(/<td>([^<]+@test\.test)<\/td>/g)].map((m) => m[1]).sort();
+
+  assert.deepEqual(await emailsOn(''), ['admin@test.test', 'loose@test.test', 'tigers@test.test', 'waiting@test.test']);
+  assert.deepEqual(await emailsOn('?type=admin'), ['admin@test.test']);
+  assert.deepEqual(await emailsOn('?type=coach'), ['tigers@test.test']);
+  assert.deepEqual(await emailsOn('?type=pending'), ['waiting@test.test']);
+  assert.deepEqual(await emailsOn('?type=unattached'), ['loose@test.test']);
+  assert.deepEqual(await emailsOn('?q=TIGERS'), ['tigers@test.test']);
+  assert.deepEqual(await emailsOn('?type=pending&q=tigers'), []);
+  assert.deepEqual(await emailsOn('?q=%25'), [], 'a % is searched for literally');
+  assert.deepEqual(await emailsOn('?type=nonsense'), await emailsOn(''));
+
+  const page = await admin.get('/admin/accounts');
+  assert.match(page.text, /Applied to Tigers/);
+  assert.match(page.text, /Coaches awaiting approval \(1\)/);
+  assert.ok(!page.text.includes('password_hash') && !page.text.includes('$2'), 'no password hashes');
+
+  const coach = await login(app, 'tigers@test.test');
+  assert.equal((await coach.get('/admin/accounts')).status, 403);
+  assert.equal((await request(app).get('/admin/accounts')).status, 302);
+});
+
 test('POST without a CSRF token is refused', async () => {
   const { app } = await setup();
   const res = await request(app).post('/login').type('form').send({ email: 'admin@test.test', password: PASSWORD });

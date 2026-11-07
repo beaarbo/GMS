@@ -1,0 +1,64 @@
+<%- include('../partials/top') %>
+<p class="breadcrumb"><a href="/admin">Admin dashboard</a></p>
+<div class="page-head">
+  <div>
+    <h1>Accounts</h1>
+    <p class="sub"><%= total %> account<%= total === 1 ? '' : 's' %> in total. Coach approvals are on <a href="/admin/clubs">Clubs and coaches</a>.</p>
+  </div>
+</div>
+
+<section class="card">
+  <p class="stats">
+    <a href="/admin/accounts<%= search ? `?q=${encodeURIComponent(search)}` : '' %>" class="<%= type ? '' : 'current-filter' %>">All</a>
+    <% Object.entries(types).forEach(([key, t]) => { %>
+      <a href="/admin/accounts?type=<%= key %><%= search ? `&q=${encodeURIComponent(search)}` : '' %>" class="<%= type === key ? 'current-filter' : '' %>"><%= t.label %> (<%= counts[key] %>)</a>
+    <% }) %>
+  </p>
+  <form method="get" class="filters">
+    <div>
+      <label for="f-type">Type</label>
+      <select id="f-type" name="type">
+        <option value="">All</option>
+        <% Object.entries(types).forEach(([key, t]) => { %><option value="<%= key %>" <%= type === key ? 'selected' : '' %>><%= t.label %></option><% }) %>
+      </select>
+    </div>
+    <div>
+      <label for="f-q">Name or email</label>
+      <input id="f-q" name="q" value="<%= search %>">
+    </div>
+    <div class="actions">
+      <button class="btn secondary" type="submit">Filter</button>
+      <a href="/admin/accounts">Clear</a>
+    </div>
+  </form>
+</section>
+
+<section class="card">
+  <% if (accounts.length === 0) { %>
+    <p class="empty">No accounts match.</p>
+  <% } else { %>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Type</th><th>Club</th><th>Created</th></tr></thead>
+        <tbody>
+          <% accounts.forEach((a) => { %>
+            <tr>
+              <td><strong><%= a.full_name || '–' %></strong></td>
+              <td><%= a.email %></td>
+              <td class="nowrap"><%= a.phone || '–' %></td>
+              <td>
+                <% if (a.type === 'admin') { %><span class="badge open">Admin</span>
+                <% } else if (a.type === 'coach') { %><span class="badge approved">Coach</span>
+                <% } else if (a.type === 'pending') { %><span class="badge pending">Awaiting approval</span>
+                <% } else { %><span class="badge draft">No club</span><% } %>
+              </td>
+              <td><%= a.club || (a.pending_club ? `Applied to ${a.pending_club}` : '–') %></td>
+              <td class="nowrap"><%= formatActivityTime(a.created_at) %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</section>
+<%- include('../partials/bottom') %>

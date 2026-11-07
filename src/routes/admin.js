@@ -711,6 +711,67 @@ router.get('/fighters/:id(\\d+)/document', (req, res) => {
   return sendDocument(res, document);
 });
 
+// Each account type, and how to find it. A coach's type follows their club status.
+const ACCOUNT_TYPES = {
+  admin: { label: 'Admins', where: "u.role = 'admin'" },
+  coach: { label: 'Coaches in a club', where: "u.role = 'coach' AND u.club_id IS NOT NULL" },
+  pending: {
+    label: 'Coaches awaiting approval',
+    where: "u.role = 'coach' AND u.club_id IS NULL AND EXISTS (SELECT 1 FROM club_applications a WHERE a.user_id = u.id AND a.status = 'pending')",
+  },
+  unattached: {
+    label: 'Coaches without a club',
+    where: "u.role = 'coach' AND u.club_id IS NULL AND NOT EXISTS (SELECT 1 FROM club_applications a WHERE a.user_id = u.id AND a.status = 'pending')",
+  },
+};
+
+function accountType(row) {
+  if (row.role === 'admin') return 'admin';
+  if (row.club_id) return 'coach';
+  return row.pending_club ? 'pending' : 'unattached';
+}
+
+router.get('/accounts', (req, res) => {
+  const { db } = req.app.locals;
+  const type = ACCOUNT_TYPES[clean(req.query.type, 20)] ? clean(req.query.type, 20) : '';
+  const search = clean(req.query.q, 100);
+  const where = [];
+  const params = {};
+  if (type) where.push(ACCOUNT_TYPES[type].where);
+  if (search) {
+    // Escapes % and _ so a search for them matches the characters themselves.
+    where.push("(u.full_name LIKE @search ESCAPE '\\' OR u.email LIKE @search ESCAPE '\\')");
+    params.search = `%${search.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+  }
+  const accounts = db
+    .prepare(
+      `SELECT u.id, u.email, u.full_name, u.phone, u.role, u.club_id, u.created_at, c.name AS club,
+         (SELECT pc.name FROM club_applications a JOIN clubs pc ON pc.id = a.club_id
+          WHERE a.user_id = u.id AND a.status = 'pending') AS pending_club
+       FROM users u LEFT JOIN clubs c ON c.id = u.club_id
+       ${where.length > 0 ? `WHERE ${where.join(' AND ')}` : ''}
+       ORDER BY u.created_at DESC, u.id DESC`
+    )
+    .all(params)
+    .map((row) => ({ ...row, type: accountType(row) }));
+  const counts = Object.fromEntries(
+    Object.entries(ACCOUNT_TYPES).map(([key, { where: clause }]) => [
+      key,
+      db.prepare(`SELECT COUNT(*) AS n FROM users u WHERE ${clause}`).get().n,
+    ])
+  );
+  res.render('admin/accounts', {
+    title: 'Accounts',
+    accounts,
+    types: ACCOUNT_TYPES,
+    counts,
+    total: db.prepare('SELECT COUNT(*) AS n FROM users').get().n,
+    type,
+    search,
+    formatActivityTime,
+  });
+});
+
 const ACTIVITY_PAGE_SIZE = 100;
 
 function readActivityFilter(query) {
