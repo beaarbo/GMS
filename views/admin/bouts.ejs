@@ -1,0 +1,94 @@
+<%- include('../partials/top') %>
+<p class="breadcrumb"><a href="/admin">Admin dashboard</a></p>
+<div class="page-head">
+  <div>
+    <h1>Bout list</h1>
+    <p class="sub"><%= competition.name %> · <%= competition.venue %>, <%= eventDatesText(competition) %><% if (divisions.length > 0) { %> · <%= totalBouts %> bout<%= totalBouts === 1 ? '' : 's' %> in <%= divisions.length %> division<%= divisions.length === 1 ? '' : 's' %><% } %></p>
+  </div>
+  <% if (divisions.length > 0) { %>
+    <div class="actions">
+<% if (competition.bouts_published_at) { %>
+        <span class="badge approved">Visible to coaches</span>
+        <form method="post" action="/admin/competitions/<%= competition.id %>/bouts/unpublish">
+          <input type="hidden" name="_csrf" value="<%= csrf %>">
+          <button class="btn secondary" type="submit">Hide from coaches</button>
+        </form>
+      <% } else { %>
+        <form method="post" action="/admin/competitions/<%= competition.id %>/bouts/publish" data-confirm="Publish this bout list? Coaches with athletes in it will be emailed.">
+          <input type="hidden" name="_csrf" value="<%= csrf %>">
+          <button class="btn approve" type="submit">Publish to coaches</button>
+        </form>
+      <% } %>
+      <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/results">Record results</a>
+      <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/bouts.pdf">Download PDF</a>
+      <% if (!resultsRecorded) { %>
+      <form method="post" action="/admin/competitions/<%= competition.id %>/bouts/delete" data-confirm="Delete this bout list?">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <button class="btn danger" type="submit">Delete</button>
+      </form>
+      <% } %>
+    </div>
+  <% } %>
+</div>
+
+<% if (competition.status !== 'closed' && divisions.length === 0) { %>
+  <section class="card">
+    <h2>Registration is still open</h2>
+    <p class="empty">Close registration from the <a href="/admin">admin dashboard</a> to generate the bout list.</p>
+  </section>
+<% } else { %>
+  <section class="card">
+    <h2>Draw and schedule</h2>
+    <% if (divisions.length === 0) { %>
+      <p class="stats"><span><strong><%= counts.approved %></strong> approved fighters will be drawn</span></p>
+      <% if (counts.pending > 0) { %>
+        <div class="notice error"><%= counts.pending %> pending registration<%= counts.pending === 1 ? ' is' : 's are' %> not included. <a href="/admin/competitions/<%= competition.id %>/registrations?status=pending">Review them first</a>.</div>
+      <% } %>
+      <p class="sub">Each division becomes a single-elimination bracket. Fighters from the same club are drawn into opposite halves, so two club-mates can only meet in the final.</p>
+    <% } %>
+    <form method="post" action="/admin/competitions/<%= competition.id %>/bouts/generate">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <div class="form-row">
+        <div class="field">
+          <label for="courts">Courts</label>
+          <input id="courts" name="courts" type="number" min="1" max="20" value="<%= competition.bout_courts %>" required>
+        </div>
+        <div class="field">
+          <label for="start">Start time each day</label>
+          <input id="start" name="start" type="time" value="<%= competition.bout_start %>" required>
+        </div>
+        <div class="field">
+          <label for="minutes">Minutes per bout</label>
+          <input id="minutes" name="minutes" type="number" min="1" max="120" value="<%= competition.bout_minutes %>" required>
+        </div>
+      </div>
+      <p class="hint">Bouts are spread across the competition's <%= dayCount %> event day<%= dayCount === 1 ? '' : 's' %>. To change the days, <a href="/admin/competitions/<%= competition.id %>/edit">edit the competition</a>.</p>
+      <div class="actions">
+        <% if (divisions.length === 0) { %>
+          <button class="btn" type="submit">Generate bout list</button>
+        <% } else { %>
+          <button class="btn" type="submit" formaction="/admin/competitions/<%= competition.id %>/bouts/schedule">Update schedule</button>
+          <% if (!resultsRecorded) { %>
+          <button class="btn secondary" type="submit" data-confirm="Redraw every division? The current draw will be replaced and hidden from coaches until you publish again.">Redraw</button>
+          <% } %>
+        <% } %>
+      </div>
+    </form>
+  </section>
+<% } %>
+
+<% divisions.forEach((division) => { %>
+  <section class="card">
+    <div class="division-head">
+      <h2><%= division.title %></h2>
+      <p class="stats">
+        <span>Day: <strong><%= division.dayLabel %></strong></span>
+        <span>Court: <strong><%= division.court || '–' %></strong></span>
+        <span>Participants: <strong><%= division.participants %></strong></span>
+        <span>Matches: <strong><%= division.matches %></strong></span>
+      </p>
+    </div>
+    <%- include('../partials/bracket', { division, highlightClubId: null }) %>
+  </section>
+<% }) %>
+<%- include('../partials/bottom') %>

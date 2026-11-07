@@ -1,0 +1,60 @@
+# CLAUDE.md
+
+Guidance for Claude Code when working in this repository.
+
+## Project overview
+
+Game Management System: registration for taekwondo competitions, kyorugi (sparring) first. The admin (host) creates clubs. Coaches sign up and apply to join a club, and once approved they register that club's fighters for posted competitions. The system places fighters into gender, age, belt and weight divisions and closes registration at the deadline, and the admin approves or rejects each registration. After closing registration, the admin generates a single-elimination bout list with a court and time schedule, shown as brackets and exported as a PDF with one page per division.
+
+## Environment
+
+- OS: Windows 11
+- Shell: PowerShell 5.1 (no `&&` or `||`; chain commands with `;`)
+- Git is installed at `C:\Program Files\Git\cmd\git.exe`, and the repo's default branch is `main`. Docker is not installed, so the `Dockerfile` hasn't been built here.
+- Deploy target: Railway, from the GitHub repo, with a volume at `/data`. Every push to `main` redeploys. See the README's "Deploy it" section for the environment variables.
+
+## Commands
+
+- Install: `npm install`
+- Run: `npm start` (or `npm run dev` to restart on changes)
+- Demo data: `npm run seed` (logins are listed at the top of `scripts/seed.js`)
+- Test: `npm test`
+
+## Architecture
+
+Express with server-rendered EJS and SQLite (better-sqlite3).
+
+- `src/divisions.js`: pure division logic and the default template. No database or web imports.
+- `src/bracket.js`: pure single-elimination draw (seed positions, same-club separation), court assignment, and bracket geometry (`layoutBracket`) shared by the web page and the PDF.
+- `src/boutlistPdf.js`: draws the bracket layout to PDF with pdfkit.
+- `src/mailer.js`, `src/notifications.js`: SMTP sending, and every email the site sends. `createApp` takes a `mailer`, and tests pass one that captures messages.
+- `src/documents.js`, `src/activity.js`: athlete document rules and file checks, and the activity log. Call `req.logActivity(action, summary, competitionId)` from any route that changes data.
+- `src/services.js`: database operations shared by routes, the seed script and tests.
+- `src/db.js`: schema (`CREATE TABLE IF NOT EXISTS`) plus data migrations in `migrate`, tracked with SQLite's `user_version`. Add a new version for any change to existing data.
+- `src/app.js`: app factory (`createApp`), security headers, sessions, CSRF.
+- `src/routes/`: `public`, `auth`, `coach` (join a club), `club` (approved coaches: fighters and entries), `admin` and `adminClubs` (clubs, coach approvals).
+- `views/`, `public/`: templates and static assets.
+- `test/`: `node:test`. `flow.test.js` drives the whole app through supertest on an in-memory database.
+
+## Conventions
+
+- Every form needs a hidden `_csrf` field.
+- The CSP blocks inline scripts and styles. Put JS in `public/app.js` and CSS in `public/styles.css`.
+- Club routes must scope queries by `req.user.club_id`, so clubs can't reach each other's data. A coach has no `club_id` until an admin approves them, and fighters belong to the club, not the coach.
+- Core flows must work without JavaScript. `public/app.js` is only an enhancement.
+
+## Notes
+
+- Registrations store their age, belt and weight group IDs at entry time. That's why division setup, event date and age rule lock once registrations exist, and why fighters with an active registration can't be edited.
+- A competition's days live in `competition_dates`. `competitions.event_date` always equals the first day, which ages are calculated from, so it locks once registrations exist. Bout `day` numbers are positions in the sorted date list.
+- Documents are BLOBs in `fighter_documents`, so never `SELECT *` from it in lists. Uploads are parsed in `app.js` before the CSRF check, which needs the form's token, and only for the document route and logged-in users.
+- Never put passwords, tokens or dates of birth in the activity log.
+- Coaches pick a weight class, and `assignDivision` refuses any class outside the fighter's age group and gender. No weight is stored.
+- Results move winners by filling the next bout's blue or red slot, so a result can't change once the next bout has one. Redraw and delete are blocked while results exist.
+- Email links use `PUBLIC_URL`, never the request's Host header. Reset tokens are stored only as hashes.
+- Belts are fixed to Blue, Red and Black (ranks 1 to 3), and every competition's belt groups match.
+- Bouts reference approved registrations, so approvals and reopening are blocked while a bout list exists. Keep that rule, or the draw and foreign keys can break.
+- `closeExpiredCompetitions` runs on each request, so `status` flips to closed once the deadline passes, in the server's `TZ`. Reopening requires a later deadline.
+- Public pages show rules only. Never expose fighter data on them, because many fighters are minors.
+- The database needs a persistent disk, so serverless hosts won't work.
+- `data/` and `.env` are gitignored. `data/gms.sqlite` on this machine holds demo data only.

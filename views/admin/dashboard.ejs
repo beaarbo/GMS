@@ -1,0 +1,58 @@
+<%- include('../partials/top') %>
+<div class="page-head">
+  <div>
+    <h1>Admin dashboard</h1>
+    <p class="sub">Post competitions and approve club registrations.</p>
+  </div>
+  <div class="actions">
+    <a class="btn secondary" href="/admin/activity">Activity log</a>
+    <a class="btn secondary" href="/admin/clubs">Clubs and coaches</a>
+    <a class="btn" href="/admin/competitions/new">New competition</a>
+  </div>
+</div>
+
+<% if (pendingCoaches > 0) { %>
+  <div class="notice info"><%= pendingCoaches %> coach application<%= pendingCoaches === 1 ? ' is' : 's are' %> waiting for approval. <a href="/admin/clubs">Review</a></div>
+<% } %>
+
+<% if (competitions.length === 0) { %>
+  <div class="card"><p class="empty">No competitions yet. Create your first one to get started.</p></div>
+<% } %>
+
+<% competitions.forEach((c) => { %>
+  <section class="card">
+    <div class="page-head">
+      <div>
+        <h2><%= c.name %> <span class="badge <%= c.status %>"><%= c.status %></span></h2>
+        <p class="sub"><%= eventDatesText(c) %> · <%= c.venue %> · Registration deadline: <%= deadlineText(c) %><% if (isRegistrationOpen(c)) { %> (<%= timeLeft(c) %>)<% } %></p>
+      </div>
+    </div>
+    <p class="stats">
+      <span><strong><%= c.pending || 0 %></strong> pending</span>
+      <span><strong><%= c.approved || 0 %></strong> approved</span>
+      <span><strong><%= c.rejected || 0 %></strong> rejected</span>
+    </p>
+    <div class="actions">
+      <a class="btn small" href="/admin/competitions/<%= c.id %>/registrations">Review registrations</a>
+      <a class="btn secondary small" href="/admin/competitions/<%= c.id %>/divisions">Divisions</a>
+      <% if (c.status === 'closed') { %><a class="btn small" href="/admin/competitions/<%= c.id %>/bouts">Bout list</a><a class="btn small" href="/admin/competitions/<%= c.id %>/results">Results</a><% } %>
+      <a class="btn secondary small" href="/admin/competitions/<%= c.id %>/setup">Division setup</a>
+      <a class="btn secondary small" href="/admin/competitions/<%= c.id %>/edit">Edit</a>
+      <form method="post" action="/admin/competitions/<%= c.id %>/status">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <% if (c.status === 'open') { %>
+          <button class="btn secondary small" name="status" value="closed" type="submit">Close registration</button>
+        <% } else { %>
+          <button class="btn approve small" name="status" value="open" type="submit"><%= c.status === 'draft' ? 'Publish' : 'Reopen registration' %></button>
+        <% } %>
+      </form>
+      <% if (c.status === 'draft') { %>
+        <form method="post" action="/admin/competitions/<%= c.id %>/delete" data-confirm="Delete this draft competition? This cannot be undone.">
+          <input type="hidden" name="_csrf" value="<%= csrf %>">
+          <button class="btn danger small" type="submit">Delete</button>
+        </form>
+      <% } %>
+    </div>
+  </section>
+<% }) %>
+<%- include('../partials/bottom') %>

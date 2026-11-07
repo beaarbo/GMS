@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title><%= title %> · Game Management System</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="corner-stripe"></div>
+  <div class="topbar-inner">
+    <a class="brand" href="/">Game Management System</a>
+    <nav class="nav" aria-label="Main">
+      <a href="/">Competitions</a>
+      <% if (user && user.role === 'admin') { %>
+        <a href="/admin">Admin dashboard</a>
+        <a href="/admin/clubs">Clubs and coaches</a>
+        <a href="/admin/activity">Activity log</a>
+      <% } else if (user && user.club_id) { %>
+        <a href="/club">Club dashboard</a>
+      <% } else if (user) { %>
+        <a href="/coach">Join a club</a>
+      <% } %>
+      <% if (user) { %>
+        <span class="who"><%= user.club_name || user.full_name || 'Host admin' %></span>
+        <form method="post" action="/logout">
+          <input type="hidden" name="_csrf" value="<%= csrf %>">
+          <button class="link-button" type="submit">Log out</button>
+        </form>
+      <% } else { %>
+        <a href="/login">Log in</a>
+        <a href="/register">Coach sign up</a>
+      <% } %>
+    </nav>
+  </div>
+</header>
+<main>
+<% flash.forEach((item) => { %>
+  <div class="notice <%= item.type %>" role="status"><%= item.text %></div>
+<% }) %>

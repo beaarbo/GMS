@@ -1,0 +1,60 @@
+<%- include('../partials/top') %>
+<p class="breadcrumb"><a href="/admin">Admin dashboard</a></p>
+<div class="page-head">
+  <div>
+    <h1>Activity log</h1>
+    <p class="sub">Who did what and when. Entries can't be changed or deleted. <%= total %> entr<%= total === 1 ? 'y' : 'ies' %>.</p>
+  </div>
+  <a class="btn secondary" href="/admin/activity.csv<%= query ? `?${query}` : '' %>">Export CSV</a>
+</div>
+
+<section class="card">
+  <form method="get" class="filters">
+    <div>
+      <label for="f-category">Type</label>
+      <select id="f-category" name="category">
+        <option value="">All</option>
+        <% Object.entries(categories).forEach(([value, label]) => { %><option value="<%= value %>" <%= category === value ? 'selected' : '' %>><%= label %></option><% }) %>
+      </select>
+    </div>
+    <div>
+      <label for="f-competition">Competition</label>
+      <select id="f-competition" name="competition">
+        <option value="">All</option>
+        <% competitions.forEach((c) => { %><option value="<%= c.id %>" <%= competitionId === c.id ? 'selected' : '' %>><%= c.name %></option><% }) %>
+      </select>
+    </div>
+    <div class="actions">
+      <button class="btn secondary" type="submit">Filter</button>
+      <a href="/admin/activity">Clear</a>
+    </div>
+  </form>
+</section>
+
+<section class="card">
+  <% if (entries.length === 0) { %>
+    <p class="empty">Nothing matches.</p>
+  <% } else { %>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>When</th><th>Who</th><th>What</th></tr></thead>
+        <tbody>
+          <% entries.forEach((e) => { %>
+            <tr>
+              <td class="nowrap"><%= formatActivityTime(e.at) %></td>
+              <td><%= e.actor %></td>
+              <td><%= e.summary %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+    <p></p>
+    <div class="actions">
+      <% if (page > 1) { %><a class="btn secondary small" href="/admin/activity?<%= query ? `${query}&` : '' %>page=<%= page - 1 %>">Newer</a><% } %>
+      <span class="hint">Page <%= page %> of <%= pages %></span>
+      <% if (page < pages) { %><a class="btn secondary small" href="/admin/activity?<%= query ? `${query}&` : '' %>page=<%= page + 1 %>">Older</a><% } %>
+    </div>
+  <% } %>
+</section>
+<%- include('../partials/bottom') %>

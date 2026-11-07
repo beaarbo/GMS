@@ -1,0 +1,20 @@
+<%- include('partials/top') %>
+<div class="card narrow">
+  <h1>Log in</h1>
+  <% if (error) { %><div class="notice error" role="alert"><%= error %></div><% } %>
+  <form method="post" action="/login">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <div class="field">
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" value="<%= email %>" autocomplete="username" required>
+    </div>
+    <div class="field">
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+    </div>
+    <button class="btn" type="submit">Log in</button>
+  </form>
+  <p class="sub"><a href="/forgot-password">Forgot your password?</a></p>
+  <p class="sub">New coach? <a href="/register">Create an account</a>.</p>
+</div>
+<%- include('partials/bottom') %>

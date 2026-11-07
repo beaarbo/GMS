@@ -1,0 +1,92 @@
+<%- include('../partials/top') %>
+<div class="page-head">
+  <div>
+    <h1><%= user.club_name %></h1>
+    <p class="sub">Manage your fighters and competition entries.</p>
+  </div>
+  <a class="btn" href="/club/fighters/new">Add fighter</a>
+</div>
+
+<section class="card">
+  <h2>Open competitions</h2>
+  <% if (competitions.length === 0) { %>
+    <p class="empty">No competitions are open for registration right now.</p>
+  <% } else { %>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Competition</th><th>Date</th><th>Deadline</th><th></th></tr></thead>
+        <tbody>
+          <% competitions.forEach((c) => { %>
+            <tr>
+              <td><strong><%= c.name %></strong></td>
+              <td><%= eventDatesText(c) %></td>
+              <td><%= deadlineText(c) %><br><span class="hint"><%= timeLeft(c) %></span></td>
+              <td><a class="btn small" href="/club/competitions/<%= c.id %>">Register fighters</a></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</section>
+
+<% if (registrations.length > 0) { %>
+  <section class="card">
+    <h2>Your entries</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Competition</th><th>Date</th><th>Status</th><th>Fighters</th></tr></thead>
+        <tbody>
+          <% registrations.forEach((r) => { %>
+            <tr>
+              <td><a href="/club/competitions/<%= r.competition_id %>"><%= r.name %></a></td>
+              <td><%= eventDatesText(r) %></td>
+              <td><span class="badge <%= r.status %>"><%= r.status %></span></td>
+              <td class="num"><%= r.n %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+<% } %>
+
+<section class="card">
+  <h2>Fighters</h2>
+  <% if (fighters.length === 0) { %>
+    <p class="empty">No fighters yet. Add your first fighter to enter a competition.</p>
+  <% } else { %>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Name</th><th>Gender</th><th>Date of birth</th><th>Belt</th><th>Document</th><th></th></tr></thead>
+        <tbody>
+          <% fighters.forEach((f) => { %>
+            <tr>
+              <td><strong><%= f.last_name %>, <%= f.first_name %></strong></td>
+              <td><%= GENDERS[f.gender] %></td>
+              <td class="nowrap"><%= formatDate(f.date_of_birth) %></td>
+              <td><%= beltName(f.belt_rank) %></td>
+              <td>
+                <% if (f.document_type) { %>
+                  <a href="/club/fighters/<%= f.id %>/document"><span class="badge approved">Uploaded</span></a>
+                <% } else { %>
+                  <a class="btn small" href="/club/fighters/<%= f.id %>/document">Upload <%= documentLabel(documentTypeFor(f.belt_rank)) %></a>
+                <% } %>
+              </td>
+              <td>
+                <div class="actions">
+                  <a class="btn secondary small" href="/club/fighters/<%= f.id %>/edit">Edit</a>
+                  <form method="post" action="/club/fighters/<%= f.id %>/delete" data-confirm="Remove <%= f.first_name %> <%= f.last_name %>?">
+                    <input type="hidden" name="_csrf" value="<%= csrf %>">
+                    <button class="btn danger small" type="submit">Remove</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</section>
+<%- include('../partials/bottom') %>

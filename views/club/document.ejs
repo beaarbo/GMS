@@ -1,0 +1,37 @@
+<%- include('../partials/top') %>
+<p class="breadcrumb"><a href="/club">Club dashboard</a></p>
+<div class="card narrow">
+  <h1><%= fighter.first_name %> <%= fighter.last_name %></h1>
+  <p class="sub"><%= beltName(fighter.belt_rank) %> belt · needs a <%= label %></p>
+  <% if (error) { %><div class="notice error" role="alert"><%= error %></div><% } %>
+
+  <% if (document) { %>
+    <p><span class="badge approved">Uploaded</span></p>
+    <% if (document.content_type.startsWith('image/')) { %>
+      <a href="/club/fighters/<%= fighter.id %>/document/file" target="_blank" rel="noopener"><img class="document-preview" src="/club/fighters/<%= fighter.id %>/document/file" alt="<%= label %> for <%= fighter.first_name %> <%= fighter.last_name %>"></a>
+    <% } else { %>
+      <p><a class="btn secondary" href="/club/fighters/<%= fighter.id %>/document/file" target="_blank" rel="noopener">View PDF</a></p>
+    <% } %>
+  <% } else { %>
+    <p><span class="badge rejected">Not uploaded</span></p>
+    <p class="sub">This athlete can't enter a competition until their <%= label %> is uploaded.</p>
+  <% } %>
+
+  <% if (locked) { %>
+    <div class="notice info">This athlete has an approved registration, so their document is locked. Ask the organiser if it needs changing.</div>
+  <% } else { %>
+    <form method="post" action="/club/fighters/<%= fighter.id %>/document" enctype="multipart/form-data">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <div class="field">
+        <label for="document"><%= document ? 'Replace with a new file' : `Choose a photo or scan of the ${label}` %></label>
+        <input id="document" name="document" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" required>
+        <p class="hint">JPG, PNG, WebP or PDF, up to 5 MB. Only your club and the organisers can see it.</p>
+      </div>
+      <div class="actions">
+        <button class="btn" type="submit"><%= document ? 'Replace' : 'Upload' %></button>
+        <a class="btn secondary" href="/club">Back</a>
+      </div>
+    </form>
+  <% } %>
+</div>
+<%- include('../partials/bottom') %>

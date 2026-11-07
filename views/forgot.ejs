@@ -1,0 +1,23 @@
+<%- include('partials/top') %>
+<div class="card narrow">
+  <h1>Forgot password</h1>
+  <% if (sent) { %>
+    <div class="notice success" role="status">If that email has an account, we've sent a link to reset the password. It expires in 1 hour.</div>
+    <p class="sub">Nothing after a few minutes? Check your spam folder, or ask the organiser.</p>
+    <a class="btn secondary" href="/login">Back to log in</a>
+  <% } else { %>
+    <p class="sub">Enter your email and we'll send you a link to choose a new password.</p>
+    <form method="post" action="/forgot-password">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <div class="field">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="username" required>
+      </div>
+      <div class="actions">
+        <button class="btn" type="submit">Send reset link</button>
+        <a class="btn secondary" href="/login">Back to log in</a>
+      </div>
+    </form>
+  <% } %>
+</div>
+<%- include('partials/bottom') %>

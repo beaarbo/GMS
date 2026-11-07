@@ -1,0 +1,109 @@
+<%- include('../partials/top') %>
+<p class="breadcrumb"><a href="/admin">Admin dashboard</a></p>
+<div class="page-head">
+  <div>
+    <h1>Clubs and coaches</h1>
+    <p class="sub">Create clubs and approve the coaches who register athletes for them.</p>
+  </div>
+</div>
+
+<section class="card">
+  <h2>Coach applications</h2>
+  <% if (applications.length === 0) { %>
+    <p class="empty">No applications are waiting.</p>
+  <% } else { %>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Coach</th><th>Contact</th><th>Applying to</th><th>Decision</th></tr></thead>
+        <tbody>
+          <% applications.forEach((a) => { %>
+            <tr>
+              <td><strong><%= a.full_name %></strong></td>
+              <td><%= a.email %><br><span class="hint"><%= a.phone %></span></td>
+              <td><%= a.club_name %></td>
+              <td>
+                <div class="actions">
+                  <form method="post" action="/admin/clubs/applications/<%= a.id %>/approve">
+                    <input type="hidden" name="_csrf" value="<%= csrf %>">
+                    <button class="btn approve small" type="submit">Approve</button>
+                  </form>
+                  <form class="actions" method="post" action="/admin/clubs/applications/<%= a.id %>/reject">
+                    <input type="hidden" name="_csrf" value="<%= csrf %>">
+                    <input class="note-field" name="note" maxlength="300" placeholder="Reason for rejecting" aria-label="Reason for rejecting <%= a.full_name %>" required>
+                    <button class="btn danger small" type="submit">Reject</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</section>
+
+<section class="card">
+  <h2>Add a club</h2>
+  <form method="post" action="/admin/clubs">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <div class="form-row">
+      <div class="field">
+        <label for="new-name">Club name</label>
+        <input id="new-name" name="name" required>
+      </div>
+      <div class="field">
+        <label for="new-city">City</label>
+        <input id="new-city" name="city" required>
+      </div>
+    </div>
+    <button class="btn" type="submit">Create club</button>
+  </form>
+</section>
+
+<% if (clubs.length === 0) { %>
+  <div class="card"><p class="empty">No clubs yet. Coaches can apply once you create one.</p></div>
+<% } %>
+
+<% clubs.forEach((club) => { %>
+  <section class="card">
+    <h2><%= club.name %></h2>
+    <p class="stats"><span><strong><%= club.fighter_count %></strong> fighter<%= club.fighter_count === 1 ? '' : 's' %></span><span><strong><%= club.coaches.length %></strong> coach<%= club.coaches.length === 1 ? '' : 'es' %></span></p>
+    <% if (club.coaches.length > 0) { %>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Coach</th><th>Contact</th><th></th></tr></thead>
+          <tbody>
+            <% club.coaches.forEach((coach) => { %>
+              <tr>
+                <td><strong><%= coach.full_name %></strong></td>
+                <td><%= coach.email %><br><span class="hint"><%= coach.phone %></span></td>
+                <td>
+                  <form method="post" action="/admin/clubs/coaches/<%= coach.id %>/remove" data-confirm="Remove <%= coach.full_name %> from <%= club.name %>?">
+                    <input type="hidden" name="_csrf" value="<%= csrf %>">
+                    <button class="btn danger small" type="submit">Remove</button>
+                  </form>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+      <p></p>
+    <% } %>
+    <div class="actions">
+      <form class="actions" method="post" action="/admin/clubs/<%= club.id %>">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <input class="note-field" name="name" value="<%= club.name %>" aria-label="Name of <%= club.name %>" required>
+        <input class="note-field" name="city" value="<%= club.city %>" aria-label="City of <%= club.name %>" required>
+        <button class="btn secondary small" type="submit">Save</button>
+      </form>
+      <% if (club.fighter_count === 0 && club.coaches.length === 0) { %>
+        <form method="post" action="/admin/clubs/<%= club.id %>/delete" data-confirm="Delete <%= club.name %>? This cannot be undone.">
+          <input type="hidden" name="_csrf" value="<%= csrf %>">
+          <button class="btn danger small" type="submit">Delete</button>
+        </form>
+      <% } %>
+    </div>
+  </section>
+<% }) %>
+<%- include('../partials/bottom') %>

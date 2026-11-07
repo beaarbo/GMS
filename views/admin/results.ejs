@@ -1,0 +1,88 @@
+<%- include('../partials/top') %>
+<p class="breadcrumb"><a href="/admin/competitions/<%= competition.id %>/bouts">Bout list</a></p>
+<div class="page-head">
+  <div>
+    <h1>Results</h1>
+    <p class="sub"><%= competition.name %> · <%= done %> of <%= total %> bouts recorded</p>
+  </div>
+  <% if (done > 0) { %>
+    <form method="post" action="/admin/competitions/<%= competition.id %>/results/clear-all" data-confirm="Clear every recorded result? This cannot be undone.">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <button class="btn danger" type="submit">Clear all results</button>
+    </form>
+  <% } %>
+</div>
+
+<% if (total === 0) { %>
+  <section class="card"><p class="empty">There are no bouts to record. <a href="/admin/competitions/<%= competition.id %>/bouts">Generate the bout list</a> first.</p></section>
+<% } else { %>
+  <section class="card">
+    <form method="get" class="filters">
+      <div>
+        <label for="f-day">Day</label>
+        <select id="f-day" name="day">
+          <option value="">All</option>
+          <% days.forEach(([value, label]) => { %><option value="<%= value %>" <%= day === String(value) ? 'selected' : '' %>><%= label %></option><% }) %>
+        </select>
+      </div>
+      <div>
+        <label for="f-court">Court</label>
+        <select id="f-court" name="court">
+          <option value="">All</option>
+          <% courts.forEach(([value]) => { %><option value="<%= value %>" <%= court === String(value) ? 'selected' : '' %>><%= value %></option><% }) %>
+        </select>
+      </div>
+      <div class="actions"><button class="btn secondary" type="submit">Filter</button></div>
+    </form>
+  </section>
+
+  <section class="card">
+    <p class="sub">Click the winner. They move into their next bout automatically.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Bout</th><th>When</th><th>Division</th><th>Fighters</th><th></th></tr></thead>
+        <tbody>
+          <% bouts.forEach((bout) => { %>
+            <tr class="<%= bout.winner ? 'result-row-done' : '' %>">
+              <td class="num"><strong><%= bout.number %></strong></td>
+              <td class="nowrap">Day <%= bout.day %>, Court <%= bout.court %><br><span class="hint"><%= bout.time %></span></td>
+              <td><%= bout.title %></td>
+              <td>
+                <form method="post" action="/admin/competitions/<%= competition.id %>/results/<%= bout.id %>">
+                  <input type="hidden" name="_csrf" value="<%= csrf %>">
+                  <input type="hidden" name="day" value="<%= day %>">
+                  <input type="hidden" name="court" value="<%= court %>">
+                  <% [['blue', bout.blue, bout.bluePlaceholder], ['red', bout.red, bout.redPlaceholder]].forEach(([color, fighter, placeholder]) => { %>
+                    <% if (!fighter) { %>
+                      <div class="hint"><%= placeholder %></div>
+                    <% } else if (bout.winner) { %>
+                      <div><% if (bout.winner.registrationId === fighter.registrationId) { %><span class="badge approved">Winner</span> <strong><%= fighter.name %></strong><% } else { %><%= fighter.name %><% } %> <span class="hint"><%= fighter.club %></span></div>
+                    <% } else if (bout.blue && bout.red) { %>
+                      <p><button class="btn secondary small winner-choice" type="submit" name="winner" value="<%= color %>" aria-label="<%= fighter.name %> wins bout <%= bout.number %>"><%= fighter.name %> <span class="hint"><%= fighter.club %></span></button></p>
+                    <% } else { %>
+                      <div><%= fighter.name %> <span class="hint"><%= fighter.club %></span></div>
+                    <% } %>
+                  <% }) %>
+                </form>
+              </td>
+              <td>
+                <% if (bout.winner) { %>
+                  <form method="post" action="/admin/competitions/<%= competition.id %>/results/<%= bout.id %>">
+                    <input type="hidden" name="_csrf" value="<%= csrf %>">
+                    <input type="hidden" name="action" value="clear">
+                    <input type="hidden" name="day" value="<%= day %>">
+                    <input type="hidden" name="court" value="<%= court %>">
+                    <button class="btn danger small" type="submit">Undo</button>
+                  </form>
+                <% } %>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <%- include('../partials/medals') %>
+<% } %>
+<%- include('../partials/bottom') %>

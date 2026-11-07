@@ -1,0 +1,48 @@
+<%- include('../partials/top') %>
+<div class="card narrow">
+  <h1><%= title %></h1>
+  <%- include('../partials/errors') %>
+  <form method="post" action="<%= action %>">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <div class="form-row">
+      <div class="field">
+        <label for="first_name">First name</label>
+        <input id="first_name" name="first_name" value="<%= fighter.first_name || '' %>" required>
+      </div>
+      <div class="field">
+        <label for="last_name">Last name</label>
+        <input id="last_name" name="last_name" value="<%= fighter.last_name || '' %>" required>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="field">
+        <label for="gender">Gender</label>
+        <select id="gender" name="gender" required>
+          <option value="">Select</option>
+          <% Object.entries(GENDERS).forEach(([value, label]) => { %>
+            <option value="<%= value %>" <%= fighter.gender === value ? 'selected' : '' %>><%= label %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div class="field">
+        <label for="date_of_birth">Date of birth</label>
+        <input id="date_of_birth" name="date_of_birth" type="date" value="<%= fighter.date_of_birth || '' %>" max="<%= today() %>" required>
+      </div>
+    </div>
+    <div class="field">
+      <label for="belt_rank">Belt</label>
+      <select id="belt_rank" name="belt_rank" required>
+        <option value="">Select</option>
+        <% BELTS.forEach((b) => { %>
+          <option value="<%= b.rank %>" <%= Number(fighter.belt_rank) === b.rank ? 'selected' : '' %>><%= b.name %></option>
+        <% }) %>
+      </select>
+    </div>
+    <p class="hint">Weight is entered for each competition, when you register the fighter.</p>
+    <div class="actions">
+      <button class="btn" type="submit">Save fighter</button>
+      <a class="btn secondary" href="/club">Cancel</a>
+    </div>
+  </form>
+</div>
+<%- include('../partials/bottom') %>

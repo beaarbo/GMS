@@ -1,0 +1,112 @@
+<%- include('../partials/top') %>
+<p class="breadcrumb"><a href="/admin">Admin dashboard</a></p>
+<div class="page-head">
+  <div>
+    <h1>Registrations</h1>
+    <p class="sub"><%= competition.name %></p>
+  </div>
+  <div class="actions">
+    <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/divisions">View divisions</a>
+    <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/export.csv">Export approved (CSV)</a>
+  </div>
+</div>
+
+<p class="stats">
+  <span><strong><%= counts.pending %></strong> pending</span>
+  <span><strong><%= counts.approved %></strong> approved</span>
+  <span><strong><%= counts.rejected %></strong> rejected</span>
+</p>
+
+<section class="card">
+  <form method="get" class="filters">
+    <div>
+      <label for="f-status">Status</label>
+      <select id="f-status" name="status">
+        <option value="">All</option>
+        <% ['pending', 'approved', 'rejected'].forEach((s) => { %><option value="<%= s %>" <%= filters.status === s ? 'selected' : '' %>><%= s %></option><% }) %>
+      </select>
+    </div>
+    <div>
+      <label for="f-club">Club</label>
+      <select id="f-club" name="club">
+        <option value="">All</option>
+        <% clubs.forEach((c) => { %><option value="<%= c.id %>" <%= filters.club === String(c.id) ? 'selected' : '' %>><%= c.name %></option><% }) %>
+      </select>
+    </div>
+    <div>
+      <label for="f-gender">Gender</label>
+      <select id="f-gender" name="gender">
+        <option value="">All</option>
+        <% Object.entries(GENDERS).forEach(([v, l]) => { %><option value="<%= v %>" <%= filters.gender === v ? 'selected' : '' %>><%= l %></option><% }) %>
+      </select>
+    </div>
+    <div>
+      <label for="f-age">Age group</label>
+      <select id="f-age" name="age">
+        <option value="">All</option>
+        <% setup.ageGroups.forEach((g) => { %><option value="<%= g.id %>" <%= filters.age === String(g.id) ? 'selected' : '' %>><%= g.name %></option><% }) %>
+      </select>
+    </div>
+    <div>
+      <label for="f-belt">Belt group</label>
+      <select id="f-belt" name="belt">
+        <option value="">All</option>
+        <% setup.beltGroups.forEach((g) => { %><option value="<%= g.id %>" <%= filters.belt === String(g.id) ? 'selected' : '' %>><%= g.name %></option><% }) %>
+      </select>
+    </div>
+    <div class="actions">
+      <button class="btn secondary" type="submit">Filter</button>
+      <a href="/admin/competitions/<%= competition.id %>/registrations">Clear</a>
+    </div>
+  </form>
+</section>
+
+<section class="card">
+  <% if (registrations.length === 0) { %>
+    <p class="empty">No registrations match.</p>
+  <% } else { %>
+    <form method="post" action="/admin/competitions/<%= competition.id %>/registrations/review">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <input type="hidden" name="qs" value="<%= query %>">
+      <div class="bulk-bar">
+        <button class="btn approve small" type="submit" name="bulk" value="approved">Approve ticked</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th><input type="checkbox" data-check-all aria-label="Tick all"></th>
+              <th>Fighter</th><th>Club</th><th>Division</th><th>Details</th><th>Status</th><th>Reason</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <% registrations.forEach((r) => { %>
+              <tr>
+                <td><input type="checkbox" name="ids" value="<%= r.id %>" aria-label="Tick <%= r.first_name %> <%= r.last_name %>"></td>
+                <td><strong><%= r.last_name %>, <%= r.first_name %></strong></td>
+                <td><%= r.club_name %></td>
+                <td><%= GENDERS[r.gender] %> · <%= r.age_group %> · <%= r.belt_group %> · <%= r.weight_class %></td>
+                <td class="hint">Age <%= r.age_at_event %> (born <%= formatDate(r.date_of_birth) %>)<br><%= beltName(r.belt_rank) %> belt<br>
+                  <% if (r.document_type) { %>
+                    <a href="/admin/fighters/<%= r.fighter_id %>/document" target="_blank" rel="noopener">View <%= documentLabel(r.document_type) %></a>
+                  <% } else { %>
+                    <span class="badge rejected">No document</span>
+                  <% } %>
+                </td>
+                <td><span class="badge <%= r.status %>"><%= r.status %></span></td>
+                <td><input class="note-input" name="note_<%= r.id %>" value="<%= r.review_note %>" maxlength="300" aria-label="Rejection reason for <%= r.first_name %> <%= r.last_name %>"></td>
+                <td>
+                  <div class="actions">
+                    <% if (r.status !== 'approved') { %><button class="btn approve small" type="submit" name="single" value="approved:<%= r.id %>">Approve</button><% } %>
+                    <% if (r.status !== 'rejected') { %><button class="btn danger small" type="submit" name="single" value="rejected:<%= r.id %>">Reject</button><% } %>
+                  </div>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </form>
+  <% } %>
+</section>
+<%- include('../partials/bottom') %>

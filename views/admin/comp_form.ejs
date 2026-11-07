@@ -1,0 +1,58 @@
+<%- include('../partials/top') %>
+<div class="card narrow">
+  <h1><%= title %></h1>
+  <%- include('../partials/errors') %>
+  <% if (locked) { %><div class="notice info">Clubs have registered, so the first event day and age rule are locked. You can still add or remove later days.</div><% } %>
+  <form method="post" action="<%= action %>">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <div class="field">
+      <label for="name">Competition name</label>
+      <input id="name" name="name" value="<%= competition.name || '' %>" required>
+    </div>
+    <div class="field">
+      <label for="venue">Venue</label>
+      <input id="venue" name="venue" value="<%= competition.venue || '' %>" required>
+    </div>
+    <fieldset class="date-list">
+      <legend>Event dates</legend>
+      <p class="hint">Enter each competition day. They don't need to be in a row, so two weekends works. To add more than these boxes allow, save and more appear. Ages use the first day.</p>
+      <% const dates = competition.event_dates || []; %>
+      <% const boxes = Math.max(dates.length + 2, 4); %>
+      <div class="form-row">
+        <% for (let i = 0; i < boxes; i += 1) { %>
+          <div class="field">
+            <label for="event_date_<%= i %>">Day <%= i + 1 %></label>
+            <input id="event_date_<%= i %>" name="event_dates" type="date" value="<%= dates[i] || '' %>" <%= locked && i === 0 ? 'disabled' : '' %> <%= !locked && i === 0 ? 'required' : '' %>>
+          </div>
+        <% } %>
+      </div>
+    </fieldset>
+    <div class="form-row">
+      <div class="field">
+        <label for="registration_deadline">Registration deadline</label>
+        <input id="registration_deadline" name="registration_deadline" type="date" value="<%= competition.registration_deadline || '' %>" required>
+      </div>
+      <div class="field">
+        <label for="registration_deadline_time">Closes at</label>
+        <input id="registration_deadline_time" name="registration_deadline_time" type="time" value="<%= competition.registration_deadline_time || '23:59' %>" required>
+      </div>
+    </div>
+    <p class="hint">Registration closes by itself at this time. To reopen it, set a later deadline.</p>
+    <div class="field">
+      <label for="age_basis">How age is calculated</label>
+      <select id="age_basis" name="age_basis" <%= locked ? 'disabled' : '' %>>
+        <option value="year" <%= competition.age_basis === 'year' ? 'selected' : '' %>>Competition year minus birth year</option>
+        <option value="date" <%= competition.age_basis === 'date' ? 'selected' : '' %>>Exact age on the first event day</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="description">Details for clubs <span class="hint">(optional)</span></label>
+      <textarea id="description" name="description" rows="4"><%= competition.description || '' %></textarea>
+    </div>
+    <div class="actions">
+      <button class="btn" type="submit">Save</button>
+      <a class="btn secondary" href="/admin">Cancel</a>
+    </div>
+  </form>
+</div>
+<%- include('../partials/bottom') %>

@@ -1,0 +1,41 @@
+<%- include('../partials/top') %>
+<p class="breadcrumb"><a href="/admin">Admin dashboard</a></p>
+<div class="page-head">
+  <div>
+    <h1>Divisions</h1>
+    <p class="sub"><%= competition.name %> · <%= divisions.length %> division<%= divisions.length === 1 ? '' : 's' %> with entries</p>
+  </div>
+  <div class="actions">
+    <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/registrations">Review registrations</a>
+    <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/export.csv">Export approved (CSV)</a>
+  </div>
+</div>
+
+<% if (divisions.length === 0) { %>
+  <div class="card"><p class="empty">No fighters are registered yet.</p></div>
+<% } %>
+
+<% divisions.forEach((d) => { %>
+  <section class="card">
+    <div class="division-head">
+      <h2><%= d.title %></h2>
+      <p class="stats">
+        <span><strong><%= d.approved.length %></strong> approved</span>
+        <% if (d.pending > 0) { %><span><strong><%= d.pending %></strong> pending</span><% } %>
+      </p>
+    </div>
+    <% if (d.approved.length === 0) { %>
+      <p class="empty">No approved fighters yet.</p>
+    <% } else { %>
+      <ol class="fighter-list">
+        <% d.approved.forEach((r) => { %>
+          <li><strong><%= r.last_name %>, <%= r.first_name %></strong> · <%= r.club_name %></li>
+        <% }) %>
+      </ol>
+    <% } %>
+    <% if (d.approved.length + d.pending < 2) { %>
+      <p class="warn-text">No opponent yet in this division.</p>
+    <% } %>
+  </section>
+<% }) %>
+<%- include('../partials/bottom') %>

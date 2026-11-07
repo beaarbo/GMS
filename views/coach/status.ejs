@@ -1,0 +1,36 @@
+<%- include('../partials/top') %>
+<div class="card narrow">
+  <h1>Join a club</h1>
+  <% const pending = application && application.status === 'pending'; %>
+  <% if (pending) { %>
+    <p><span class="badge pending">Waiting for approval</span></p>
+    <p>You applied to <strong><%= application.club_name %></strong>. You can register athletes once an admin approves you.</p>
+    <form method="post" action="/coach/withdraw" data-confirm="Withdraw your application?">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <button class="btn danger" type="submit">Withdraw application</button>
+    </form>
+  <% } else { %>
+    <% if (application && application.status === 'rejected') { %>
+      <div class="notice error" role="status">Your application to <%= application.club_name %> was rejected: <%= application.review_note %></div>
+    <% } else if (application && application.status === 'removed') { %>
+      <div class="notice info" role="status">An admin removed you from <%= application.club_name %>. You can apply to a club again below.</div>
+    <% } %>
+    <% if (clubs.length === 0) { %>
+      <p class="empty">No clubs have been created yet. Please check back once the organiser has added yours.</p>
+    <% } else { %>
+      <p class="sub">Choose your club. An admin reviews each application before you can register athletes.</p>
+      <form method="post" action="/coach/apply">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <div class="field">
+          <label for="club_id">Club</label>
+          <select id="club_id" name="club_id" required>
+            <option value="">Select</option>
+            <% clubs.forEach((club) => { %><option value="<%= club.id %>"><%= club.name %> (<%= club.city %>)</option><% }) %>
+          </select>
+        </div>
+        <button class="btn" type="submit">Apply to join</button>
+      </form>
+    <% } %>
+  <% } %>
+</div>
+<%- include('../partials/bottom') %>

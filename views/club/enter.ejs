@@ -1,0 +1,90 @@
+<%- include('../partials/top') %>
+<p class="breadcrumb"><a href="/club">Club dashboard</a></p>
+<div class="page-head">
+  <div>
+    <h1><%= competition.name %></h1>
+    <p class="sub"><%= eventDatesText(competition) %> · <%= competition.venue %> · Registration deadline: <%= deadlineText(competition) %> · <%= open ? timeLeft(competition) : 'Closed' %></p>
+  </div>
+  <div class="actions">
+    <% if (competition.bouts_published_at) { %><a class="btn" href="/club/competitions/<%= competition.id %>/bouts">View bout list</a><% } %>
+    <a class="btn secondary" href="/competitions/<%= competition.id %>">View division rules</a>
+  </div>
+</div>
+
+<section class="card">
+  <h2>Register fighters</h2>
+  <% if (!open) { %>
+    <p class="empty">Registration for this competition closed. The deadline was <%= deadlineText(competition) %>.</p>
+  <% } else if (available.length === 0) { %>
+    <p class="empty">All your fighters are entered, or you haven't added any yet. <a href="/club/fighters/new">Add a fighter</a>.</p>
+  <% } else { %>
+    <p class="sub">Tick each fighter and choose their weight class. The system works out their age and belt division, and the host then approves it.</p>
+    <form method="post" action="/club/competitions/<%= competition.id %>/enter">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Enter</th><th>Fighter</th><th>Gender</th><th>Age at event</th><th>Belt</th><th>Weight class</th></tr></thead>
+          <tbody>
+            <% available.forEach((f) => { %>
+              <tr>
+                <td><input type="checkbox" name="fighter_ids" value="<%= f.id %>" aria-label="Enter <%= f.first_name %> <%= f.last_name %>" <%= f.options.ok && f.hasDocument ? '' : 'disabled' %>></td>
+                <td><strong><%= f.last_name %>, <%= f.first_name %></strong></td>
+                <td><%= GENDERS[f.gender] %></td>
+                <td class="num"><%= f.age %></td>
+                <td><%= beltName(f.belt_rank) %></td>
+                <td>
+                  <% if (f.options.ok && !f.hasDocument) { %>
+                    <a class="btn small" href="/club/fighters/<%= f.id %>/document">Upload <%= documentLabel(documentTypeFor(f.belt_rank)) %> first</a>
+                  <% } else if (f.options.ok) { %>
+                    <select class="weight-select" name="weight_class_<%= f.id %>" aria-label="Weight class of <%= f.first_name %> <%= f.last_name %>">
+                      <option value="">Select</option>
+                      <% f.options.classes.forEach((c) => { %><option value="<%= c.id %>" <%= f.lastClassId === c.id ? 'selected' : '' %>><%= c.label %></option><% }) %>
+                    </select>
+                  <% } else { %>
+                    <span class="hint"><%= f.options.error %></span>
+                  <% } %>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+      <p></p>
+      <button class="btn" type="submit">Submit for approval</button>
+    </form>
+  <% } %>
+</section>
+
+<section class="card">
+  <h2>Your entries</h2>
+  <% if (registrations.length === 0) { %>
+    <p class="empty">You haven't entered any fighters yet.</p>
+  <% } else { %>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Fighter</th><th>Division</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          <% registrations.forEach((r) => { %>
+            <tr>
+              <td><strong><%= r.last_name %>, <%= r.first_name %></strong></td>
+              <td><%= GENDERS[r.gender] %> · <%= r.age_group %> · <%= r.belt_group %> · <%= r.weight_class %></td>
+              <td>
+                <span class="badge <%= r.status %>"><%= r.status %></span>
+                <% if (r.review_note) { %><div class="hint"><%= r.review_note %></div><% } %>
+              </td>
+              <td>
+                <% if (r.status !== 'approved') { %>
+                  <form method="post" action="/club/competitions/<%= competition.id %>/withdraw/<%= r.id %>" data-confirm="Withdraw <%= r.first_name %> <%= r.last_name %>?">
+                    <input type="hidden" name="_csrf" value="<%= csrf %>">
+                    <button class="btn danger small" type="submit">Withdraw</button>
+                  </form>
+                <% } %>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</section>
+<%- include('../partials/bottom') %>

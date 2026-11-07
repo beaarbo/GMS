@@ -1,0 +1,57 @@
+<%- include('partials/top') %>
+<% const open = isRegistrationOpen(competition); %>
+<div class="page-head">
+  <div>
+    <h1><%= competition.name %></h1>
+    <p class="sub"><%= eventDatesText(competition) %> · <%= competition.venue %></p>
+    <p class="sub">Registration deadline: <%= deadlineText(competition) %> · <%= open ? timeLeft(competition) : 'Closed' %></p>
+  </div>
+  <% if (user && user.club_id) { %>
+    <a class="btn" href="/club/competitions/<%= competition.id %>"><%= open ? 'Register fighters' : 'View your entries' %></a>
+  <% } else if (user && user.role === 'coach') { %>
+    <a class="btn" href="/coach">Join a club to enter</a>
+  <% } else if (!user && open) { %>
+    <a class="btn" href="/register">Create a coach account to enter</a>
+  <% } %>
+</div>
+
+<% if (competition.description) { %><div class="card"><p class="empty"><%= competition.description %></p></div><% } %>
+
+<section class="card">
+  <h2>Kyorugi divisions</h2>
+  <p class="sub">Fighters are grouped by gender, age, belt and weight.
+    <%= competition.age_basis === 'year' ? 'Age is the competition year minus the birth year.' : 'Age is taken on the first day of the event.' %></p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Age group</th><th>Ages</th><th>Male weight classes</th><th>Female weight classes</th></tr></thead>
+      <tbody>
+        <% setup.ageGroups.forEach((g) => { const classes = (gender) => setup.weightClasses.filter((w) => w.age_group_id === g.id && w.gender === gender).map((w) => w.label).join(', '); %>
+          <tr>
+            <td><strong><%= g.name %></strong></td>
+            <td class="nowrap"><%= g.min_age %>–<%= g.max_age %></td>
+            <td><%= classes('M') %></td>
+            <td><%= classes('F') %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Belt groups</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Group</th><th>Belts</th></tr></thead>
+      <tbody>
+        <% setup.beltGroups.forEach((g) => { %>
+          <tr>
+            <td><strong><%= g.name %></strong></td>
+            <td><%= BELTS.filter((b) => b.rank >= g.min_rank && b.rank <= g.max_rank).map((b) => b.name).join(', ') %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</section>
+<%- include('partials/bottom') %>

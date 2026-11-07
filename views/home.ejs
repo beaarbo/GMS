@@ -1,0 +1,25 @@
+<%- include('partials/top') %>
+<div class="page-head">
+  <div>
+    <h1>Taekwondo competitions</h1>
+    <p class="sub">Kyorugi (sparring) events open for club registration.</p>
+  </div>
+  <% if (!user) { %><a class="btn" href="/register">Create a coach account</a><% } %>
+</div>
+
+<% if (competitions.length === 0) { %>
+  <div class="card"><p class="empty">No competitions have been posted yet. Check back soon.</p></div>
+<% } %>
+
+<div class="card-grid">
+  <% competitions.forEach((c) => { const open = isRegistrationOpen(c); %>
+    <article class="card">
+      <p><span class="badge <%= open ? 'open' : 'closed' %>"><%= open ? `Open · ${timeLeft(c)}` : 'Registration closed' %></span></p>
+      <h2><%= c.name %></h2>
+      <p class="sub"><%= eventDatesText(c) %> · <%= c.venue %></p>
+      <p class="sub">Registration deadline: <%= deadlineText(c) %></p>
+      <div class="actions"><a class="btn secondary" href="/competitions/<%= c.id %>">View details</a></div>
+    </article>
+  <% }) %>
+</div>
+<%- include('partials/bottom') %>

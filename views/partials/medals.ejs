@@ -1,0 +1,23 @@
+<section class="card">
+  <h2>Medal standings</h2>
+  <% if (medals.table.length === 0) { %>
+    <p class="empty">No medals yet.</p>
+  <% } else { %>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Club</th><th class="medal-count">Gold</th><th class="medal-count">Silver</th><th class="medal-count">Bronze</th></tr></thead>
+        <tbody>
+          <% medals.table.forEach((row) => { %>
+            <tr>
+              <td><strong><%= row.club %></strong></td>
+              <td class="medal-count"><%= row.gold %></td>
+              <td class="medal-count"><%= row.silver %></td>
+              <td class="medal-count"><%= row.bronze %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+    <p class="hint">Each losing semifinalist gets bronze. Fighters alone in a division aren't counted.</p>
+  <% } %>
+</section>

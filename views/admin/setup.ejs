@@ -1,0 +1,50 @@
+<%- include('../partials/top') %>
+<p class="breadcrumb"><a href="/admin">Admin dashboard</a></p>
+<div class="page-head">
+  <div>
+    <h1>Division setup</h1>
+    <p class="sub"><%= competition.name %></p>
+  </div>
+</div>
+
+<%- include('../partials/errors') %>
+<% if (locked) { %>
+  <div class="notice info">Clubs have registered, so divisions are locked to keep existing placements correct.</div>
+<% } %>
+
+<form method="post" action="/admin/competitions/<%= competition.id %>/setup">
+  <input type="hidden" name="_csrf" value="<%= csrf %>">
+  <fieldset class="card" <%= locked ? 'disabled' : '' %>>
+    <h2>Age groups and weight classes</h2>
+    <p class="sub">List limits in increasing order. <strong>-45</strong> means up to and including 45 kg, and <strong>+78</strong> is the open class above 78 kg. Clear a row's fields to remove it.</p>
+    <div class="table-wrap">
+      <table class="setup-table">
+        <thead><tr><th>Name</th><th>Min age</th><th>Max age</th><th>Male limits (kg)</th><th>Female limits (kg)</th></tr></thead>
+        <tbody>
+          <% [...ageRows, {}, {}].forEach((row, i) => { %>
+            <tr>
+              <td><input name="age_name" value="<%= row.name || '' %>" aria-label="Age group <%= i + 1 %> name"></td>
+              <td><input name="age_min" type="number" min="0" value="<%= row.min_age ?? '' %>" aria-label="Age group <%= i + 1 %> minimum age"></td>
+              <td><input name="age_max" type="number" min="0" value="<%= row.max_age ?? '' %>" aria-label="Age group <%= i + 1 %> maximum age"></td>
+              <td><input class="limits" name="age_male" value="<%= row.male || '' %>" aria-label="Age group <%= i + 1 %> male weight limits"></td>
+              <td><input class="limits" name="age_female" value="<%= row.female || '' %>" aria-label="Age group <%= i + 1 %> female weight limits"></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </fieldset>
+
+  <section class="card">
+    <h2>Belt groups</h2>
+    <p class="sub">Every competition uses three fixed groups: <%= beltRows.map((g) => g.name).join(', ') %>.</p>
+  </section>
+
+  <% if (!locked) { %>
+    <div class="actions">
+      <button class="btn" type="submit">Save divisions</button>
+      <a class="btn secondary" href="/admin">Back to dashboard</a>
+    </div>
+  <% } %>
+</form>
+<%- include('../partials/bottom') %>

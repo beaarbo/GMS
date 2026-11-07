@@ -1,0 +1,18 @@
+<div class="table-wrap">
+  <svg class="bracket" viewBox="0 0 595 <%= division.layout.height + 14 %>" role="img" aria-label="Bracket for <%= division.title %>">
+    <% division.layout.lines.forEach((l) => { %><line x1="<%= l.x1 %>" y1="<%= l.y1 %>" x2="<%= l.x2 %>" y2="<%= l.y2 %>"/><% }) %>
+    <% division.layout.fighters.forEach((f) => { %>
+      <% if (f.seed) { %><text class="seed" x="13" y="<%= f.y - 2 %>" text-anchor="end"><%= f.seed %></text><% } %>
+      <text class="name <%= highlightClubId && f.clubId === highlightClubId ? 'own' : '' %>" x="16" y="<%= f.y - 3 %>"><%= f.name %></text>
+      <text class="club" x="16" y="<%= f.y + 8 %>"><%= f.club %></text>
+    <% }) %>
+    <% division.layout.labels.forEach((l) => { %>
+      <text class="number" x="<%= l.x - 4 %>" y="<%= l.y + 4 %>" text-anchor="end"><%= l.number %></text>
+      <text class="time" x="<%= l.x - 24 %>" y="<%= l.y + 3 %>" text-anchor="end"><%= l.time %></text>
+    <% }) %>
+    <% division.layout.winners.forEach((w) => { const fits = Math.floor((w.endX - w.x - 6) / 4.4); %>
+      <text class="winner <%= highlightClubId && w.clubId === highlightClubId ? 'own' : '' %>" x="<%= w.x + 3 %>" y="<%= w.y - 3 %>"><%= w.name.length > fits ? `${w.name.slice(0, fits - 1)}…` : w.name %></text>
+    <% }) %>
+    <% if (division.layout.note) { %><text class="time" x="<%= division.layout.note.x %>" y="<%= division.layout.note.y - 4 %>" text-anchor="end"><%= division.layout.note.text %></text><% } %>
+  </svg>
+</div>
