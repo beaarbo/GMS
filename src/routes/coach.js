@@ -23,6 +23,8 @@ router.get('/', (req, res) => {
 });
 
 router.post('/apply', (req, res) => {
+  // Coaches already in a club change it from their account page.
+  if (req.user.club_id) return res.redirect('/account');
   const clubId = Number(req.body.club_id);
   const result = applyToClub(req.app.locals.db, req.user.id, clubId);
   if (result.ok) {

@@ -28,7 +28,8 @@ router.get('/', (req, res) => {
     title: 'Clubs and coaches',
     applications: db
       .prepare(
-        `SELECT a.id, a.created_at, u.full_name, u.email, u.phone, c.name AS club_name
+        `SELECT a.id, a.created_at, u.full_name, u.email, u.phone, c.name AS club_name,
+           (SELECT cur.name FROM clubs cur WHERE cur.id = u.club_id) AS current_club
          FROM club_applications a JOIN users u ON u.id = a.user_id JOIN clubs c ON c.id = a.club_id
          WHERE a.status = 'pending' ORDER BY a.id`
       )

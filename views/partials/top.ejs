@@ -34,7 +34,7 @@
         <%- link('/coach', 'Join a club') %>
       <% } %>
       <% if (user) { %>
-        <span class="who"><%= user.club_name || user.full_name || 'Host admin' %></span>
+        <a class="who" href="/account" title="My account"<%- currentPath.startsWith('/account') ? ' aria-current="page"' : '' %>><%= user.full_name || user.email %><%= user.club_name ? ` · ${user.club_name}` : '' %></a>
         <form method="post" action="/logout">
           <input type="hidden" name="_csrf" value="<%= csrf %>">
           <button class="link-button" type="submit">Log out</button>

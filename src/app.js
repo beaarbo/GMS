@@ -13,6 +13,7 @@ const publicRoutes = require('./routes/public');
 const authRoutes = require('./routes/auth');
 const clubRoutes = require('./routes/club');
 const coachRoutes = require('./routes/coach');
+const accountRoutes = require('./routes/account');
 const adminRoutes = require('./routes/admin');
 const adminClubRoutes = require('./routes/adminClubs');
 
@@ -214,6 +215,7 @@ function createApp({
   app.use(authRoutes);
   app.use('/club', clubRoutes);
   app.use('/coach', coachRoutes);
+  app.use('/account', accountRoutes);
   app.use('/admin/clubs', adminClubRoutes);
   app.use('/admin', adminRoutes);
 

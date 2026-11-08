@@ -1350,6 +1350,120 @@ test('admins can list every account and filter by type or search', async () => {
   assert.equal((await request(app).get('/admin/accounts')).status, 302);
 });
 
+test('anyone logged in can update their name and phone', async () => {
+  const { db, app } = await setup();
+  const coach = await signUpClub(app, 'Tigers', 'tigers@test.test');
+  assert.equal((await request(app).get('/account')).headers.location, '/login');
+
+  const page = await coach.get('/account');
+  assert.equal(page.status, 200);
+  assert.match(page.text, /My account/);
+  assert.match(page.text, /You coach for <strong>Tigers<\/strong>/);
+
+  assert.equal((await post(coach, '/account/details', { full_name: '', phone: '1' }, '/account')).status, 400);
+  await post(coach, '/account/details', { full_name: 'Coach Ana', phone: '555-9999' }, '/account');
+  assert.deepEqual(db.prepare("SELECT full_name, phone FROM users WHERE email = 'tigers@test.test'").get(), { full_name: 'Coach Ana', phone: '555-9999' });
+  assert.equal(lastLog(db).action, 'account.updated');
+
+  const admin = await login(app, 'admin@test.test');
+  await post(admin, '/account/details', { full_name: 'Head Organiser', phone: '' }, '/account');
+  assert.equal(db.prepare("SELECT full_name FROM users WHERE role = 'admin'").get().full_name, 'Head Organiser');
+  assert.ok(!(await admin.get('/account')).text.includes('Move to another club'), 'admins have no club section');
+});
+
+test('changing email needs the current password and warns the old address', async () => {
+  const { db, app, mailer } = await setup();
+  const coach = await signUpClub(app, 'Tigers', 'tigers@test.test');
+  await signUpCoach(app, 'taken@test.test');
+  const emailOf = () => db.prepare('SELECT email FROM users WHERE full_name = ? ORDER BY id').get('Coach').email;
+
+  assert.equal((await post(coach, '/account/email', { email: 'new@test.test', current_password: 'wrong-password' }, '/account')).status, 401);
+  assert.equal((await post(coach, '/account/email', { email: 'TAKEN@test.test', current_password: PASSWORD }, '/account')).status, 400);
+  assert.equal((await post(coach, '/account/email', { email: 'not-an-email', current_password: PASSWORD }, '/account')).status, 400);
+  assert.equal(emailOf(), 'tigers@test.test');
+
+  const before = mailer.sent.length;
+  await post(coach, '/account/email', { email: 'New@Test.test', current_password: PASSWORD }, '/account');
+  assert.equal(emailOf(), 'new@test.test');
+  const warning = mailer.sent.slice(before).find((m) => m.subject === 'Your account was changed');
+  assert.equal(warning.to, 'tigers@test.test', 'the old address is told');
+  assert.match(warning.text, /new@test\.test/);
+  assert.match(lastLog(db).summary, /from tigers@test\.test to new@test\.test/);
+
+  const fresh = request.agent(app);
+  assert.equal((await post(fresh, '/login', { email: 'new@test.test', password: PASSWORD }, '/login')).status, 302);
+  assert.equal((await post(request.agent(app), '/login', { email: 'tigers@test.test', password: PASSWORD }, '/login')).status, 401);
+});
+
+test('changing password needs the current one and logs out other devices', async () => {
+  const { db, app, mailer } = await setup();
+  const here = await signUpClub(app, 'Tigers', 'tigers@test.test');
+  const elsewhere = await login(app, 'tigers@test.test');
+  const change = (fields) => post(here, '/account/password', fields, '/account');
+
+  assert.equal((await change({ current_password: 'wrong', new_password: 'brand-new-pass-1', confirm_password: 'brand-new-pass-1' })).status, 401);
+  assert.equal((await change({ current_password: PASSWORD, new_password: 'short', confirm_password: 'short' })).status, 400);
+  assert.equal((await change({ current_password: PASSWORD, new_password: 'brand-new-pass-1', confirm_password: 'different-pass-1' })).status, 400);
+  assert.equal((await elsewhere.get('/club')).status, 200, 'nothing changed yet');
+
+  const done = await change({ current_password: PASSWORD, new_password: 'brand-new-pass-1', confirm_password: 'brand-new-pass-1' });
+  assert.equal(done.headers.location, '/account');
+  assert.equal((await here.get('/club')).status, 200, 'this device stays logged in');
+  assert.equal((await elsewhere.get('/club')).status, 302, 'other devices are logged out');
+  assert.equal(mailer.sent[mailer.sent.length - 1].subject, 'Your account was changed');
+  assert.equal(lastLog(db).action, 'account.password_changed');
+  assert.ok(!JSON.stringify(logged(db)).includes('brand-new-pass-1'));
+  assert.equal((await post(request.agent(app), '/login', { email: 'tigers@test.test', password: 'brand-new-pass-1' }, '/login')).status, 302);
+});
+
+test('a coach can only change club through admin approval', async () => {
+  const { db, app, mailer } = await setup();
+  const coach = await signUpClub(app, 'Tigers', 'tigers@test.test');
+  const tigers = db.prepare("SELECT id FROM clubs WHERE name = 'Tigers'").get().id;
+  const dragons = createClub(db, { name: 'Dragons', city: 'Cebu' });
+  const clubOf = () => db.prepare("SELECT club_id FROM users WHERE email = 'tigers@test.test'").get().club_id;
+  await addFighter(coach, {});
+
+  assert.equal((await post(coach, '/account/club', { club_id: String(tigers) }, '/account')).status, 400, 'not your own club');
+  await post(coach, '/account/club', { club_id: String(dragons) }, '/account');
+  assert.equal(clubOf(), tigers, 'still in Tigers until approved');
+  assert.match((await coach.get('/account')).text, /waiting for an admin/);
+  assert.match(mailer.sent[mailer.sent.length - 1].text, /move from Tigers to Dragons/);
+  assert.match(lastLog(db).summary, /Asked to move from Tigers to Dragons/);
+
+  const admin = await login(app, 'admin@test.test');
+  assert.match((await admin.get('/admin/clubs')).text, /Moving from Tigers/);
+  const { id } = db.prepare("SELECT id FROM club_applications WHERE status = 'pending'").get();
+  await post(admin, `/admin/clubs/applications/${id}/approve`, {}, '/admin/clubs');
+  assert.equal(clubOf(), dragons);
+  assert.deepEqual(
+    db.prepare("SELECT c.name, a.status FROM club_applications a JOIN clubs c ON c.id = a.club_id ORDER BY a.id").all(),
+    [{ name: 'Tigers', status: 'removed' }, { name: 'Dragons', status: 'approved' }]
+  );
+  assert.equal(db.prepare('SELECT club_id FROM fighters').get().club_id, tigers, 'athletes stay with their club');
+  assert.equal((await post(coach, '/coach/apply', { club_id: String(tigers) }, '/account')).headers.location, '/account');
+});
+
+test('a coach can withdraw a club request or leave their club', async () => {
+  const { db, app } = await setup();
+  const coach = await signUpClub(app, 'Tigers', 'tigers@test.test');
+  const dragons = createClub(db, { name: 'Dragons', city: 'Cebu' });
+  await post(coach, '/account/club', { club_id: String(dragons) }, '/account');
+  await post(coach, '/account/club', { club_id: String(dragons) }, '/account');
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM club_applications WHERE status = 'pending'").get().n, 1);
+  await post(coach, '/account/club/withdraw', {}, '/account');
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM club_applications WHERE status = 'pending'").get().n, 0);
+
+  await post(coach, '/account/club/leave', {}, '/account');
+  assert.equal(db.prepare("SELECT club_id FROM users WHERE email = 'tigers@test.test'").get().club_id, null);
+  assert.equal(lastLog(db).action, 'coach.left');
+  assert.equal((await coach.get('/club')).headers.location, '/coach');
+
+  const admin = await login(app, 'admin@test.test');
+  assert.equal((await post(admin, '/account/club', { club_id: String(dragons) }, '/account')).status, 403);
+  assert.equal((await post(admin, '/account/club/leave', {}, '/account')).status, 403);
+});
+
 test('POST without a CSRF token is refused', async () => {
   const { app } = await setup();
   const res = await request(app).post('/login').type('form').send({ email: 'admin@test.test', password: PASSWORD });

@@ -28,15 +28,27 @@ function sendPasswordReset(ctx, email, token) {
 
 function notifyAdminsOfApplication(ctx, userId, clubId) {
   const { db } = ctx;
-  const coach = db.prepare('SELECT full_name, email FROM users WHERE id = ?').get(userId);
+  const coach = db
+    .prepare('SELECT u.full_name, u.email, c.name AS current FROM users u LEFT JOIN clubs c ON c.id = u.club_id WHERE u.id = ?')
+    .get(userId);
   const club = db.prepare('SELECT name FROM clubs WHERE id = ?').get(clubId);
   const admins = db.prepare("SELECT email FROM users WHERE role = 'admin'").all().map((u) => u.email);
+  const request = coach.current ? `has asked to move from ${coach.current} to ${club.name}` : `has applied to join ${club.name}`;
   return sendAll(
     ctx,
     admins,
     `Coach application: ${club.name}`,
-    `${coach.full_name} (${coach.email}) has applied to join ${club.name}.\n\nReview it here: ${ctx.publicUrl}/admin/clubs`
+    `${coach.full_name} (${coach.email}) ${request}.\n\nReview it here: ${ctx.publicUrl}/admin/clubs`
   );
+}
+
+// A security notice for changes the account holder should know about.
+function notifyAccountChange(ctx, email, what) {
+  return ctx.mailer.send({
+    to: email,
+    subject: 'Your account was changed',
+    text: `${what}\n\nIf this wasn't you, reset your password straight away at ${ctx.publicUrl}/forgot-password and contact the organiser.`,
+  });
 }
 
 function notifyApplicationApproved(ctx, applicationId) {
@@ -148,6 +160,7 @@ async function sendDeadlineReminders(ctx, now = Date.now()) {
 module.exports = {
   sendPasswordReset,
   notifyAdminsOfApplication,
+  notifyAccountChange,
   notifyApplicationApproved,
   notifyApplicationRejected,
   notifyCoachRemoved,

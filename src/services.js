@@ -552,10 +552,11 @@ async function createCoachAccount(db, { full_name, phone, email, password }) {
 }
 
 // Returns { ok, error? }. A coach belongs to one club and has one open application.
+// A coach already in a club can apply to another; they move only once approved.
 function applyToClub(db, userId, clubId) {
   const user = db.prepare('SELECT club_id FROM users WHERE id = ?').get(userId);
-  if (user.club_id) return { ok: false, error: 'You already belong to a club.' };
   if (!db.prepare('SELECT 1 FROM clubs WHERE id = ?').get(clubId)) return { ok: false, error: 'Select a club.' };
+  if (user.club_id === clubId) return { ok: false, error: 'You are already in that club.' };
   if (db.prepare("SELECT 1 FROM club_applications WHERE user_id = ? AND status = 'pending'").get(userId)) {
     return { ok: false, error: 'You already have an application waiting for approval.' };
   }
@@ -569,6 +570,10 @@ function approveApplication(db, applicationId) {
       .prepare("SELECT * FROM club_applications WHERE id = ? AND status = 'pending'")
       .get(applicationId);
     if (!application) return false;
+    // A coach changing clubs leaves their old one.
+    db.prepare(
+      "UPDATE club_applications SET status = 'removed', reviewed_at = datetime('now') WHERE user_id = ? AND status = 'approved'"
+    ).run(application.user_id);
     db.prepare("UPDATE club_applications SET status = 'approved', reviewed_at = datetime('now') WHERE id = ?").run(applicationId);
     db.prepare('UPDATE users SET club_id = ? WHERE id = ?').run(application.club_id, application.user_id);
     return true;

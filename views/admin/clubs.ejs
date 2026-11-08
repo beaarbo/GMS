@@ -20,7 +20,10 @@
             <tr>
               <td><strong><%= a.full_name %></strong></td>
               <td><%= a.email %><br><span class="hint"><%= a.phone %></span></td>
-              <td><%= a.club_name %></td>
+              <td>
+                <%= a.club_name %>
+                <% if (a.current_club) { %><div class="hint">Moving from <%= a.current_club %></div><% } %>
+              </td>
               <td>
                 <div class="actions">
                   <form method="post" action="/admin/clubs/applications/<%= a.id %>/approve">

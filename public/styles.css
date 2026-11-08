@@ -355,6 +355,12 @@ tbody tr.result-row-done:hover td { background: var(--ok-soft); }
 
 /* Page-specific helpers */
 
+.account-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: var(--space-4); align-items: start; }
+.account-grid .card { margin: 0; }
+.account-leave { margin-top: var(--space-5); padding-top: var(--space-4); border-top: 1px solid var(--line); }
+.account-leave .hint { margin: var(--space-2) 0 0; }
+.who:hover { color: var(--ink); }
+
 .document-preview { display: block; max-width: 100%; max-height: 320px; margin-bottom: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius); }
 .date-list { border: 0; padding: 0; margin: 0 0 var(--space-4); min-width: 0; }
 .date-list legend { font-size: var(--text-sm); font-weight: 600; color: var(--ink-2); padding: 0; margin-bottom: var(--space-1); }

@@ -1,0 +1,109 @@
+<%- include('partials/top') %>
+<div class="page-head">
+  <div>
+    <h1>My account</h1>
+    <p class="sub"><%= account.role === 'admin' ? 'Admin account' : 'Coach account' %> · <%= account.email %></p>
+  </div>
+</div>
+
+<div class="account-grid">
+  <section class="card">
+    <h2>Details</h2>
+    <% if (errors.details) { %><div class="notice error" role="alert"><%= errors.details %></div><% } %>
+    <form method="post" action="/account/details">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <div class="field">
+        <label for="full_name">Name</label>
+        <input id="full_name" name="full_name" value="<%= values.full_name ?? account.full_name %>" autocomplete="name" required>
+      </div>
+      <div class="field">
+        <label for="phone">Contact number<%= account.role === 'admin' ? '' : '' %></label>
+        <input id="phone" name="phone" type="tel" value="<%= values.phone ?? account.phone %>" autocomplete="tel" <%= account.role === 'coach' ? 'required' : '' %>>
+      </div>
+      <button class="btn" type="submit">Save details</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Email</h2>
+    <% if (errors.email) { %><div class="notice error" role="alert"><%= errors.email %></div><% } %>
+    <form method="post" action="/account/email">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <div class="field">
+        <label for="email">New email</label>
+        <input id="email" name="email" type="email" value="<%= values.email || '' %>" autocomplete="email" required>
+        <p class="hint">You'll log in with this. We'll let your current address know about the change.</p>
+      </div>
+      <div class="field">
+        <label for="email_password">Current password</label>
+        <input id="email_password" name="current_password" type="password" autocomplete="current-password" required>
+      </div>
+      <button class="btn" type="submit">Change email</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Password</h2>
+    <% if (errors.password) { %><div class="notice error" role="alert"><%= errors.password %></div><% } %>
+    <form method="post" action="/account/password">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <div class="field">
+        <label for="current_password">Current password</label>
+        <input id="current_password" name="current_password" type="password" autocomplete="current-password" required>
+      </div>
+      <div class="field">
+        <label for="new_password">New password <span class="hint">(at least 10 characters)</span></label>
+        <input id="new_password" name="new_password" type="password" autocomplete="new-password" minlength="10" maxlength="72" required>
+      </div>
+      <div class="field">
+        <label for="confirm_password">Repeat new password</label>
+        <input id="confirm_password" name="confirm_password" type="password" autocomplete="new-password" minlength="10" maxlength="72" required>
+      </div>
+      <p class="hint">Changing it logs you out on any other devices.</p>
+      <button class="btn" type="submit">Change password</button>
+    </form>
+  </section>
+
+  <% if (account.role === 'coach') { %>
+    <section class="card">
+      <h2>Club</h2>
+      <% if (errors.club) { %><div class="notice error" role="alert"><%= errors.club %></div><% } %>
+      <p><%= clubName ? 'You coach for' : 'You are not in a club yet.' %> <% if (clubName) { %><strong><%= clubName %></strong>.<% } %></p>
+
+      <% if (pending) { %>
+        <div class="notice info">Your request to <%= clubName ? 'move to' : 'join' %> <strong><%= pending.club %></strong> is waiting for an admin.</div>
+        <form method="post" action="/account/club/withdraw" data-confirm="Withdraw your request to <%= pending.club %>?">
+          <input type="hidden" name="_csrf" value="<%= csrf %>">
+          <button class="btn secondary" type="submit">Withdraw request</button>
+        </form>
+      <% } else { %>
+        <% const others = clubs.filter((c) => c.id !== account.club_id); %>
+        <% if (others.length === 0) { %>
+          <p class="empty">There are no other clubs to choose from.</p>
+        <% } else { %>
+          <form method="post" action="/account/club">
+            <input type="hidden" name="_csrf" value="<%= csrf %>">
+            <div class="field">
+              <label for="club_id"><%= clubName ? 'Move to another club' : 'Join a club' %></label>
+              <select id="club_id" name="club_id" required>
+                <option value="">Select</option>
+                <% others.forEach((c) => { %><option value="<%= c.id %>"><%= c.name %> (<%= c.city %>)</option><% }) %>
+              </select>
+              <p class="hint">An admin approves every change. <%= clubName ? `You stay in ${clubName} until then.` : '' %></p>
+            </div>
+            <button class="btn" type="submit"><%= clubName ? 'Request change' : 'Apply to join' %></button>
+          </form>
+        <% } %>
+      <% } %>
+
+      <% if (clubName) { %>
+        <form class="account-leave" method="post" action="/account/club/leave" data-confirm="Leave <%= clubName %>? You'll need an admin's approval to join a club again.">
+          <input type="hidden" name="_csrf" value="<%= csrf %>">
+          <button class="btn danger small" type="submit">Leave <%= clubName %></button>
+          <p class="hint">The club keeps its athletes and their registrations.</p>
+        </form>
+      <% } %>
+    </section>
+  <% } %>
+</div>
+<%- include('partials/bottom') %>
