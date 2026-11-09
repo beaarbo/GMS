@@ -35,7 +35,7 @@ function passwordError(password) {
 
 function homeFor(user) {
   if (user.role === 'admin') return '/admin';
-  return user.club_id ? '/club' : '/coach';
+  return user.club_id ? '/home' : '/coach';
 }
 
 function notFound(res) {

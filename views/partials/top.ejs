@@ -23,6 +23,7 @@
       const link = (href, label) => `<a href="${href}"${current(href) ? ' aria-current="page"' : ''}>${label}</a>`;
     %>
     <nav class="nav" aria-label="Main">
+      <% if (user && user.role === 'coach') { %><%- link('/home', 'Home') %><% } %>
       <%- link('/', 'Competitions') %>
       <%- link('/news', 'News') %>
       <% if (user && user.role === 'admin') { %>

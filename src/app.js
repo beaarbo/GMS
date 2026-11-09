@@ -13,6 +13,7 @@ const { isRegistrationOpen, today, timeLeft, closeExpiredCompetitions, getEventD
 const publicRoutes = require('./routes/public');
 const authRoutes = require('./routes/auth');
 const clubRoutes = require('./routes/club');
+const coachHomeRoutes = require('./routes/coachHome');
 const coachRoutes = require('./routes/coach');
 const accountRoutes = require('./routes/account');
 const adminRoutes = require('./routes/admin');
@@ -242,6 +243,7 @@ function createApp({
 
   app.use(publicRoutes);
   app.use(authRoutes);
+  app.use('/home', coachHomeRoutes);
   app.use('/club', clubRoutes);
   app.use('/coach', coachRoutes);
   app.use('/account', accountRoutes);

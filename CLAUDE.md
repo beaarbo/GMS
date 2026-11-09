@@ -33,7 +33,7 @@ Express with server-rendered EJS and SQLite (better-sqlite3).
 - `src/db.js`: schema (`CREATE TABLE IF NOT EXISTS`) plus data migrations in `migrate`, tracked with SQLite's `user_version`. Add a new version for any change to existing data.
 - `src/app.js`: app factory (`createApp`), security headers, sessions, CSRF.
 - `src/athleteImport.js`, `src/news.js`: pure helpers for the spreadsheet athlete import and for news posts (form checks, plain-text body to paragraphs and links).
-- `src/routes/`: `public` (home, competitions, news), `auth`, `coach` (join a club), `club` (approved coaches: fighters, import, entries, club icon), `admin`, `adminClubs` (clubs, coach approvals) and `adminNews`.
+- `src/routes/`: `public` (home, competitions, news), `auth`, `coachHome` (`/home`, where approved coaches land: upcoming competitions, then news), `coach` (join a club), `club` (approved coaches: fighters, import, entries, club icon), `admin`, `adminClubs` (clubs, coach approvals) and `adminNews`.
 - `views/`, `public/`: templates and static assets.
 - `test/`: `node:test`. `flow.test.js` drives the whole app through supertest on an in-memory database.
 

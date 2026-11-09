@@ -448,3 +448,10 @@ label.check { display: flex; align-items: center; gap: var(--space-2); font-weig
 .news-strip li:first-child { border-top: 0; padding-top: 0; }
 .news-strip li a { font-weight: 600; }
 .news-strip .news-meta { margin: var(--space-1) 0 0; }
+/* Coach home */
+.home-section { margin-bottom: var(--space-6); }
+.home-section > h2, .home-section > .page-head { margin-bottom: var(--space-3); }
+.home-section h3 { margin: var(--space-2) 0; font-size: var(--text-lg); }
+.home-section .news-item h3 a { color: var(--ink); text-decoration: none; }
+.home-section .news-item h3 a:hover { color: var(--chung); text-decoration: underline; }
+.home-entries { margin-top: var(--space-2); }
