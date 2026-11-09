@@ -1836,3 +1836,66 @@ test('rebuilding the users table for officials keeps every linked row', async ()
   assert.deepEqual(db.pragma('foreign_key_check'), []);
   db.close();
 });
+
+test('court screens get a live change event when a result is recorded', async () => {
+  const http = require('http');
+  const { db, app } = await setup();
+  const { compId, admin } = await closedCompetitionWithFighters(db, app, [
+    ['T', 'Alpha'], ['T', 'Bravo'], ['D', 'Charlie'], ['D', 'Delta'],
+  ]);
+  const bouts = `/admin/competitions/${compId}/bouts`;
+  await post(admin, `${bouts}/generate`, { courts: '1', start: '09:00', minutes: '10', rest: '0' }, bouts);
+
+  const page = (await admin.get(`/screens/${compId}/1/1`)).text;
+  assert.match(page, new RegExp(`data-live-events="/screens/${compId}/1/1/events"`));
+  assert.match(page, /<noscript><meta http-equiv="refresh"/, 'without JavaScript it still reloads itself');
+  assert.match(page, /<script src="\/app.js" defer><\/script>/);
+
+  // A logged-in session cookie for the raw stream.
+  const visitor = request.agent(app);
+  const token = await csrfFrom(visitor, '/login');
+  const signIn = await visitor.post('/login').type('form').send({ _csrf: token, email: 'admin@test.test', password: PASSWORD });
+  const cookie = signIn.headers['set-cookie'].map((c) => c.split(';')[0]).join('; ');
+
+  const server = app.listen(0);
+  const { port } = server.address();
+  let received = '';
+  const stream = await new Promise((resolve, reject) => {
+    const req = http.get({ port, path: `/screens/${compId}/1/1/events`, headers: { Cookie: cookie } }, (res) => {
+      assert.equal(res.statusCode, 200);
+      assert.match(res.headers['content-type'], /^text\/event-stream/);
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => { received += chunk; });
+      resolve(req);
+    });
+    req.on('error', reject);
+  });
+  const waitFor = async (pattern) => {
+    for (let i = 0; i < 50 && !pattern.test(received); i += 1) await new Promise((r) => setTimeout(r, 50));
+    return pattern.test(received);
+  };
+  assert.ok(await waitFor(/retry: 5000/), 'the stream opens');
+  assert.equal(app.locals.live.listenerCount(compId), 1);
+
+  const first = db.prepare('SELECT id FROM bouts WHERE bout_number = 1').get();
+  await post(admin, `/admin/competitions/${compId}/results/${first.id}`, { winner: 'blue' }, `/admin/competitions/${compId}/results`);
+  assert.ok(await waitFor(/event: change/), 'recording a result signals the screen');
+
+  // Another competition's changes don't reach this screen.
+  received = '';
+  app.locals.live.notify(compId + 1);
+  await new Promise((r) => setTimeout(r, 500));
+  assert.doesNotMatch(received, /event: change/);
+
+  // Visitors can't open the stream.
+  const anonymous = await new Promise((resolve) => {
+    http.get({ port, path: `/screens/${compId}/1/1/events` }, (res) => { res.resume(); resolve(res.statusCode); });
+  });
+  assert.equal(anonymous, 302);
+
+  // Closing the screen stops listening.
+  stream.destroy();
+  for (let i = 0; i < 20 && app.locals.live.listenerCount(compId) > 0; i += 1) await new Promise((r) => setTimeout(r, 50));
+  assert.equal(app.locals.live.listenerCount(compId), 0);
+  await new Promise((r) => server.close(r));
+});

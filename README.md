@@ -112,7 +112,7 @@ While a bout list exists, approvals can't change and registration can't reopen. 
 
 **Officials** are accounts an admin adds on the **Accounts** page, with a starting password the official can change. They see **Competition day**, where they can run the weigh-in, record results and open court screens for closed competitions. They can't approve entries, draw bout lists, change settings or manage accounts.
 
-**Court screens** show one court on one day, for a TV or tablet at the mat: the bout on now with the blue and red athletes, the next three bouts and the latest results. They refresh every 15 seconds without JavaScript. Admins and officials can open them once a bout list exists, and coaches once it's published. They need a login, because they show athletes' names.
+**Court screens** show one court on one day, for a TV or tablet at the mat: the bout on now with the blue and red athletes, the next three bouts and the latest results. They update live: the moment a result is recorded or a bracket or schedule changes, open screens swap in the new content, and a "Live" marker shows the connection is up. Without JavaScript they reload every 15 seconds instead. Admins and officials can open them once a bout list exists, and coaches once it's published. They need a login, because they show athletes' names.
 
 ## Deploy it
 

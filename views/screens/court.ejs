@@ -3,12 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <%# Refreshes itself, so it works on any screen with no JavaScript. %>
-  <meta http-equiv="refresh" content="<%= refreshSeconds %>">
+  <%# With JavaScript the page updates live as results come in. Without it, it reloads itself. %>
+  <noscript><meta http-equiv="refresh" content="<%= refreshSeconds %>"></noscript>
   <title>Court <%= court %> · <%= competition.name %></title>
   <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
 </head>
-<body class="screen">
+<body class="screen" data-live-events="/screens/<%= competition.id %>/<%= day %>/<%= court %>/events">
 <% const side = (bout, color) => { const f = bout[color]; return f ? { name: f.name, club: f.club } : { name: bout[`${color}Placeholder`] || 'To be decided', club: '' }; }; %>
 <header class="screen-head">
   <div>
@@ -16,11 +17,12 @@
     <p class="screen-sub"><%= competition.name %> · <%= dayLabel %></p>
   </div>
   <div class="screen-sub screen-right">
-    <%= done %> of <%= total %> bouts done<br>Updated <%= updatedAt %>
+    <span class="screen-status" id="screen-status" hidden></span>
+    <span data-live-part="progress"><%= done %> of <%= total %> bouts done<br>Updated <%= updatedAt %></span>
   </div>
 </header>
 
-<main class="screen-main">
+<main class="screen-main" data-live-part="main">
   <section class="screen-now">
     <h1 class="screen-label">Now fighting</h1>
     <% if (now) { const blue = side(now, 'blue'); const red = side(now, 'red'); %>

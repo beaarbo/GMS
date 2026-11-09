@@ -7,6 +7,7 @@ const session = require('express-session');
 const { BELTS, GENDERS, beltName, formatEventDates } = require('./divisions');
 const { createMailer } = require('./mailer');
 const { logActivity } = require('./activity');
+const { createLiveUpdates } = require('./live');
 const { MAX_DOCUMENT_BYTES, MAX_ICON_BYTES, MAX_ATTACHMENT_BYTES, MAX_NEW_COMPETITION_FILES, documentLabel, documentTypeFor, clubInitials } = require('./documents');
 const { MAX_IMPORT_BYTES } = require('./athleteImport');
 const { isRegistrationOpen, today, timeLeft, closeExpiredCompetitions, getEventDates, getClubIcon, clubIconVersions, competitionLogoVersions } = require('./services');
@@ -98,6 +99,8 @@ function createApp({
 }) {
   const app = express();
   app.locals.backups = backups;
+  const live = createLiveUpdates();
+  app.locals.live = live;
   app.set('views', path.join(__dirname, '..', 'views'));
   app.set('view engine', 'ejs');
   app.locals.db = db;
@@ -241,8 +244,11 @@ function createApp({
     req.flash = (type, text) => {
       req.session.flash = [...(req.session.flash || []), { type, text }];
     };
+    // Every change to a competition is logged with it, so this is also where open
+    // court screens hear about results, bracket changes and schedule updates.
     req.logActivity = (action, summary, competitionId = null) => {
       logActivity(db, { user: req.user, action, summary, competitionId });
+      live.notify(competitionId);
     };
     // Club icon links for templates, read from the database once per page when first needed.
     let iconVersions = null;

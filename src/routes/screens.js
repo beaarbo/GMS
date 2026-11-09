@@ -65,6 +65,7 @@ router.get('/:id(\\d+)/:day(\\d+)/:court(\\d+)', screenCompetition, (req, res) =
     title: `Court ${court}`,
     competition: req.competition,
     court,
+    day,
     dayLabel: date ? `Day ${day} · ${formatDay(date)}` : `Day ${day}`,
     now,
     next,
@@ -73,6 +74,39 @@ router.get('/:id(\\d+)/:day(\\d+)/:court(\\d+)', screenCompetition, (req, res) =
     total: bouts.length,
     refreshSeconds: REFRESH_SECONDS,
     updatedAt: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+  });
+});
+
+const HEARTBEAT_MS = 25000;
+const COALESCE_MS = 300;
+
+// A server-sent event stream for one court screen. It sends "change" whenever
+// the competition changes; the page then fetches its new content. Comments keep
+// the connection open through proxies, and the browser reconnects on its own.
+router.get('/:id(\\d+)/:day(\\d+)/:court(\\d+)/events', screenCompetition, (req, res) => {
+  const { live } = req.app.locals;
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  res.write('retry: 5000\n\n');
+
+  // Several changes in a burst (a result and the bout it fills) become one update.
+  let pending = null;
+  const unsubscribe = live.subscribe(req.competition.id, () => {
+    if (pending) return;
+    pending = setTimeout(() => {
+      pending = null;
+      res.write(`event: change\ndata: ${Date.now()}\n\n`);
+    }, COALESCE_MS);
+  });
+  const heartbeat = setInterval(() => res.write(': still here\n\n'), HEARTBEAT_MS);
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    clearTimeout(pending);
+    unsubscribe();
   });
 });
 
