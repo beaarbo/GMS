@@ -12,7 +12,7 @@
 </div>
 
 <% if (divisions.length === 0) { %>
-  <div class="card"><p class="empty">No fighters are registered yet.</p></div>
+  <div class="card"><p class="empty">No athletes are registered yet.</p></div>
 <% } %>
 
 <% divisions.forEach((d) => { %>
@@ -25,7 +25,7 @@
       </p>
     </div>
     <% if (d.approved.length === 0) { %>
-      <p class="empty">No approved fighters yet.</p>
+      <p class="empty">No approved athletes yet.</p>
     <% } else { %>
       <ol class="fighter-list">
         <% d.approved.forEach((r) => { %>

@@ -16,12 +16,5 @@
   <div class="card"><p class="empty">No news yet. Check back soon.</p></div>
 <% } %>
 
-<% posts.forEach((post) => { %>
-  <article class="card news-item">
-    <%- include('partials/news_meta', { post }) %>
-    <h2><a href="/news/<%= post.id %>"><%= post.title %></a></h2>
-    <p><%= newsSummary(post.body) %></p>
-    <a href="/news/<%= post.id %>">Read more</a>
-  </article>
-<% }) %>
+<% posts.forEach((post) => { %><%- include('partials/news_card', { post }) %><% }) %>
 <%- include('partials/bottom') %>

@@ -80,7 +80,7 @@ router.post('/:id(\\d+)/delete', (req, res) => {
     db.prepare('SELECT 1 FROM fighters WHERE club_id = ? LIMIT 1').get(id) ||
     db.prepare('SELECT 1 FROM users WHERE club_id = ? LIMIT 1').get(id);
   if (inUse) {
-    req.flash('error', 'Only clubs with no coaches or fighters can be deleted.');
+    req.flash('error', 'Only clubs with no coaches or athletes can be deleted.');
   } else {
     const club = db.prepare('SELECT name FROM clubs WHERE id = ?').get(id);
     if (db.prepare('DELETE FROM clubs WHERE id = ?').run(id).changes > 0) {
@@ -131,7 +131,7 @@ router.post('/coaches/:id(\\d+)/remove', (req, res) => {
     .get(Number(req.params.id));
   if (removeCoach(db, Number(req.params.id))) {
     req.logActivity('coach.removed', `Removed ${coach.email} from ${coach.club}`);
-    req.flash('success', "Coach removed. The club's fighters and registrations stay with the club.");
+    req.flash('success', "Coach removed. The club's athletes and registrations stay with the club.");
     notifyCoachRemoved(notify, coach.email, coach.club);
   }
   return res.redirect('/admin/clubs');

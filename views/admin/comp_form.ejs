@@ -1,5 +1,6 @@
 <%- include('../partials/top') %>
-<div class="card narrow">
+<p class="breadcrumb"><a href="/admin">Admin dashboard</a></p>
+<div class="card medium">
   <h1><%= title %></h1>
   <%- include('../partials/errors') %>
   <% if (locked) { %><div class="notice info">Clubs have registered, so the first event day and age rule are locked. You can still add or remove later days.</div><% } %>

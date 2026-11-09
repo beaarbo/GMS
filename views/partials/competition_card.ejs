@@ -1,0 +1,36 @@
+<%# One competition as a card, used on the Competitions page and the coach Home page. Pass c; c.entries (the club's counts) is optional. %>
+<% const cardOpen = isRegistrationOpen(c); %>
+<% const clubCoach = user && user.club_id; %>
+<% const e = c.entries; %>
+<% const entered = e ? e.pending + e.approved + e.rejected : 0; %>
+<article class="card">
+  <div class="title-row">
+    <%- include('comp_logo', { competition: c, size: 'md' }) %>
+    <span class="badge <%= cardOpen ? 'open' : 'closed' %>"><%= cardOpen ? `Open · ${timeLeft(c)}` : 'Registration closed' %></span>
+  </div>
+  <h3 class="card-title"><a class="title-link" href="/competitions/<%= c.id %>"><%= c.name %></a></h3>
+  <p class="sub"><%= eventDatesText(c) %> · <%= c.venue %></p>
+  <p class="sub">Registration deadline: <%= deadlineText(c) %></p>
+  <% if (clubCoach && e) { %>
+    <p class="stats card-stats">
+      <% if (entered === 0) { %>
+        <span>No athletes entered yet</span>
+      <% } else { %>
+        <span>Approved <strong><%= e.approved %></strong></span>
+        <span>Pending <strong><%= e.pending %></strong></span>
+        <% if (e.rejected > 0) { %><span>Rejected <strong><%= e.rejected %></strong></span><% } %>
+      <% } %>
+    </p>
+  <% } %>
+  <div class="actions">
+    <% if (clubCoach && cardOpen) { %>
+      <a class="btn" href="/club/competitions/<%= c.id %>">Register athletes</a>
+    <% } else if (clubCoach && entered > 0) { %>
+      <a class="btn secondary" href="/club/competitions/<%= c.id %>">Your entries</a>
+    <% } %>
+    <% if (clubCoach && c.bouts_published_at) { %>
+      <a class="btn secondary" href="/club/competitions/<%= c.id %>/bouts">Bout list</a>
+    <% } %>
+    <a class="btn secondary" href="/competitions/<%= c.id %>">Details</a>
+  </div>
+</article>

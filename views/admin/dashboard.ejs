@@ -5,10 +5,7 @@
     <p class="sub">Post competitions and approve club registrations.</p>
   </div>
   <div class="actions">
-    <a class="btn secondary" href="/admin/accounts">Accounts</a>
-    <a class="btn secondary" href="/admin/activity">Activity log</a>
-    <a class="btn secondary" href="/admin/clubs">Clubs and coaches</a>
-    <a class="btn secondary" href="/admin/news">News</a>
+    <a class="btn secondary" href="/admin/news/new">New news post</a>
     <a class="btn" href="/admin/competitions/new">New competition</a>
   </div>
 </div>
@@ -24,7 +21,7 @@
 <% competitions.forEach((c) => { %>
   <section class="card">
     <div class="page-head">
-      <div class="club-head">
+      <div class="title-row">
         <%- include('../partials/comp_logo', { competition: c, size: 'md' }) %>
         <div>
           <h2><%= c.name %> <span class="badge <%= c.status %>"><%= statusLabel(c.status) %></span></h2>

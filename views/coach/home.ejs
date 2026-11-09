@@ -1,6 +1,6 @@
 <%- include('../partials/top') %>
 <div class="page-head">
-  <div class="club-head">
+  <div class="title-row">
     <% if (user.club_id) { %><%- include('../partials/club_icon', { clubId: user.club_id, name: user.club_name, size: 'lg' }) %><% } %>
     <div>
       <h1>Welcome<%= user.full_name ? `, ${user.full_name}` : '' %></h1>
@@ -14,62 +14,28 @@
   <div class="notice info">An admin must approve you for a club before you can register athletes. <a href="/coach">Join a club</a></div>
 <% } %>
 
-<section class="home-section">
-  <h2>Upcoming competitions</h2>
+<section class="section">
+  <div class="section-head">
+    <h2>Upcoming competitions</h2>
+    <a href="/">All competitions</a>
+  </div>
   <% if (competitions.length === 0) { %>
     <div class="card"><p class="empty">No upcoming competitions yet. Check back soon.</p></div>
   <% } else { %>
     <div class="card-grid">
-      <% competitions.forEach((c) => { const e = c.entries; const entered = e.pending + e.approved + e.rejected; %>
-        <article class="card">
-          <%- include('../partials/comp_logo', { competition: c, size: 'md' }) %>
-          <p><span class="badge <%= c.open ? 'open' : 'closed' %>"><%= c.open ? `Open · ${timeLeft(c)}` : 'Registration closed' %></span></p>
-          <h3><%= c.name %></h3>
-          <p class="sub"><%= eventDatesText(c) %> · <%= c.venue %></p>
-          <p class="sub">Registration deadline: <%= deadlineText(c) %></p>
-          <% if (user.club_id) { %>
-            <p class="stats home-entries">
-              <% if (entered === 0) { %>
-                <span>No athletes entered yet</span>
-              <% } else { %>
-                <span>Approved <strong><%= e.approved %></strong></span>
-                <span>Pending <strong><%= e.pending %></strong></span>
-                <% if (e.rejected > 0) { %><span>Rejected <strong><%= e.rejected %></strong></span><% } %>
-              <% } %>
-            </p>
-          <% } %>
-          <div class="actions">
-            <% if (user.club_id && c.open) { %>
-              <a class="btn" href="/club/competitions/<%= c.id %>">Register athletes</a>
-            <% } else if (user.club_id && entered > 0) { %>
-              <a class="btn secondary" href="/club/competitions/<%= c.id %>">Your entries</a>
-            <% } %>
-            <% if (user.club_id && c.bouts_published_at) { %>
-              <a class="btn secondary" href="/club/competitions/<%= c.id %>/bouts">Bout list</a>
-            <% } %>
-            <a class="btn secondary" href="/competitions/<%= c.id %>">Details</a>
-          </div>
-        </article>
-      <% }) %>
+      <% competitions.forEach((c) => { %><%- include('../partials/competition_card', { c }) %><% }) %>
     </div>
   <% } %>
 </section>
 
-<section class="home-section">
-  <div class="page-head">
+<section class="section">
+  <div class="section-head">
     <h2>News</h2>
     <a href="/news">All news</a>
   </div>
   <% if (news.length === 0) { %>
     <div class="card"><p class="empty">No news yet.</p></div>
   <% } %>
-  <% news.forEach((post) => { %>
-    <article class="card news-item">
-      <%- include('../partials/news_meta', { post }) %>
-      <h3><a href="/news/<%= post.id %>"><%= post.title %></a></h3>
-      <p><%= newsSummary(post.body) %></p>
-      <a href="/news/<%= post.id %>">Read more</a>
-    </article>
-  <% }) %>
+  <% news.forEach((post) => { %><%- include('../partials/news_card', { post }) %><% }) %>
 </section>
 <%- include('../partials/bottom') %>

@@ -40,11 +40,11 @@
   <section class="card">
     <h2>Draw and schedule</h2>
     <% if (divisions.length === 0) { %>
-      <p class="stats"><span><strong><%= counts.approved %></strong> approved fighters will be drawn</span></p>
+      <p class="stats"><span><strong><%= counts.approved %></strong> approved athletes will be drawn</span></p>
       <% if (counts.pending > 0) { %>
         <div class="notice error"><%= counts.pending %> pending registration<%= counts.pending === 1 ? ' is' : 's are' %> not included. <a href="/admin/competitions/<%= competition.id %>/registrations?status=pending">Review them first</a>.</div>
       <% } %>
-      <p class="sub">Each division becomes a single-elimination bracket. Fighters from the same club are drawn into opposite halves, so two club-mates can only meet in the final.</p>
+      <p class="sub">Each division becomes a single-elimination bracket. Athletes from the same club are drawn into opposite halves, so two club-mates can only meet in the final.</p>
     <% } %>
     <form method="post" action="/admin/competitions/<%= competition.id %>/bouts/generate">
       <input type="hidden" name="_csrf" value="<%= csrf %>">
@@ -66,7 +66,7 @@
           <input id="rest" name="rest" type="number" min="0" max="240" value="<%= competition.bout_rest_minutes %>" required>
         </div>
       </div>
-      <p class="hint">Minutes per bout covers the whole slot on the court. Rest is counted from the end of a fighter's bout to the start of their next one. While a winner rests, the court runs bouts from other divisions, so bout numbers can move between divisions. Use 0 for no minimum.</p>
+      <p class="hint">Minutes per bout covers the whole slot on the court. Rest is counted from the end of an athlete's bout to the start of their next one. While a winner rests, the court runs bouts from other divisions, so bout numbers can move between divisions. Use 0 for no minimum.</p>
       <p class="hint">Bouts are spread across the competition's <%= dayCount %> event day<%= dayCount === 1 ? '' : 's' %><% if (dayCount > 1 && divisions.length > 0) { %>, except divisions pinned to a day below<% } %>. To change the days, <a href="/admin/competitions/<%= competition.id %>/edit">edit the competition</a>.</p>
       <div class="actions">
         <% if (divisions.length === 0) { %>

@@ -70,7 +70,7 @@
 <% clubs.forEach((club) => { %>
   <section class="card">
     <h2 class="club-name"><%- include('../partials/club_icon', { clubId: club.id, name: club.name, size: 'md' }) %><%= club.name %></h2>
-    <p class="stats"><span><strong><%= club.fighter_count %></strong> fighter<%= club.fighter_count === 1 ? '' : 's' %></span><span><strong><%= club.coaches.length %></strong> coach<%= club.coaches.length === 1 ? '' : 'es' %></span></p>
+    <p class="stats"><span><strong><%= club.fighter_count %></strong> athlete<%= club.fighter_count === 1 ? '' : 's' %></span><span><strong><%= club.coaches.length %></strong> coach<%= club.coaches.length === 1 ? '' : 'es' %></span></p>
     <% if (club.coaches.length > 0) { %>
       <div class="table-wrap">
         <table>
@@ -91,7 +91,6 @@
           </tbody>
         </table>
       </div>
-      <p></p>
     <% } %>
     <div class="actions">
       <form class="actions" method="post" action="/admin/clubs/<%= club.id %>">

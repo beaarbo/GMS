@@ -1,6 +1,6 @@
 <%- include('partials/top') %>
 <p class="breadcrumb"><a href="/news">News</a></p>
-<article class="card news-article">
+<article class="card medium">
   <%- include('partials/news_meta', { post }) %>
   <h1><%= post.title %></h1>
   <%- include('partials/news_body', { text: post.body }) %>

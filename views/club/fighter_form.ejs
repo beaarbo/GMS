@@ -1,4 +1,5 @@
 <%- include('../partials/top') %>
+<p class="breadcrumb"><a href="/club">Club dashboard</a></p>
 <div class="card narrow">
   <h1><%= title %></h1>
   <%- include('../partials/errors') %>
@@ -38,9 +39,9 @@
         <% }) %>
       </select>
     </div>
-    <p class="hint">Weight is entered for each competition, when you register the fighter.</p>
+    <p class="hint">Weight is entered for each competition, when you register the athlete.</p>
     <div class="actions">
-      <button class="btn" type="submit">Save fighter</button>
+      <button class="btn" type="submit">Save athlete</button>
       <a class="btn secondary" href="/club">Cancel</a>
     </div>
   </form>

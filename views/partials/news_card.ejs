@@ -1,0 +1,7 @@
+<%# One news post as a preview card, used on the News page and the coach Home page. Pass post. %>
+<article class="card">
+  <%- include('news_meta', { post }) %>
+  <h3 class="card-title"><a class="title-link" href="/news/<%= post.id %>"><%= post.title %></a></h3>
+  <p class="preview"><%= newsSummary(post.body) %></p>
+  <a href="/news/<%= post.id %>">Read more</a>
+</article>

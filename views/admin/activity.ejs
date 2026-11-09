@@ -49,7 +49,6 @@
         </tbody>
       </table>
     </div>
-    <p></p>
     <div class="actions">
       <% if (page > 1) { %><a class="btn secondary small" href="/admin/activity?<%= query ? `${query}&` : '' %>page=<%= page - 1 %>">Newer</a><% } %>
       <span class="hint">Page <%= page %> of <%= pages %></span>

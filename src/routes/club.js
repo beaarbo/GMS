@@ -75,13 +75,13 @@ router.get('/', (req, res) => {
 });
 
 router.get('/fighters/new', (req, res) => {
-  res.render('club/fighter_form', { title: 'Add fighter', fighter: {}, errors: [], action: '/club/fighters' });
+  res.render('club/fighter_form', { title: 'Add athlete', fighter: {}, errors: [], action: '/club/fighters' });
 });
 
 router.post('/fighters', (req, res) => {
   const { values, errors } = readFighter(req.body);
   if (errors.length > 0) {
-    return res.status(400).render('club/fighter_form', { title: 'Add fighter', fighter: values, errors, action: '/club/fighters' });
+    return res.status(400).render('club/fighter_form', { title: 'Add athlete', fighter: values, errors, action: '/club/fighters' });
   }
   const { lastInsertRowid: fighterId } = req.app.locals.db
     .prepare(
@@ -263,11 +263,11 @@ router.get('/fighters/:id(\\d+)/edit', (req, res) => {
   const fighter = ownFighter(req, req.params.id);
   if (!fighter) return notFound(res);
   if (hasActiveRegistration(req.app.locals.db, fighter.id)) {
-    req.flash('error', 'This fighter has an active registration. Withdraw it before editing, so their division stays correct.');
+    req.flash('error', 'This athlete has an active registration. Withdraw it before editing, so their division stays correct.');
     return res.redirect('/club');
   }
   return res.render('club/fighter_form', {
-    title: 'Edit fighter',
+    title: 'Edit athlete',
     fighter,
     errors: [],
     action: `/club/fighters/${fighter.id}`,
@@ -279,13 +279,13 @@ router.post('/fighters/:id(\\d+)', (req, res) => {
   const fighter = ownFighter(req, req.params.id);
   if (!fighter) return notFound(res);
   if (hasActiveRegistration(db, fighter.id)) {
-    req.flash('error', 'This fighter has an active registration. Withdraw it before editing, so their division stays correct.');
+    req.flash('error', 'This athlete has an active registration. Withdraw it before editing, so their division stays correct.');
     return res.redirect('/club');
   }
   const { values, errors } = readFighter(req.body);
   if (errors.length > 0) {
     return res.status(400).render('club/fighter_form', {
-      title: 'Edit fighter',
+      title: 'Edit athlete',
       fighter: values,
       errors,
       action: `/club/fighters/${fighter.id}`,
@@ -299,10 +299,10 @@ router.post('/fighters/:id(\\d+)', (req, res) => {
   // A grading card can't prove a black belt, or the other way round.
   if (documentTypeFor(values.belt_rank) !== documentTypeFor(fighter.belt_rank)) {
     db.prepare('DELETE FROM fighter_documents WHERE fighter_id = ?').run(fighter.id);
-    req.flash('success', `Fighter updated. Their new belt needs a ${documentLabel(documentTypeFor(values.belt_rank))}, so please upload one.`);
+    req.flash('success', `Athlete updated. Their new belt needs a ${documentLabel(documentTypeFor(values.belt_rank))}, so please upload one.`);
     return res.redirect(`/club/fighters/${fighter.id}/document`);
   }
-  req.flash('success', 'Fighter updated.');
+  req.flash('success', 'Athlete updated.');
   return res.redirect('/club');
 });
 
@@ -311,11 +311,11 @@ router.post('/fighters/:id(\\d+)/delete', (req, res) => {
   const fighter = ownFighter(req, req.params.id);
   if (!fighter) return notFound(res);
   if (db.prepare('SELECT 1 FROM registrations WHERE fighter_id = ? LIMIT 1').get(fighter.id)) {
-    req.flash('error', 'This fighter has registration history and cannot be removed.');
+    req.flash('error', 'This athlete has registration history and cannot be removed.');
   } else {
     db.prepare('DELETE FROM fighters WHERE id = ?').run(fighter.id);
     req.logActivity('athlete.removed', `Removed ${fighter.first_name} ${fighter.last_name} from ${req.user.club_name}`);
-    req.flash('success', 'Fighter removed.');
+    req.flash('success', 'Athlete removed.');
   }
   return res.redirect('/club');
 });
@@ -389,7 +389,7 @@ router.post('/competitions/:id(\\d+)/enter', (req, res) => {
       req.flash('error', `${fighter.first_name} ${fighter.last_name}: ${result.error}`);
     }
   });
-  if (entered > 0) req.flash('success', `${entered} fighter${entered === 1 ? '' : 's'} submitted for approval.`);
+  if (entered > 0) req.flash('success', `${entered} athlete${entered === 1 ? '' : 's'} submitted for approval.`);
   return res.redirect(back);
 });
 
@@ -412,7 +412,7 @@ router.post('/competitions/:id(\\d+)/withdraw/:regId(\\d+)', (req, res) => {
     );
     req.flash('success', 'Registration withdrawn.');
   } else {
-    req.flash('error', 'That registration cannot be withdrawn. Approved fighters must be released by the organiser.');
+    req.flash('error', 'That registration cannot be withdrawn. Approved athletes must be released by the organiser.');
   }
   return res.redirect(`/club/competitions/${req.params.id}`);
 });

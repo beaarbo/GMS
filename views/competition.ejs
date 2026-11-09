@@ -1,7 +1,7 @@
 <%- include('partials/top') %>
 <% const open = isRegistrationOpen(competition); %>
 <div class="page-head">
-  <div class="club-head">
+  <div class="title-row">
     <%- include('partials/comp_logo', { competition, size: 'lg' }) %>
     <div>
       <h1><%= competition.name %></h1>
@@ -10,7 +10,7 @@
     </div>
   </div>
   <% if (user && user.club_id) { %>
-    <a class="btn" href="/club/competitions/<%= competition.id %>"><%= open ? 'Register fighters' : 'View your entries' %></a>
+    <a class="btn" href="/club/competitions/<%= competition.id %>"><%= open ? 'Register athletes' : 'View your entries' %></a>
   <% } else if (user && user.role === 'coach') { %>
     <a class="btn" href="/coach">Join a club to enter</a>
   <% } else if (!user && open) { %>
@@ -19,7 +19,7 @@
 </div>
 
 <% if (user && user.role === 'admin') { %>
-  <div class="actions comp-admin-links">
+  <div class="actions page-actions">
     <a class="btn secondary small" href="/admin/competitions/<%= competition.id %>/edit">Edit details</a>
     <a class="btn secondary small" href="/admin/competitions/<%= competition.id %>/files">Logo and files</a>
   </div>

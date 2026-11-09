@@ -1,18 +1,18 @@
 <%- include('../partials/top') %>
 <div class="page-head">
-  <div class="club-head">
+  <div class="title-row">
     <a class="club-icon-edit" href="/club/icon" title="Change club icon">
       <%- include('../partials/club_icon', { clubId: user.club_id, name: user.club_name, size: 'lg' }) %>
       <span class="club-icon-edit-label">Edit</span>
     </a>
     <div>
       <h1><%= user.club_name %></h1>
-      <p class="sub">Manage your fighters and competition entries. <a href="/club/icon">Change club icon</a></p>
+      <p class="sub">Manage your athletes and competition entries. <a href="/club/icon">Change club icon</a></p>
     </div>
   </div>
   <div class="actions">
     <a class="btn secondary" href="/club/fighters/import">Import from spreadsheet</a>
-    <a class="btn" href="/club/fighters/new">Add fighter</a>
+    <a class="btn" href="/club/fighters/new">Add athlete</a>
   </div>
 </div>
 
@@ -30,7 +30,7 @@
               <td><strong><%= c.name %></strong></td>
               <td><%= eventDatesText(c) %></td>
               <td><%= deadlineText(c) %><br><span class="hint"><%= timeLeft(c) %></span></td>
-              <td><a class="btn small" href="/club/competitions/<%= c.id %>">Register fighters</a></td>
+              <td><a class="btn small" href="/club/competitions/<%= c.id %>">Register athletes</a></td>
             </tr>
           <% }) %>
         </tbody>
@@ -44,7 +44,7 @@
     <h2>Your entries</h2>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Competition</th><th>Date</th><th>Status</th><th>Fighters</th></tr></thead>
+        <thead><tr><th>Competition</th><th>Date</th><th>Status</th><th>Athletes</th></tr></thead>
         <tbody>
           <% registrations.forEach((r) => { %>
             <tr>
@@ -61,9 +61,9 @@
 <% } %>
 
 <section class="card">
-  <h2>Fighters</h2>
+  <h2>Athletes</h2>
   <% if (fighters.length === 0) { %>
-    <p class="empty">No fighters yet. Add your first fighter to enter a competition.</p>
+    <p class="empty">No athletes yet. Add your first athlete to enter a competition.</p>
   <% } else { %>
     <div class="table-wrap">
       <table>

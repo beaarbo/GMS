@@ -641,8 +641,8 @@ router.post('/competitions/:id(\\d+)/bouts/generate', (req, res) => {
       req.competition.id
     );
   }
-  if (fighters === 0) req.flash('error', 'There are no approved fighters to draw.');
-  else req.flash('success', `Bout list generated for ${fighters} approved fighter${fighters === 1 ? '' : 's'}. Publish it when you're ready for coaches to see it.`);
+  if (fighters === 0) req.flash('error', 'There are no approved athletes to draw.');
+  else req.flash('success', `Bout list generated for ${fighters} approved athlete${fighters === 1 ? '' : 's'}. Publish it when you're ready for coaches to see it.`);
   return res.redirect(boutListPath(req.competition));
 });
 
