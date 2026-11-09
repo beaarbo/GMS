@@ -496,6 +496,14 @@ test('the weigh-in checks weight classes, moves athletes and leaves no-shows out
     (({ weigh_status, weight_class_id, entered_weight_class_id }) => ({ weigh_status, weight_class_id, entered_weight_class_id }))(reg('Bravo')),
     { weigh_status: 'passed', weight_class_id: heavier.id, entered_weight_class_id: entered }
   );
+  // The weight class filter lists only athletes now in that class, and stays on after each step.
+  const filtered = (await admin.get(`${path}?weight=${heavier.id}`)).text;
+  assert.match(filtered, new RegExp(`<option value="${heavier.id}" selected>[^<]*${heavier.label}</option>`));
+  assert.match(filtered, /Bravo/);
+  assert.doesNotMatch(filtered, /Alpha|Charlie|Delta|Echo/);
+  const kept = await post(admin, `${path}/${reg('Alpha').id}`, { action: 'cancel', weight: String(heavier.id) }, path);
+  assert.equal(kept.headers.location, `${path}?weight=${heavier.id}#reg-${reg('Alpha').id}`);
+
   // A class from another age group or gender is refused.
   const otherClass = db.prepare('SELECT id FROM weight_classes WHERE competition_id = ? AND gender = ?').get(compId, 'M').id;
   await weigh('Alpha', { action: 'move', weight_class_id: String(otherClass) });

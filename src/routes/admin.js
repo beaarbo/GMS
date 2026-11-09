@@ -281,8 +281,9 @@ router.post('/competitions/:id(\\d+)/status', (req, res) => {
 function weighInFilters(source) {
   const show = ['waiting', 'done', 'out'].includes(source.show) ? source.show : '';
   const club = /^\d+$/.test(source.club || '') ? source.club : '';
+  const weight = /^\d+$/.test(source.weight || '') ? source.weight : '';
   const q = clean(source.q, 60);
-  return { show, club, q };
+  return { show, club, weight, q };
 }
 
 function weighInPath(competition, filters, registrationId = null) {
@@ -300,6 +301,7 @@ router.get('/competitions/:id(\\d+)/weigh-in', (req, res) => {
     if (filters.show === 'done' && r.weigh_status !== 'passed') return false;
     if (filters.show === 'out' && !['no_show', 'disqualified'].includes(r.weigh_status)) return false;
     if (filters.club && String(r.club_id) !== filters.club) return false;
+    if (filters.weight && String(r.weight_class_id) !== filters.weight) return false;
     return !search || `${r.first_name} ${r.last_name}`.toLowerCase().includes(search) || `${r.last_name} ${r.first_name}`.toLowerCase().includes(search);
   });
   // An out-of-class result waiting for the official's decision. The next weigh-in step clears it.
@@ -313,6 +315,9 @@ router.get('/competitions/:id(\\d+)/weigh-in', (req, res) => {
     query: new URLSearchParams(Object.entries(filters).filter(([, value]) => value)).toString(),
     counts: weighInCounts(db, req.competition.id),
     clubs: [...new Map(all.map((r) => [r.club_id, r.club_name])).entries()].sort((a, b) => a[1].localeCompare(b[1])),
+    // Classes with approved athletes in them, in division order. A label like
+    // "-45 kg" repeats across age groups, so each names its age group and gender.
+    weightClasses: [...new Map(all.map((r) => [r.weight_class_id, `${r.age_group} · ${GENDERS[r.gender]} · ${r.weight_class}`])).entries()],
     locked: hasBoutList(db, req.competition.id),
     pending,
   });

@@ -40,9 +40,16 @@
         <% clubs.forEach(([id, name]) => { %><option value="<%= id %>" <%= filters.club === String(id) ? 'selected' : '' %>><%= name %></option><% }) %>
       </select>
     </div>
+    <div>
+      <label for="w-weight">Weight class</label>
+      <select id="w-weight" name="weight">
+        <option value="">All weight classes</option>
+        <% weightClasses.forEach(([id, label]) => { %><option value="<%= id %>" <%= filters.weight === String(id) ? 'selected' : '' %>><%= label %></option><% }) %>
+      </select>
+    </div>
     <div class="actions">
       <button class="btn secondary" type="submit">Filter</button>
-      <% if (filters.q || filters.club) { %><a href="?<%= filters.show ? `show=${filters.show}` : '' %>">Clear</a><% } %>
+      <% if (filters.q || filters.club || filters.weight) { %><a href="?<%= filters.show ? `show=${filters.show}` : '' %>">Clear</a><% } %>
     </div>
   </form>
 </section>
