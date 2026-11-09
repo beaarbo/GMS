@@ -27,7 +27,7 @@ Express with server-rendered EJS and SQLite (better-sqlite3).
 - `src/divisions.js`: pure division logic and the default template. No database or web imports.
 - `src/bracket.js`: pure single-elimination draw (seed positions, same-club separation), court assignment, and bracket geometry (`layoutBracket`) shared by the web page and the PDF.
 - `src/boutlistPdf.js`: draws the bracket layout to PDF with pdfkit.
-- `src/mailer.js`, `src/notifications.js`: SMTP sending, and every email the site sends. `createApp` takes a `mailer`, and tests pass one that captures messages.
+- `src/mailer.js`, `src/notifications.js`: SMTP sending, and every email the site sends. `createApp` takes a `mailer`, and tests pass one that captures messages. `send()` never throws; `test()` and `details()` (masked login, no password) serve the admin Email page (`adminEmail` route), and `explainMailError` turns SMTP errors into advice.
 - `src/documents.js`, `src/activity.js`: athlete document rules and file checks, and the activity log. Call `req.logActivity(action, summary, competitionId)` from any route that changes data.
 - `src/services.js`: database operations shared by routes, the seed script and tests.
 - `src/db.js`: schema (`CREATE TABLE IF NOT EXISTS`) plus data migrations in `migrate`, tracked with SQLite's `user_version`. Add a new version for any change to existing data.

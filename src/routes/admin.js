@@ -118,6 +118,7 @@ router.get('/', (req, res) => {
     title: 'Admin dashboard',
     competitions,
     pendingCoaches: req.app.locals.db.prepare("SELECT COUNT(*) AS n FROM club_applications WHERE status = 'pending'").get().n,
+    emailConfigured: Boolean(req.app.locals.notify.mailer.configured),
   });
 });
 

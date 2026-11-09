@@ -1,0 +1,54 @@
+<%- include('../partials/top') %>
+<p class="breadcrumb"><a href="/admin">Admin dashboard</a></p>
+<div class="page-head">
+  <div>
+    <h1>Email</h1>
+    <p class="sub">The site emails password reset links, coach approvals, deadline reminders and published bout lists.</p>
+  </div>
+</div>
+
+<% if (result) { %>
+  <% if (result.ok) { %>
+    <div class="notice success" role="status">The test email to <strong><%= result.to %></strong> was accepted by the mail server. Check that inbox, including spam, in a minute or two.</div>
+  <% } else { %>
+    <div class="notice error" role="alert">
+      <p><strong>The test email to <%= result.to %> failed.</strong></p>
+      <p><%= result.advice %></p>
+      <p class="mail-error">Mail server said: <%= result.error %><%= result.code ? ` (${result.code})` : '' %></p>
+    </div>
+  <% } %>
+<% } %>
+
+<section class="card">
+  <h2>Settings</h2>
+  <% if (!details.configured) { %>
+    <div class="notice error">Email is not set up, so nothing is sent: no password resets, approvals or reminders. Add <code>SMTP_HOST</code>, <code>SMTP_PORT</code>, <code>SMTP_USER</code>, <code>SMTP_PASS</code> and <code>MAIL_FROM</code> to the server's settings and redeploy.</div>
+  <% } %>
+  <div class="table-wrap">
+    <table>
+      <tbody>
+        <tr><th scope="row">Mail server</th><td><%= details.host || 'Not set' %><%= details.port ? `, port ${details.port}${details.secure ? ' (secure from the start)' : ''}` : '' %></td></tr>
+        <tr><th scope="row">Login</th><td><%= details.user || 'Not set' %></td></tr>
+        <tr><th scope="row">Sent from</th><td><%= details.from || 'Not set' %></td></tr>
+        <tr><th scope="row">Links point to</th><td><%= publicUrl %><% if (publicUrlWarning) { %><div class="warn-text"><%= publicUrlWarning %></div><% } %></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="hint">The password is never shown. These come from the server's environment variables, so change them there (on Railway, the service's Variables) and redeploy.</p>
+</section>
+
+<section class="card">
+  <h2>Send a test email</h2>
+  <form method="post" action="/admin/email/test">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <div class="form-row">
+      <div class="field">
+        <label for="to">Send to</label>
+        <input id="to" name="to" type="email" value="<%= user.email %>" required>
+      </div>
+    </div>
+    <button class="btn" type="submit">Send test email</button>
+    <p class="hint">It connects to the mail server and sends a short message, then shows what happened here. It can take up to 30 seconds if the server can't be reached.</p>
+  </form>
+</section>
+<%- include('../partials/bottom') %>

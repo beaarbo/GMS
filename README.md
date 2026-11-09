@@ -76,7 +76,7 @@ The site emails people about:
 - **Deadline reminders:** every approved coach gets one when a deadline is within 3 days. Moving the deadline allows another.
 - **Bout lists:** coaches with athletes in the draw hear when it's published.
 
-If a message fails to send, the error is logged and the page carries on, so check the server log if emails aren't arriving.
+If a message fails to send, the error is logged and the page carries on. To find out why emails aren't arriving, open **Email** in the admin menu: it shows the current settings (never the password) and sends a test email, showing the mail server's answer and what to change. For Gmail, use an App Password rather than your normal password, with `SMTP_HOST=smtp.gmail.com` and `SMTP_PORT=587`.
 
 ## Registration deadlines
 

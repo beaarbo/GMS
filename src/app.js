@@ -24,6 +24,7 @@ const screenRoutes = require('./routes/screens');
 const adminClubRoutes = require('./routes/adminClubs');
 const adminNewsRoutes = require('./routes/adminNews');
 const adminBackupRoutes = require('./routes/adminBackups');
+const adminEmailRoutes = require('./routes/adminEmail');
 const { AUDIENCES, formatBody, summary } = require('./news');
 
 const SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 12;
@@ -291,6 +292,7 @@ function createApp({
   app.use('/admin/clubs', adminClubRoutes);
   app.use('/admin/news', adminNewsRoutes);
   app.use('/admin/backups', adminBackupRoutes);
+  app.use('/admin/email', adminEmailRoutes);
   // Weigh-in and results first: officials may use them, the rest of /admin they may not.
   app.use('/admin', competitionDayRoutes.router);
   app.use('/admin', adminRoutes);

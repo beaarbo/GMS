@@ -10,6 +10,9 @@
   </div>
 </div>
 
+<% if (!emailConfigured) { %>
+  <div class="notice error">Email is not set up, so password resets, approvals and reminders aren't sent. <a href="/admin/email">Check email settings</a></div>
+<% } %>
 <% if (pendingCoaches > 0) { %>
   <div class="notice info"><%= pendingCoaches %> coach application<%= pendingCoaches === 1 ? ' is' : 's are' %> waiting for approval. <a href="/admin/clubs">Review</a></div>
 <% } %>
