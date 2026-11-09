@@ -20,8 +20,30 @@ function required(name) {
   return value;
 }
 
+// "Production", " production" and the like all count, so a stray capital or space
+// can't quietly switch off secure cookies and the start-up checks.
+function isProduction(value) {
+  return String(value || '').trim().toLowerCase() === 'production';
+}
+
+// Behind a host's proxy (Railway, Render, Fly), req.ip must come from the
+// proxy's X-Forwarded-For header, or every visitor shares one rate limit.
+// TRUST_PROXY overrides: a hop count, or "false" to turn it off.
+function trustProxySetting(production) {
+  const value = String(process.env.TRUST_PROXY || '').trim().toLowerCase();
+  if (value === 'false' || value === '0') return false;
+  if (/^\d+$/.test(value)) return Number(value);
+  if (value === 'true') return 1;
+  return production || Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_ENVIRONMENT_NAME) ? 1 : false;
+}
+
 async function main() {
-  const production = process.env.NODE_ENV === 'production';
+  const production = isProduction(process.env.NODE_ENV);
+  const trustProxy = trustProxySetting(production);
+  console.log(`Starting in ${production ? 'production' : 'development'} mode${trustProxy ? ', behind a proxy' : ''}.`);
+  if (!production && process.env.RAILWAY_ENVIRONMENT) {
+    console.warn(`NODE_ENV is "${process.env.NODE_ENV || ''}", not "production". Set NODE_ENV=production on Railway, or login cookies aren't marked secure.`);
+  }
   const sessionSecret = production ? required('SESSION_SECRET') : process.env.SESSION_SECRET || 'local-development-only';
   if (production && sessionSecret.length < 32) {
     console.error('SESSION_SECRET must be at least 32 characters.');
@@ -77,10 +99,15 @@ async function main() {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
     from: process.env.MAIL_FROM,
+    brevoApiKey: process.env.BREVO_API_KEY,
+    resendApiKey: process.env.RESEND_API_KEY,
     production,
   });
   if (!mailer.configured) {
-    console.warn('SMTP_HOST is not set, so no emails will be sent. Password reset will not work without it.');
+    console.warn('Email is not set up (no BREVO_API_KEY, RESEND_API_KEY or SMTP_HOST), so no emails will be sent. Password reset will not work without it.');
+  } else {
+    const { provider, host } = mailer.details();
+    console.log(`Email is sent through ${provider || `SMTP (${host})`}.`);
   }
 
   const checkReminders = () => {
@@ -89,7 +116,7 @@ async function main() {
   checkReminders();
   setInterval(checkReminders, REMINDER_CHECK_MS).unref();
 
-  createApp({ db, sessionSecret, production, mailer, publicUrl, backups }).listen(port, () => {
+  createApp({ db, sessionSecret, production, mailer, publicUrl, backups, trustProxy }).listen(port, () => {
     console.log(`Game Management System running on http://localhost:${port}`);
   });
 }

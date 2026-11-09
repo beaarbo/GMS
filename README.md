@@ -66,7 +66,12 @@ Documents lock once a registration is approved. Changing a belt between Blue or 
 
 ## Email and password reset
 
-Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` and `MAIL_FROM` to send email through any provider that offers SMTP, and `PUBLIC_URL` to the site's address. Without `SMTP_HOST` no email is sent, so password reset won't work. In development, messages are printed to the console instead.
+Set `PUBLIC_URL` to the site's address, then set up email in one of two ways:
+
+- **An email service over HTTPS (recommended on Railway).** Some hosts, Railway included on some plans, block outgoing SMTP, so emails fail with "Connection timeout". Set `BREVO_API_KEY` (from [Brevo](https://www.brevo.com), free for a few hundred emails a day) or `RESEND_API_KEY` (from [Resend](https://resend.com)), plus `MAIL_FROM`. Brevo can send from a single verified address, such as your Gmail; Resend needs a domain you own and have verified.
+- **SMTP**, on hosts that allow it: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` and `MAIL_FROM`. For Gmail, use an App Password with `smtp.gmail.com` and port 587.
+
+An API key wins if both are set. Without either, no email is sent, so password reset won't work. In development, messages are printed to the console instead.
 
 The site emails people about:
 
@@ -130,11 +135,11 @@ The app needs a host that runs a long-lived Node process **and** provides a pers
 | `ADMIN_EMAIL` | Your admin login email |
 | `ADMIN_PASSWORD` | A strong password of at least 10 characters |
 | `PUBLIC_URL` | The site's address, for example `https://example.com`. Links in emails use it. |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | Your email provider's SMTP details |
+| `BREVO_API_KEY` or `RESEND_API_KEY`, and `MAIL_FROM` | An email service's API key and the sender address (see "Email and password reset"). Or `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` where SMTP isn't blocked. |
 | `DATABASE_PATH` | A file on the volume, for example `/data/gms.sqlite` |
 | `TZ` | Your time zone, for example `Asia/Manila`. Registration deadlines use it. |
 
-The host must serve the site over HTTPS, because login cookies are HTTPS-only in production. The admin account is created on first start. The server refuses to start in production if a required setting is missing.
+The host must serve the site over HTTPS, because login cookies are HTTPS-only in production. The server logs "Starting in production mode, behind a proxy" when `NODE_ENV` is right. On Railway it trusts the proxy's visitor address automatically, so rate limits apply per visitor; elsewhere set `TRUST_PROXY=1` if the site sits behind one. The admin account is created on first start. The server refuses to start in production if a required setting is missing.
 
 The database holds personal data, including children's names and dates of birth, so check which data protection rules apply to you.
 

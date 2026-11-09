@@ -22,13 +22,17 @@
 <section class="card">
   <h2>Settings</h2>
   <% if (!details.configured) { %>
-    <div class="notice error">Email is not set up, so nothing is sent: no password resets, approvals or reminders. Add <code>SMTP_HOST</code>, <code>SMTP_PORT</code>, <code>SMTP_USER</code>, <code>SMTP_PASS</code> and <code>MAIL_FROM</code> to the server's settings and redeploy.</div>
+    <div class="notice error">Email is not set up, so nothing is sent: no password resets, approvals or reminders. On Railway, add <code>BREVO_API_KEY</code> (or <code>RESEND_API_KEY</code>) and <code>MAIL_FROM</code> to the service's Variables and redeploy. SMTP settings (<code>SMTP_HOST</code> and the rest) work on hosts that allow outgoing email.</div>
   <% } %>
   <div class="table-wrap">
     <table>
       <tbody>
-        <tr><th scope="row">Mail server</th><td><%= details.host || 'Not set' %><%= details.port ? `, port ${details.port}${details.secure ? ' (secure from the start)' : ''}` : '' %></td></tr>
-        <tr><th scope="row">Login</th><td><%= details.user || 'Not set' %></td></tr>
+        <% if (details.provider) { %>
+          <tr><th scope="row">Sent through</th><td><%= details.provider %> (over HTTPS, with an API key)</td></tr>
+        <% } else { %>
+          <tr><th scope="row">Mail server</th><td><%= details.host || 'Not set' %><%= details.port ? `, port ${details.port}${details.secure ? ' (secure from the start)' : ''}` : '' %></td></tr>
+          <tr><th scope="row">Login</th><td><%= details.user || 'Not set' %></td></tr>
+        <% } %>
         <tr><th scope="row">Sent from</th><td><%= details.from || 'Not set' %></td></tr>
         <tr><th scope="row">Links point to</th><td><%= publicUrl %><% if (publicUrlWarning) { %><div class="warn-text"><%= publicUrlWarning %></div><% } %></td></tr>
       </tbody>

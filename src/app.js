@@ -97,6 +97,8 @@ function createApp({
   publicUrl = 'http://localhost:3000',
   // { dir, keep }: where backups go and how many to keep. No dir, no backups.
   backups = { dir: null },
+  // Proxy hops to trust for the visitor's address (rate limits, secure cookies).
+  trustProxy = production ? 1 : false,
 }) {
   const app = express();
   app.locals.backups = backups;
@@ -108,7 +110,7 @@ function createApp({
   // Links in emails use this set address, never the request's Host header, which
   // a caller could fake to send a reset link pointing at their own site.
   app.locals.notify = { db, mailer, publicUrl: publicUrl.replace(/\/+$/, '') };
-  if (production) app.set('trust proxy', 1);
+  if (trustProxy) app.set('trust proxy', trustProxy);
 
   app.use(
     helmet({
