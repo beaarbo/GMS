@@ -19,6 +19,7 @@ const accountRoutes = require('./routes/account');
 const adminRoutes = require('./routes/admin');
 const adminClubRoutes = require('./routes/adminClubs');
 const adminNewsRoutes = require('./routes/adminNews');
+const adminBackupRoutes = require('./routes/adminBackups');
 const { AUDIENCES, formatBody, summary } = require('./news');
 
 const SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 12;
@@ -89,8 +90,11 @@ function createApp({
   production = false,
   mailer = createMailer({ production }),
   publicUrl = 'http://localhost:3000',
+  // { dir, keep }: where backups go and how many to keep. No dir, no backups.
+  backups = { dir: null },
 }) {
   const app = express();
+  app.locals.backups = backups;
   app.set('views', path.join(__dirname, '..', 'views'));
   app.set('view engine', 'ejs');
   app.locals.db = db;
@@ -277,6 +281,7 @@ function createApp({
   app.use('/account', accountRoutes);
   app.use('/admin/clubs', adminClubRoutes);
   app.use('/admin/news', adminNewsRoutes);
+  app.use('/admin/backups', adminBackupRoutes);
   app.use('/admin', adminRoutes);
 
   app.use((req, res) => {

@@ -32,8 +32,9 @@ Express with server-rendered EJS and SQLite (better-sqlite3).
 - `src/services.js`: database operations shared by routes, the seed script and tests.
 - `src/db.js`: schema (`CREATE TABLE IF NOT EXISTS`) plus data migrations in `migrate`, tracked with SQLite's `user_version`. Add a new version for any change to existing data.
 - `src/app.js`: app factory (`createApp`), security headers, sessions, CSRF.
+- `src/backups.js`: database snapshots with SQLite's online backup, checked before they're kept. `server.js` makes one a day (and restores one named in `RESTORE_BACKUP` before opening the database), and `createApp` takes `backups: { dir, keep }` for the admin Backups page.
 - `src/athleteImport.js`, `src/news.js`: pure helpers for the spreadsheet athlete import and for news posts (form checks, plain-text body to paragraphs and links).
-- `src/routes/`: `public` (home, competitions, news), `auth`, `coachHome` (`/home`, where approved coaches land: upcoming competitions, then news), `coach` (join a club), `club` (approved coaches: fighters, import, entries, club icon), `admin`, `adminClubs` (clubs, coach approvals) and `adminNews`.
+- `src/routes/`: `public` (home, competitions, news), `auth`, `coachHome` (`/home`, where approved coaches land: upcoming competitions, then news), `coach` (join a club), `club` (approved coaches: fighters, import, entries, club icon), `admin`, `adminClubs` (clubs, coach approvals), `adminNews` and `adminBackups`.
 - `views/`, `public/`: templates and static assets.
 - `test/`: `node:test`. `flow.test.js` drives the whole app through supertest on an in-memory database.
 
@@ -61,6 +62,7 @@ Express with server-rendered EJS and SQLite (better-sqlite3).
 - A competition can't open for registration (publish or reopen) without a logo and a description. Logos are in `competition_logos` and attachments in `competition_files`, both BLOBs. They follow the competition's visibility: drafts are admin-only. Attachments are always sent as downloads.
 - News bodies are plain text: never render them unescaped. `formatBody` splits them into escaped pieces and http(s) links.
 - The database needs a persistent disk, so serverless hosts won't work.
+- Backups live in a `backups` folder beside the database (or `BACKUP_DIR`) and contain everything, password hashes included. Only file names matching `isBackupName` are ever read or served, and each download is logged. Never copy the live `.sqlite` file directly for a backup: use `createBackup`, which is safe while the site runs.
 - `data/` and `.env` are gitignored. `data/gms.sqlite` on this machine holds demo data only.
 
 ## graphify

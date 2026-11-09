@@ -754,8 +754,11 @@ test('deadline helpers report what is left', () => {
     };
   };
   const hour = 3600000;
-  assert.equal(timeLeft(at(5 * 24 * hour)), '5 days left');
-  assert.equal(timeLeft(at(5 * hour)), '5 hours left');
+  // Deadlines are whole minutes, so pad by one: run in a minute's last second,
+  // an unpadded deadline lands just short of the mark and rounds down.
+  const minute = 60000;
+  assert.equal(timeLeft(at(5 * 24 * hour + minute)), '5 days left');
+  assert.equal(timeLeft(at(5 * hour + minute)), '5 hours left');
   assert.equal(timeLeft(at(10 * 60000)), 'Closing soon');
   assert.equal(deadlinePassed(at(hour)), false);
   assert.equal(deadlinePassed(at(-2 * 60000)), true);

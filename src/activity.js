@@ -4,6 +4,7 @@
 const ACTIVITY_CATEGORIES = {
   registration: 'Registrations',
   competition: 'Competitions',
+  weighin: 'Weigh-in',
   bouts: 'Bout lists',
   result: 'Results',
   club: 'Clubs',
@@ -11,6 +12,8 @@ const ACTIVITY_CATEGORIES = {
   athlete: 'Athletes',
   document: 'Documents',
   account: 'Accounts',
+  news: 'News',
+  backup: 'Backups',
 };
 
 function actorName(user) {

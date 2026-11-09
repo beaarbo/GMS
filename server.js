@@ -5,9 +5,11 @@ const { createApp } = require('./src/app');
 const { createMailer } = require('./src/mailer');
 const { ensureAdmin } = require('./src/services');
 const { sendDeadlineReminders } = require('./src/notifications');
+const { defaultBackupDir, runDailyBackup, restoreBackup, DEFAULT_KEEP } = require('./src/backups');
 
 const PLACEHOLDER = /^replace-with/;
 const REMINDER_CHECK_MS = 3600000;
+const BACKUP_CHECK_MS = 3600000;
 
 function required(name) {
   const value = process.env[name];
@@ -29,7 +31,33 @@ async function main() {
   const port = Number(process.env.PORT) || 3000;
   const publicUrl = production ? required('PUBLIC_URL') : process.env.PUBLIC_URL || `http://localhost:${port}`;
 
-  const db = openDb(process.env.DATABASE_PATH || './data/gms.sqlite');
+  const databasePath = process.env.DATABASE_PATH || './data/gms.sqlite';
+
+  // A snapshot each day beside the database, keeping the newest BACKUP_KEEP_DAYS.
+  const keepDays = Number(process.env.BACKUP_KEEP_DAYS);
+  const backups = {
+    dir: process.env.BACKUP_DIR || defaultBackupDir(databasePath),
+    keep: { ...DEFAULT_KEEP, daily: Number.isInteger(keepDays) && keepDays > 0 ? keepDays : DEFAULT_KEEP.daily },
+  };
+
+  // RESTORE_BACKUP=<backup file name> swaps that backup in before the database opens.
+  if (process.env.RESTORE_BACKUP) {
+    const result = await restoreBackup(databasePath, backups.dir, process.env.RESTORE_BACKUP.trim());
+    if (result.restored) {
+      console.log(`Restored ${process.env.RESTORE_BACKUP}. The database from before is saved as ${result.safety || '(there was none)'}. Remove RESTORE_BACKUP now.`);
+    } else {
+      console.warn(`RESTORE_BACKUP ignored: ${result.reason}`);
+    }
+  }
+
+  const db = openDb(databasePath);
+  const checkBackups = () => {
+    runDailyBackup(db, backups.dir, { keep: backups.keep })
+      .then((made) => made && console.log(`Daily backup saved: ${made.name}`))
+      .catch((error) => console.error('Daily backup failed:', error.message));
+  };
+  checkBackups();
+  setInterval(checkBackups, BACKUP_CHECK_MS).unref();
 
   const adminExists = db.prepare("SELECT 1 FROM users WHERE role = 'admin' LIMIT 1").get();
   if (!adminExists) {
@@ -61,7 +89,7 @@ async function main() {
   checkReminders();
   setInterval(checkReminders, REMINDER_CHECK_MS).unref();
 
-  createApp({ db, sessionSecret, production, mailer, publicUrl }).listen(port, () => {
+  createApp({ db, sessionSecret, production, mailer, publicUrl, backups }).listen(port, () => {
     console.log(`Game Management System running on http://localhost:${port}`);
   });
 }

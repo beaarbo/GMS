@@ -121,10 +121,31 @@ The app needs a host that runs a long-lived Node process **and** provides a pers
 
 The host must serve the site over HTTPS, because login cookies are HTTPS-only in production. The admin account is created on first start. The server refuses to start in production if a required setting is missing.
 
-**Back up the database file regularly.** It holds personal data, including children's names and dates of birth, so check which data protection rules apply to you.
+The database holds personal data, including children's names and dates of birth, so check which data protection rules apply to you.
+
+## Backups
+
+The server saves a snapshot of the database once a day, in a `backups` folder next to the database file (on Railway, `/data/backups`). It keeps the newest 7 daily snapshots, plus the newest 10 made with **Back up now**. Each snapshot is checked before it's kept. Two optional settings change this:
+
+| Variable | Value |
+| --- | --- |
+| `BACKUP_DIR` | Another folder for backups. Default: `backups` next to the database. |
+| `BACKUP_KEEP_DAYS` | How many daily backups to keep. Default: `7`. |
+
+Admins can make a backup and download any of them from **Backups** in the admin menu. Snapshots on the same disk don't survive losing that disk, so **download one regularly**, for example weekly and before each competition, and store it safely. A backup contains everyone's personal data and password hashes.
+
+### Restore a backup
+
+Restoring replaces the live database, so anything after the backup is lost.
+
+1. On the Backups page, note the file name of the backup to restore, for example `gms-20270108-063000-daily.sqlite`.
+2. Set the variable `RESTORE_BACKUP` to that name and redeploy (on Railway, adding a variable redeploys).
+3. On start, the server saves the current database as a new backup first, then swaps in the one you named. Its log says what it did.
+4. Remove `RESTORE_BACKUP`. It only restores once, so leaving it set does no harm, but it will log a reminder on each start.
+
+This restores backups still in the backups folder. To restore a copy you downloaded, put it in that folder first, or replace the database file by hand while the service is stopped. To look inside a backup, copy it to `data/gms.sqlite` on your computer and run `npm start`.
 
 ## Not included yet
 
-- Weigh-in records.
 - Non-Latin names in the PDF. It uses a standard font, so names in scripts such as Korean or Chinese won't print correctly.
 - Poomsae.

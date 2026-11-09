@@ -1,0 +1,54 @@
+<%- include('../partials/top') %>
+<p class="breadcrumb"><a href="/admin">Admin dashboard</a></p>
+<div class="page-head">
+  <div>
+    <h1>Backups</h1>
+    <p class="sub">Copies of the whole database: accounts, clubs, athletes, documents, registrations and results.</p>
+  </div>
+  <% if (configured) { %>
+    <form method="post" action="/admin/backups">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <button class="btn" type="submit">Back up now</button>
+    </form>
+  <% } %>
+</div>
+
+<% if (!configured) { %>
+  <div class="notice error">Backups aren't set up on this server, because the database isn't stored in a file.</div>
+<% } else { %>
+  <div class="notice info">
+    A backup is made automatically once a day and the newest <%= keep.daily %> are kept, plus the newest <%= keep.manual %> made with Back up now.
+    They're stored on the same disk as the database, which protects against mistakes and a damaged database but not against losing the disk.
+    <strong>Download a backup regularly, for example weekly and before each competition, and keep it somewhere safe.</strong>
+  </div>
+
+  <section class="card">
+    <% if (backups.length === 0) { %>
+      <p class="empty">No backups yet. The first daily backup is made shortly after the server starts, or make one now.</p>
+    <% } else { %>
+      <p class="stats"><span><strong><%= backups.length %></strong> backup<%= backups.length === 1 ? '' : 's' %></span><span><strong><%= fileSize(totalSize) %></strong> in total</span></p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Made</th><th>Type</th><th class="num">Size</th><th></th></tr></thead>
+          <tbody>
+            <% backups.forEach((b) => { %>
+              <tr>
+                <td class="nowrap"><strong><%= formatDate(b.createdAt.slice(0, 10)) %></strong> <%= b.createdAt.slice(11) %></td>
+                <td><%= b.kind === 'daily' ? 'Daily' : 'Made by an admin' %></td>
+                <td class="num nowrap"><%= fileSize(b.size) %></td>
+                <td><a class="btn secondary small" href="/admin/backups/<%= b.name %>">Download</a></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
+  </section>
+
+  <section class="card">
+    <h2>Keep backups safe</h2>
+    <p>A backup holds personal data, including children's names and dates of birth, plus everyone's password hashes. Store downloads only where you'd store the original records, and delete old ones you don't need.</p>
+    <p class="hint">To restore a backup, see "Restore a backup" in the README. It replaces the live database, so everything after the backup is lost.</p>
+  </section>
+<% } %>
+<%- include('../partials/bottom') %>
