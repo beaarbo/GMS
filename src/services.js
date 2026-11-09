@@ -196,7 +196,49 @@ function saveFighterDocument(db, fighter, { data, contentType, userId = null }) 
   ).run({ fighterId: fighter.id, docType: documentTypeFor(fighter.belt_rank), contentType, data, userId });
 }
 
-const NEWS_SELECT = `SELECT n.*, u.full_name AS author FROM news_posts n LEFT JOIN users u ON u.id = n.author_id`;
+function saveCompetitionLogo(db, competitionId, { data, contentType }) {
+  db.prepare(
+    `INSERT INTO competition_logos (competition_id, content_type, data) VALUES (?, ?, ?)
+     ON CONFLICT(competition_id) DO UPDATE SET content_type = excluded.content_type, data = excluded.data, uploaded_at = datetime('now')`
+  ).run(competitionId, contentType, data);
+}
+
+function getCompetitionLogo(db, competitionId) {
+  return db.prepare('SELECT * FROM competition_logos WHERE competition_id = ?').get(competitionId) || null;
+}
+
+function hasCompetitionLogo(db, competitionId) {
+  return Boolean(db.prepare('SELECT 1 FROM competition_logos WHERE competition_id = ?').get(competitionId));
+}
+
+// When each competition's logo last changed, by competition id, for cache-safe links.
+function competitionLogoVersions(db) {
+  return new Map(db.prepare('SELECT competition_id, uploaded_at FROM competition_logos').all().map((r) => [r.competition_id, r.uploaded_at]));
+}
+
+function listCompetitionFiles(db, competitionId) {
+  return db
+    .prepare('SELECT id, competition_id, title, filename, content_type, size, uploaded_at FROM competition_files WHERE competition_id = ? ORDER BY id')
+    .all(competitionId);
+}
+
+function getCompetitionFile(db, competitionId, fileId) {
+  return db.prepare('SELECT * FROM competition_files WHERE competition_id = ? AND id = ?').get(competitionId, fileId) || null;
+}
+
+function addCompetitionFile(db, competitionId, { title, filename, contentType, data, userId = null }) {
+  return Number(
+    db
+      .prepare('INSERT INTO competition_files (competition_id, title, filename, content_type, size, data, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(competitionId, title, filename, contentType, data.length, data, userId).lastInsertRowid
+  );
+}
+
+function deleteCompetitionFile(db, competitionId, fileId) {
+  return db.prepare('DELETE FROM competition_files WHERE competition_id = ? AND id = ?').run(competitionId, fileId).changes > 0;
+}
+
+const NEWS_SELECT =`SELECT n.*, u.full_name AS author FROM news_posts n LEFT JOIN users u ON u.id = n.author_id`;
 
 // Pinned posts first, then newest. Visitors only see public posts.
 function listNews(db, { signedIn, limit = 50 }) {
@@ -741,6 +783,14 @@ module.exports = {
   getClubIcon,
   deleteClubIcon,
   clubIconVersions,
+  saveCompetitionLogo,
+  getCompetitionLogo,
+  hasCompetitionLogo,
+  competitionLogoVersions,
+  listCompetitionFiles,
+  getCompetitionFile,
+  addCompetitionFile,
+  deleteCompetitionFile,
   listNews,
   getNews,
   createNews,

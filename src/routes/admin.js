@@ -29,10 +29,16 @@ const {
   clearResult,
   clearAllResults,
   getFighterDocument,
+  saveCompetitionLogo,
+  hasCompetitionLogo,
+  listCompetitionFiles,
+  getCompetitionFile,
+  addCompetitionFile,
+  deleteCompetitionFile,
   REGISTRATION_SELECT,
   DIVISION_ORDER,
 } = require('../services');
-const { sendDocument } = require('../documents');
+const { sendDocument, detectIconType, detectAttachmentType, safeFilename, MAX_ICON_BYTES, MAX_NEW_COMPETITION_FILES } = require('../documents');
 const { ACTIVITY_CATEGORIES, listActivity, countActivity, formatActivityTime } = require('../activity');
 const { notifyRegistrationDecisions, notifyBoutListPublished } = require('../notifications');
 const { layoutBracket, computeMedals } = require('../bracket');
@@ -58,12 +64,13 @@ function readCompetition(body, lockedFirstDay = null) {
     registration_deadline: clean(body.registration_deadline, 10),
     registration_deadline_time: clean(body.registration_deadline_time, 5) || '23:59',
     venue: clean(body.venue),
-    description: clean(body.description, 2000),
+    description: typeof body.description === 'string' ? body.description.replace(/\r\n?/g, '\n').trim().slice(0, 5000) : '',
     age_basis: body.age_basis === 'date' ? 'date' : 'year',
   };
   const errors = [];
   if (!values.name) errors.push('Enter a competition name.');
   if (!values.venue) errors.push('Enter a venue.');
+  if (!values.description) errors.push('Enter a description for clubs.');
   if (eventDates.length === 0) errors.push('Enter at least one event date.');
   if (!eventDates.every(isValidDate)) errors.push('Enter valid event dates.');
   if (eventDates.length > MAX_EVENT_DAYS) errors.push(`A competition can have at most ${MAX_EVENT_DAYS} days.`);
@@ -113,21 +120,64 @@ router.get('/competitions/new', (req, res) => {
   });
 });
 
+// The new-competition form's optional logo and attachments, checked before
+// anything is saved. Browsers send an empty part when no file is chosen.
+function readNewCompetitionFiles(req) {
+  const chosen = (name) => ((req.files && req.files[name]) || []).filter((f) => f.size > 0 && f.originalname);
+  const errors = req.uploadError ? [req.uploadError] : [];
+  let logo = null;
+  const [logoFile] = chosen('logo');
+  if (logoFile) {
+    const type = detectIconType(logoFile.buffer);
+    if (logoFile.size > MAX_ICON_BYTES) errors.push('The logo is over the 1 MB limit.');
+    else if (!type) errors.push('The logo must be a JPG, PNG or WebP picture.');
+    else logo = { data: logoFile.buffer, contentType: type.contentType };
+  }
+  const attachments = [];
+  chosen('files').forEach((file) => {
+    const type = detectAttachmentType(file.buffer, file.originalname);
+    if (!type) {
+      errors.push(`${file.originalname} is not an accepted file type. Attach PDF, Word (.docx), Excel (.xlsx), JPG, PNG or WebP files.`);
+      return;
+    }
+    const filename = safeFilename(file.originalname, type.extension);
+    attachments.push({ title: filename.replace(/\.[^.]*$/, ''), filename, contentType: type.contentType, data: file.buffer });
+  });
+  return { logo, attachments, errors, anyChosen: Boolean(logoFile) || chosen('files').length > 0 };
+}
+
 router.post('/competitions', (req, res) => {
-  const { values, errors } = readCompetition(req.body);
-  if (errors.length > 0) {
+  const { db } = req.app.locals;
+  const { values, errors } = readCompetition(req.body || {});
+  const uploads = readNewCompetitionFiles(req);
+  const allErrors = [...errors, ...uploads.errors];
+  if (allErrors.length > 0) {
+    // Browsers can't refill file fields, so the admin has to choose them again.
+    if (uploads.anyChosen) allErrors.push('Nothing was saved, so choose the logo and files again.');
     return res.status(400).render('admin/comp_form', {
       title: 'New competition',
       competition: values,
-      errors,
+      errors: allErrors,
       action: '/admin/competitions',
       locked: false,
     });
   }
-  const id = createCompetition(req.app.locals.db, values);
+  const id = db.transaction(() => {
+    const newId = createCompetition(db, values);
+    if (uploads.logo) saveCompetitionLogo(db, newId, uploads.logo);
+    uploads.attachments.forEach((file) => addCompetitionFile(db, newId, { ...file, userId: req.user.id }));
+    return newId;
+  })();
   req.logActivity('competition.created', `Created competition ${values.name}`, id);
-  req.flash('success', 'Competition created as a draft. Check the divisions, then publish it.');
-  return res.redirect(`/admin/competitions/${id}/setup`);
+  if (uploads.logo) req.logActivity('competition.logo', `Updated the logo for ${values.name}`, id);
+  uploads.attachments.forEach((file) => req.logActivity('competition.file_added', `Attached ${file.title} to ${values.name}`, id));
+
+  const added = [uploads.logo && 'the logo', uploads.attachments.length > 0 && `${uploads.attachments.length} file${uploads.attachments.length === 1 ? '' : 's'}`].filter(Boolean);
+  req.flash(
+    'success',
+    `Competition created as a draft${added.length > 0 ? ` with ${added.join(' and ')}` : ''}. ${uploads.logo ? 'Check the files and divisions' : 'Upload its logo, check the divisions'}, then publish it.`
+  );
+  return res.redirect(`/admin/competitions/${id}/files`);
 });
 
 router.use('/competitions/:id(\\d+)', loadCompetition);
@@ -204,6 +254,10 @@ router.post('/competitions/:id(\\d+)/status', (req, res) => {
     req.flash('error', 'Delete the bout list before reopening registration.');
     return res.redirect('/admin');
   }
+  if (status === 'open' && (!hasCompetitionLogo(db, req.competition.id) || !req.competition.description.trim())) {
+    req.flash('error', `${req.competition.name} needs a logo and a description before clubs can register. Add them first.`);
+    return res.redirect(hasCompetitionLogo(db, req.competition.id) ? `/admin/competitions/${req.competition.id}/edit` : filesPath(req.competition));
+  }
   if (status === 'open' && deadlinePassed(req.competition)) {
     req.flash('error', 'The registration deadline has passed. Edit the competition to set a later deadline first.');
     return res.redirect('/admin');
@@ -218,6 +272,55 @@ router.post('/competitions/:id(\\d+)/status', (req, res) => {
   };
   req.flash('success', messages[status]);
   return res.redirect('/admin');
+});
+
+function filesPage(req, res, status = 200, error = null) {
+  const { db } = req.app.locals;
+  return res.status(status).render('admin/comp_files', {
+    title: 'Logo and files',
+    competition: req.competition,
+    hasLogo: hasCompetitionLogo(db, req.competition.id),
+    files: listCompetitionFiles(db, req.competition.id),
+    error,
+  });
+}
+
+const filesPath = (competition) => `/admin/competitions/${competition.id}/files`;
+
+router.get('/competitions/:id(\\d+)/files', (req, res) => filesPage(req, res));
+
+router.post('/competitions/:id(\\d+)/logo', (req, res) => {
+  if (req.uploadError) return filesPage(req, res, 400, req.uploadError);
+  if (!req.file) return filesPage(req, res, 400, 'Choose a logo to upload.');
+  const type = detectIconType(req.file.buffer);
+  if (!type) return filesPage(req, res, 400, 'The logo must be a JPG, PNG or WebP picture.');
+  saveCompetitionLogo(req.app.locals.db, req.competition.id, { data: req.file.buffer, contentType: type.contentType });
+  req.logActivity('competition.logo', `Updated the logo for ${req.competition.name}`, req.competition.id);
+  req.flash('success', 'Logo saved.');
+  return res.redirect(filesPath(req.competition));
+});
+
+router.post('/competitions/:id(\\d+)/files', (req, res) => {
+  if (req.uploadError) return filesPage(req, res, 400, req.uploadError);
+  if (!req.file) return filesPage(req, res, 400, 'Choose a file to attach.');
+  const type = detectAttachmentType(req.file.buffer, req.file.originalname);
+  if (!type) return filesPage(req, res, 400, 'That file type is not accepted. Attach a PDF, Word (.docx), Excel (.xlsx), JPG, PNG or WebP file.');
+  const filename = safeFilename(req.file.originalname, type.extension);
+  const title = clean(req.body.title, 120) || filename.replace(/\.[^.]*$/, '');
+  addCompetitionFile(req.app.locals.db, req.competition.id, { title, filename, contentType: type.contentType, data: req.file.buffer, userId: req.user.id });
+  req.logActivity('competition.file_added', `Attached ${title} to ${req.competition.name}`, req.competition.id);
+  req.flash('success', `${title} attached.`);
+  return res.redirect(filesPath(req.competition));
+});
+
+router.post('/competitions/:id(\\d+)/files/:fileId(\\d+)/delete', (req, res) => {
+  const { db } = req.app.locals;
+  const file = getCompetitionFile(db, req.competition.id, req.params.fileId);
+  if (file && deleteCompetitionFile(db, req.competition.id, file.id)) {
+    req.logActivity('competition.file_removed', `Removed ${file.title} from ${req.competition.name}`, req.competition.id);
+    req.flash('success', `${file.title} removed.`);
+  }
+  return res.redirect(filesPath(req.competition));
 });
 
 router.post('/competitions/:id(\\d+)/delete', (req, res) => {

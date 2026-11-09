@@ -1,0 +1,3 @@
+<%# A competition's logo, or its initials until one is uploaded. Pass competition and size ('md' or 'lg'). %>
+<% const logoUrl = competitionLogoUrl(competition.id); %>
+<% if (logoUrl) { %><img class="comp-logo <%= size %>" src="<%= logoUrl %>" alt="<%= competition.name %> logo"><% } else { %><span class="comp-logo <%= size %> initials" aria-hidden="true"><%= clubInitials(competition.name) %></span><% } %>

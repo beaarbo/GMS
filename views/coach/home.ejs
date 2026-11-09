@@ -22,6 +22,7 @@
     <div class="card-grid">
       <% competitions.forEach((c) => { const e = c.entries; const entered = e.pending + e.approved + e.rejected; %>
         <article class="card">
+          <%- include('../partials/comp_logo', { competition: c, size: 'md' }) %>
           <p><span class="badge <%= c.open ? 'open' : 'closed' %>"><%= c.open ? `Open · ${timeLeft(c)}` : 'Registration closed' %></span></p>
           <h3><%= c.name %></h3>
           <p class="sub"><%= eventDatesText(c) %> · <%= c.venue %></p>

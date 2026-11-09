@@ -7,9 +7,9 @@ const session = require('express-session');
 const { BELTS, GENDERS, beltName, formatEventDates } = require('./divisions');
 const { createMailer } = require('./mailer');
 const { logActivity } = require('./activity');
-const { MAX_DOCUMENT_BYTES, MAX_ICON_BYTES, documentLabel, documentTypeFor, clubInitials } = require('./documents');
+const { MAX_DOCUMENT_BYTES, MAX_ICON_BYTES, MAX_ATTACHMENT_BYTES, MAX_NEW_COMPETITION_FILES, documentLabel, documentTypeFor, clubInitials } = require('./documents');
 const { MAX_IMPORT_BYTES } = require('./athleteImport');
-const { isRegistrationOpen, today, timeLeft, closeExpiredCompetitions, getEventDates, getClubIcon, clubIconVersions } = require('./services');
+const { isRegistrationOpen, today, timeLeft, closeExpiredCompetitions, getEventDates, getClubIcon, clubIconVersions, competitionLogoVersions } = require('./services');
 const publicRoutes = require('./routes/public');
 const authRoutes = require('./routes/auth');
 const clubRoutes = require('./routes/club');
@@ -139,16 +139,35 @@ function createApp({
     { path: /^\/club\/fighters\/\d+\/document$/, field: 'document', maxBytes: MAX_DOCUMENT_BYTES, tooBig: 'That file is over the 5 MB limit.' },
     { path: /^\/club\/fighters\/import$/, field: 'sheet', maxBytes: MAX_IMPORT_BYTES, tooBig: 'That file is over the 1 MB limit.' },
     { path: /^\/club\/icon$/, field: 'icon', maxBytes: MAX_ICON_BYTES, tooBig: 'That picture is over the 1 MB limit.' },
+    { path: /^\/admin\/competitions\/\d+\/logo$/, field: 'logo', maxBytes: MAX_ICON_BYTES, tooBig: 'That logo is over the 1 MB limit.' },
+    { path: /^\/admin\/competitions\/\d+\/files$/, field: 'file', maxBytes: MAX_ATTACHMENT_BYTES, tooBig: 'That file is over the 10 MB limit.' },
   ].map((upload) => ({
     ...upload,
     read: multer({ storage: multer.memoryStorage(), limits: { fileSize: upload.maxBytes, files: 1, fields: 5 } }).single(upload.field),
   }));
+  // The new-competition form carries an optional logo and any number of files.
+  // The route checks the logo's own, smaller limit.
+  uploads.push({
+    path: /^\/admin\/competitions$/,
+    tooBig: 'A file is over the 10 MB limit.',
+    read: multer({
+      storage: multer.memoryStorage(),
+      limits: { fileSize: MAX_ATTACHMENT_BYTES, files: MAX_NEW_COMPETITION_FILES + 1, fields: 40 },
+    }).fields([{ name: 'logo', maxCount: 1 }, { name: 'files', maxCount: MAX_NEW_COMPETITION_FILES }]),
+  });
   app.use((req, res, next) => {
     if (req.method !== 'POST' || !req.session.userId || !req.is('multipart/form-data')) return next();
     const upload = uploads.find((u) => u.path.test(req.path));
     if (!upload) return next();
     return upload.read(req, res, (error) => {
-      if (error) req.uploadError = error.code === 'LIMIT_FILE_SIZE' ? upload.tooBig : 'That upload could not be read. Please try again.';
+      if (error) {
+        const messages = {
+          LIMIT_FILE_SIZE: upload.tooBig,
+          LIMIT_FILE_COUNT: `Attach at most ${MAX_NEW_COMPETITION_FILES} files at once. You can add more afterwards from Logo and files.`,
+          LIMIT_UNEXPECTED_FILE: `Attach at most ${MAX_NEW_COMPETITION_FILES} files at once. You can add more afterwards from Logo and files.`,
+        };
+        req.uploadError = messages[error.code] || 'That upload could not be read. Please try again.';
+      }
       next();
     });
   });
@@ -185,6 +204,9 @@ function createApp({
       documentTypeFor,
       clubInitials,
       clubIconUrl: () => null,
+      competitionLogoUrl: () => null,
+      maxNewFiles: MAX_NEW_COMPETITION_FILES,
+      fileSize: (bytes) => (bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`),
       newsAudiences: AUDIENCES,
       formatBody,
       newsSummary: summary,
@@ -222,6 +244,12 @@ function createApp({
       iconVersions = iconVersions || clubIconVersions(db);
       const version = iconVersions.get(Number(clubId));
       return version ? `/club-icons/${clubId}?v=${encodeURIComponent(version)}` : null;
+    };
+    let logoVersions = null;
+    res.locals.competitionLogoUrl = (competitionId) => {
+      logoVersions = logoVersions || competitionLogoVersions(db);
+      const version = logoVersions.get(Number(competitionId));
+      return version ? `/competitions/${competitionId}/logo?v=${encodeURIComponent(version)}` : null;
     };
     next();
   });

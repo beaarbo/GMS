@@ -16,6 +16,7 @@ const {
   loadDivisionSetup,
   createPasswordReset,
   saveEventDates,
+  saveCompetitionLogo,
 } = require('../src/services');
 const { divisionOptions, findWeightClass } = require('../src/divisions');
 const { sendDeadlineReminders } = require('../src/notifications');
@@ -112,15 +113,18 @@ async function addFighter(agent, fields, { withDocument = true } = {}) {
   return Number(fighterId);
 }
 
+// Competitions need a logo and a description to open, so test ones get both.
 function openCompetition(db, overrides = {}) {
-  return createCompetition(db, {
+  const id = createCompetition(db, {
     name: 'Open',
     event_date: `${EVENT_YEAR}-12-01`,
     registration_deadline: `${EVENT_YEAR}-11-01`,
-    venue: 'Hall',
+    venue: 'Hall', description: 'Details.',
     status: 'open',
     ...overrides,
   });
+  saveCompetitionLogo(db, id, { data: TINY_PNG, contentType: 'image/png' });
+  return id;
 }
 
 test('club registers a fighter, who is placed in a division, and admin approves', async () => {
@@ -517,7 +521,7 @@ test('rest time delays a fighter\'s next bout and divisions can be pinned to a d
 test('schedule migration clears old draws and keeps competitions', () => {
   const db = openDb(':memory:');
   const compId = createCompetition(db, {
-    name: 'Old', event_date: '2030-01-01', registration_deadline: '2029-01-01', venue: 'Hall',
+    name: 'Old', event_date: '2030-01-01', registration_deadline: '2029-01-01', venue: 'Hall', description: 'Details.',
   });
   const [age] = db.prepare('SELECT id FROM age_groups').all();
   const [belt] = db.prepare('SELECT id FROM belt_groups').all();
@@ -637,7 +641,7 @@ test('a passed deadline blocks reopening until the admin sets a later one', asyn
     admin,
     `/admin/competitions/${compId}`,
     {
-      name: 'Open', venue: 'Hall', event_dates: `${EVENT_YEAR}-12-01`,
+      name: 'Open', venue: 'Hall', description: 'Details.', event_dates: `${EVENT_YEAR}-12-01`,
       registration_deadline: `${EVENT_YEAR}-11-01`, registration_deadline_time: '17:30',
     },
     `/admin/competitions/${compId}/edit`
@@ -759,7 +763,7 @@ test('a competition can run over two separate weekends', async () => {
     admin,
     '/admin/competitions',
     {
-      name: 'Two Weekends', venue: 'Hall', status: 'draft',
+      name: 'Two Weekends', venue: 'Hall', description: 'Details.', status: 'draft',
       // Out of order, with a duplicate and a blank box, as a form could send them.
       event_dates: [`${y}-02-13`, `${y}-02-06`, `${y}-02-07`, `${y}-02-14`, `${y}-02-07`, ''],
       registration_deadline: `${y}-01-20`, registration_deadline_time: '17:00',
@@ -770,6 +774,7 @@ test('a competition can run over two separate weekends', async () => {
   assert.equal(competition.event_date, `${y}-02-06`);
   assert.deepEqual(getEventDates(db, competition.id), [`${y}-02-06`, `${y}-02-07`, `${y}-02-13`, `${y}-02-14`]);
 
+  saveCompetitionLogo(db, competition.id, { data: TINY_PNG, contentType: 'image/png' });
   await post(admin, `/admin/competitions/${competition.id}/status`, { status: 'open' }, '/admin');
   assert.match((await request(app).get('/')).text, new RegExp(`6-7 &amp; 13-14 Feb ${y}`));
   assert.match((await request(app).get(`/competitions/${competition.id}`)).text, new RegExp(`6-7 &amp; 13-14 Feb ${y}`));
@@ -779,7 +784,7 @@ test('event date validation needs one valid date, before which the deadline fall
   const { db, app } = await setup();
   const admin = await login(app, 'admin@test.test');
   const y = EVENT_YEAR;
-  const base = { name: 'Bad', venue: 'Hall', registration_deadline: `${y}-01-01`, registration_deadline_time: '17:00' };
+  const base = { name: 'Bad', venue: 'Hall', description: 'Details.', registration_deadline: `${y}-01-01`, registration_deadline_time: '17:00' };
   const form = '/admin/competitions/new';
   const count = () => db.prepare('SELECT COUNT(*) AS n FROM competitions').get().n;
 
@@ -801,7 +806,7 @@ test('after entries, later days can change but the first day cannot', async () =
   const admin = await login(app, 'admin@test.test');
   const edit = `/admin/competitions/${compId}`;
   const first = `${EVENT_YEAR}-12-01`;
-  const base = { name: 'Open', venue: 'Hall', registration_deadline: `${EVENT_YEAR}-11-01`, registration_deadline_time: '17:00' };
+  const base = { name: 'Open', venue: 'Hall', description: 'Details.', registration_deadline: `${EVENT_YEAR}-11-01`, registration_deadline_time: '17:00' };
 
   await post(admin, edit, { ...base, event_dates: `${EVENT_YEAR}-12-08` }, `${edit}/edit`);
   assert.deepEqual(getEventDates(db, compId), [first, `${EVENT_YEAR}-12-08`]);
@@ -844,7 +849,7 @@ test('bouts are spread across the event days and move when days change', async (
     admin,
     `/admin/competitions/${compId}`,
     {
-      name: 'Open', venue: 'Hall', registration_deadline: `${EVENT_YEAR}-11-01`, registration_deadline_time: '17:00',
+      name: 'Open', venue: 'Hall', description: 'Details.', registration_deadline: `${EVENT_YEAR}-11-01`, registration_deadline_time: '17:00',
       event_dates: `${EVENT_YEAR}-12-08`,
     },
     `/admin/competitions/${compId}/edit`
@@ -973,7 +978,7 @@ test('deadline reminders go out once, only inside the 3-day window, and again af
   await post(
     admin,
     `/admin/competitions/${near}`,
-    { name: 'Near', venue: 'Hall', event_dates: `${EVENT_YEAR}-12-01`, registration_deadline: dateIn(1), registration_deadline_time: '12:00' },
+    { name: 'Near', venue: 'Hall', description: 'Details.', event_dates: `${EVENT_YEAR}-12-01`, registration_deadline: dateIn(1), registration_deadline_time: '12:00' },
     `/admin/competitions/${near}/edit`
   );
   assert.equal(await sendDeadlineReminders(ctx), 1);

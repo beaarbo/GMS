@@ -1,10 +1,13 @@
 <%- include('partials/top') %>
 <% const open = isRegistrationOpen(competition); %>
 <div class="page-head">
-  <div>
-    <h1><%= competition.name %></h1>
-    <p class="sub"><%= eventDatesText(competition) %> · <%= competition.venue %></p>
-    <p class="sub">Registration deadline: <%= deadlineText(competition) %> · <%= open ? timeLeft(competition) : 'Closed' %></p>
+  <div class="club-head">
+    <%- include('partials/comp_logo', { competition, size: 'lg' }) %>
+    <div>
+      <h1><%= competition.name %></h1>
+      <p class="sub"><%= eventDatesText(competition) %> · <%= competition.venue %></p>
+      <p class="sub">Registration deadline: <%= deadlineText(competition) %> · <%= open ? timeLeft(competition) : 'Closed' %></p>
+    </div>
   </div>
   <% if (user && user.club_id) { %>
     <a class="btn" href="/club/competitions/<%= competition.id %>"><%= open ? 'Register fighters' : 'View your entries' %></a>
@@ -15,7 +18,33 @@
   <% } %>
 </div>
 
-<% if (competition.description) { %><div class="card"><p class="empty"><%= competition.description %></p></div><% } %>
+<% if (user && user.role === 'admin') { %>
+  <div class="actions comp-admin-links">
+    <a class="btn secondary small" href="/admin/competitions/<%= competition.id %>/edit">Edit details</a>
+    <a class="btn secondary small" href="/admin/competitions/<%= competition.id %>/files">Logo and files</a>
+  </div>
+<% } %>
+
+<% if (competition.description) { %>
+  <section class="card">
+    <h2>About this competition</h2>
+    <%- include('partials/news_body', { text: competition.description }) %>
+  </section>
+<% } %>
+
+<% if (files.length > 0) { %>
+  <section class="card">
+    <h2>Documents</h2>
+    <ul class="file-list">
+      <% files.forEach((file) => { %>
+        <li>
+          <a href="/competitions/<%= competition.id %>/files/<%= file.id %>"><%= file.title %></a>
+          <span class="hint"><%= file.filename.split('.').pop().toUpperCase() %> · <%= fileSize(file.size) %></span>
+        </li>
+      <% }) %>
+    </ul>
+  </section>
+<% } %>
 
 <section class="card">
   <h2>Kyorugi divisions</h2>

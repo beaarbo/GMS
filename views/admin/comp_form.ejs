@@ -3,7 +3,8 @@
   <h1><%= title %></h1>
   <%- include('../partials/errors') %>
   <% if (locked) { %><div class="notice info">Clubs have registered, so the first event day and age rule are locked. You can still add or remove later days.</div><% } %>
-  <form method="post" action="<%= action %>">
+  <% const creating = action === '/admin/competitions'; %>
+  <form method="post" action="<%= action %>"<%- creating ? ' enctype="multipart/form-data"' : '' %>>
     <input type="hidden" name="_csrf" value="<%= csrf %>">
     <div class="field">
       <label for="name">Competition name</label>
@@ -46,9 +47,24 @@
       </select>
     </div>
     <div class="field">
-      <label for="description">Details for clubs <span class="hint">(optional)</span></label>
-      <textarea id="description" name="description" rows="4"><%= competition.description || '' %></textarea>
+      <label for="description">Description</label>
+      <textarea id="description" name="description" rows="8" maxlength="5000" required><%= competition.description || '' %></textarea>
+      <p class="hint">Shown on the competition page. Plain text: leave a blank line between paragraphs, and web addresses become links.</p>
     </div>
+    <% if (creating) { %>
+      <div class="field">
+        <label for="logo">Logo <span class="hint">(needed before you publish)</span></label>
+        <input id="logo" name="logo" type="file" accept="image/jpeg,image/png,image/webp">
+        <p class="hint">JPG, PNG or WebP, up to 1 MB. A square picture works best.</p>
+      </div>
+      <div class="field">
+        <label for="files">Files for clubs <span class="hint">(optional)</span></label>
+        <input id="files" name="files" type="file" accept=".pdf,.docx,.xlsx,.jpg,.jpeg,.png,.webp" multiple>
+        <p class="hint">Choose up to <%= maxNewFiles %> at once, such as the prospectus, rules or forms: PDF, Word (.docx), Excel (.xlsx), JPG, PNG or WebP, up to 10 MB each. Each is titled with its file name. You can add more, or retitle one by attaching it again, later from Logo and files.</p>
+      </div>
+    <% } else { %>
+      <p class="hint">To change the logo or attached files, use <a href="/admin/competitions/<%= competition.id %>/files">Logo and files</a>.</p>
+    <% } %>
     <div class="actions">
       <button class="btn" type="submit">Save</button>
       <a class="btn secondary" href="/admin">Cancel</a>

@@ -57,6 +57,7 @@ Express with server-rendered EJS and SQLite (better-sqlite3).
 - Bouts reference approved registrations, so approvals and reopening are blocked while a bout list exists. Keep that rule, or the draw and foreign keys can break.
 - `closeExpiredCompetitions` runs on each request, so `status` flips to closed once the deadline passes, in the server's `TZ`. Reopening requires a later deadline.
 - Public pages show rules only. Never expose fighter data on them, because many fighters are minors. News posts marked for coaches and organisers return 404 to visitors, and club icons are only served to logged-in users.
+- A competition can't open for registration (publish or reopen) without a logo and a description. Logos are in `competition_logos` and attachments in `competition_files`, both BLOBs. They follow the competition's visibility: drafts are admin-only. Attachments are always sent as downloads.
 - News bodies are plain text: never render them unescaped. `formatBody` splits them into escaped pieces and http(s) links.
 - The database needs a persistent disk, so serverless hosts won't work.
 - `data/` and `.env` are gitignored. `data/gms.sqlite` on this machine holds demo data only.

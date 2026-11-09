@@ -183,6 +183,29 @@ CREATE TABLE IF NOT EXISTS news_posts (
 );
 CREATE INDEX IF NOT EXISTS idx_news_created ON news_posts(created_at);
 
+-- Each competition's logo, required before it opens for registration.
+CREATE TABLE IF NOT EXISTS competition_logos (
+  competition_id INTEGER PRIMARY KEY REFERENCES competitions(id) ON DELETE CASCADE,
+  content_type TEXT NOT NULL,
+  data BLOB NOT NULL,
+  uploaded_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Files the admin attaches to a competition (prospectus, rules, forms). Anyone who
+-- can see the competition can download them. Never SELECT data in lists.
+CREATE TABLE IF NOT EXISTS competition_files (
+  id INTEGER PRIMARY KEY,
+  competition_id INTEGER NOT NULL REFERENCES competitions(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  filename TEXT NOT NULL,
+  content_type TEXT NOT NULL,
+  size INTEGER NOT NULL,
+  data BLOB NOT NULL,
+  uploaded_by INTEGER,
+  uploaded_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_competition_files ON competition_files(competition_id);
+
 -- Each club's icon, set by its coaches. Select the data column only when serving it.
 CREATE TABLE IF NOT EXISTS club_icons (
   club_id INTEGER PRIMARY KEY REFERENCES clubs(id) ON DELETE CASCADE,

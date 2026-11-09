@@ -449,3 +449,23 @@ label.check { display: flex; align-items: center; gap: var(--space-2); font-weig
 .home-section .news-item h3 a { color: var(--ink); text-decoration: none; }
 .home-section .news-item h3 a:hover { color: var(--chung); text-decoration: underline; }
 .home-entries { margin-top: var(--space-2); }
+/* Competition logos and files */
+.comp-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border-radius: var(--radius);
+  object-fit: contain;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.comp-logo.initials { background: var(--hong-soft); color: var(--hong-dark); border-color: transparent; font-weight: 700; }
+.comp-logo.md { width: 48px; height: 48px; font-size: var(--text-sm); }
+.comp-logo.lg { width: 88px; height: 88px; font-size: var(--text-xl); }
+.card-grid .card > .comp-logo { margin-bottom: var(--space-2); }
+.comp-admin-links { margin-bottom: var(--space-4); }
+.file-list { list-style: none; margin: 0; padding: 0; }
+.file-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); padding: var(--space-2) 0; border-top: 1px solid var(--line); }
+.file-list li:first-child { border-top: 0; }
+.file-list a { font-weight: 600; }

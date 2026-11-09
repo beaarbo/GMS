@@ -1,0 +1,74 @@
+<%- include('../partials/top') %>
+<p class="breadcrumb"><a href="/admin">Admin dashboard</a></p>
+<div class="page-head">
+  <div class="club-head">
+    <%- include('../partials/comp_logo', { competition, size: 'lg' }) %>
+    <div>
+      <h1>Logo and files</h1>
+      <p class="sub"><%= competition.name %> · <a href="/competitions/<%= competition.id %>">View the competition page</a></p>
+    </div>
+  </div>
+</div>
+<% if (error) { %><div class="notice error" role="alert"><%= error %></div><% } %>
+
+<section class="card">
+  <h2>Logo</h2>
+  <% if (!hasLogo) { %>
+    <div class="notice info">Every competition needs a logo before it can be published.</div>
+  <% } %>
+  <form method="post" action="/admin/competitions/<%= competition.id %>/logo" enctype="multipart/form-data">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <div class="field">
+      <label for="logo"><%= hasLogo ? 'Replace the logo' : 'Choose a logo' %></label>
+      <input id="logo" name="logo" type="file" accept="image/jpeg,image/png,image/webp" required>
+      <p class="hint">JPG, PNG or WebP, up to 1 MB. A square picture works best.</p>
+    </div>
+    <button class="btn" type="submit"><%= hasLogo ? 'Replace logo' : 'Upload logo' %></button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Files for clubs</h2>
+  <p class="sub">Attach as many as you need, such as the prospectus, rules or forms. Anyone who can see the competition can download them, so don't attach athletes' personal details.</p>
+  <% if (files.length === 0) { %>
+    <p class="empty">No files attached yet.</p>
+  <% } else { %>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>File</th><th>Size</th><th>Added</th><th></th></tr></thead>
+        <tbody>
+          <% files.forEach((file) => { %>
+            <tr>
+              <td><a href="/competitions/<%= competition.id %>/files/<%= file.id %>"><strong><%= file.title %></strong></a><br><span class="hint"><%= file.filename %></span></td>
+              <td class="nowrap"><%= fileSize(file.size) %></td>
+              <td class="nowrap"><%= postDate(file.uploaded_at) %></td>
+              <td>
+                <form method="post" action="/admin/competitions/<%= competition.id %>/files/<%= file.id %>/delete" data-confirm="Remove <%= file.title %>?">
+                  <input type="hidden" name="_csrf" value="<%= csrf %>">
+                  <button class="btn danger small" type="submit">Remove</button>
+                </form>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+  <h3>Attach a file</h3>
+  <form method="post" action="/admin/competitions/<%= competition.id %>/files" enctype="multipart/form-data">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <div class="form-row">
+      <div class="field">
+        <label for="file-title">Title <span class="hint">(optional)</span></label>
+        <input id="file-title" name="title" maxlength="120" placeholder="For example: Competition prospectus">
+      </div>
+      <div class="field">
+        <label for="file">File</label>
+        <input id="file" name="file" type="file" accept=".pdf,.docx,.xlsx,.jpg,.jpeg,.png,.webp" required>
+      </div>
+    </div>
+    <p class="hint">PDF, Word (.docx), Excel (.xlsx), JPG, PNG or WebP, up to 10 MB each. Without a title, the file name is used.</p>
+    <button class="btn" type="submit">Attach file</button>
+  </form>
+</section>
+<%- include('../partials/bottom') %>

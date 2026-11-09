@@ -24,11 +24,18 @@
 <% competitions.forEach((c) => { %>
   <section class="card">
     <div class="page-head">
-      <div>
-        <h2><%= c.name %> <span class="badge <%= c.status %>"><%= statusLabel(c.status) %></span></h2>
-        <p class="sub"><%= eventDatesText(c) %> · <%= c.venue %> · Registration deadline: <%= deadlineText(c) %><% if (isRegistrationOpen(c)) { %> (<%= timeLeft(c) %>)<% } %></p>
+      <div class="club-head">
+        <%- include('../partials/comp_logo', { competition: c, size: 'md' }) %>
+        <div>
+          <h2><%= c.name %> <span class="badge <%= c.status %>"><%= statusLabel(c.status) %></span></h2>
+          <p class="sub"><%= eventDatesText(c) %> · <%= c.venue %> · Registration deadline: <%= deadlineText(c) %><% if (isRegistrationOpen(c)) { %> (<%= timeLeft(c) %>)<% } %></p>
+        </div>
       </div>
     </div>
+    <% const missing = [!competitionLogoUrl(c.id) && 'a logo', !String(c.description || '').trim() && 'a description'].filter(Boolean); %>
+    <% if (missing.length > 0) { %>
+      <div class="notice info">Needs <%= missing.join(' and ') %> before it can open for registration.</div>
+    <% } %>
     <p class="stats">
       <span><strong><%= c.pending || 0 %></strong> pending</span>
       <span><strong><%= c.approved || 0 %></strong> approved</span>
@@ -40,6 +47,7 @@
       <% if (c.status === 'closed') { %><a class="btn secondary small" href="/admin/competitions/<%= c.id %>/bouts">Bout list</a><a class="btn secondary small" href="/admin/competitions/<%= c.id %>/results">Results</a><% } %>
       <a class="btn secondary small" href="/admin/competitions/<%= c.id %>/setup">Division setup</a>
       <a class="btn secondary small" href="/admin/competitions/<%= c.id %>/edit">Edit</a>
+      <a class="btn secondary small" href="/admin/competitions/<%= c.id %>/files">Logo and files</a>
       <form method="post" action="/admin/competitions/<%= c.id %>/status">
         <input type="hidden" name="_csrf" value="<%= csrf %>">
         <% if (c.status === 'open') { %>
