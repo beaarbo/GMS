@@ -196,6 +196,41 @@ function saveFighterDocument(db, fighter, { data, contentType, userId = null }) 
   ).run({ fighterId: fighter.id, docType: documentTypeFor(fighter.belt_rank), contentType, data, userId });
 }
 
+const NEWS_SELECT = `SELECT n.*, u.full_name AS author FROM news_posts n LEFT JOIN users u ON u.id = n.author_id`;
+
+// Pinned posts first, then newest. Visitors only see public posts.
+function listNews(db, { signedIn, limit = 50 }) {
+  return db
+    .prepare(`${NEWS_SELECT} ${signedIn ? '' : "WHERE n.audience = 'public'"} ORDER BY n.pinned DESC, n.created_at DESC, n.id DESC LIMIT ?`)
+    .all(limit);
+}
+
+function getNews(db, id, { signedIn = true } = {}) {
+  const post = db.prepare(`${NEWS_SELECT} WHERE n.id = ?`).get(id);
+  if (!post || (!signedIn && post.audience !== 'public')) return null;
+  return post;
+}
+
+function createNews(db, values, authorId) {
+  return Number(
+    db
+      .prepare('INSERT INTO news_posts (title, body, audience, pinned, author_id) VALUES (@title, @body, @audience, @pinned, @authorId)')
+      .run({ ...values, authorId }).lastInsertRowid
+  );
+}
+
+function updateNews(db, id, values) {
+  return (
+    db
+      .prepare("UPDATE news_posts SET title = @title, body = @body, audience = @audience, pinned = @pinned, updated_at = datetime('now') WHERE id = @id")
+      .run({ ...values, id }).changes > 0
+  );
+}
+
+function deleteNews(db, id) {
+  return db.prepare('DELETE FROM news_posts WHERE id = ?').run(id).changes > 0;
+}
+
 function saveClubIcon(db, clubId, { data, contentType, userId = null }) {
   db.prepare(
     `INSERT INTO club_icons (club_id, content_type, data, uploaded_by) VALUES (?, ?, ?, ?)
@@ -706,6 +741,11 @@ module.exports = {
   getClubIcon,
   deleteClubIcon,
   clubIconVersions,
+  listNews,
+  getNews,
+  createNews,
+  updateNews,
+  deleteNews,
   hasApprovedRegistration,
   hasActiveRegistration,
   hasBoutList,

@@ -16,6 +16,7 @@
       // Marks the section the visitor is in. Admin sub-pages belong to the dashboard.
       const current = (href) => {
         if (href === '/') return currentPath === '/' || currentPath.startsWith('/competitions');
+        if (href === '/news') return currentPath === '/news' || currentPath.startsWith('/news/') || currentPath.startsWith('/admin/news');
         if (href === '/admin') return currentPath === '/admin' || currentPath.startsWith('/admin/competitions') || currentPath.startsWith('/admin/fighters');
         return currentPath === href || currentPath.startsWith(`${href}/`);
       };
@@ -23,6 +24,7 @@
     %>
     <nav class="nav" aria-label="Main">
       <%- link('/', 'Competitions') %>
+      <%- link('/news', 'News') %>
       <% if (user && user.role === 'admin') { %>
         <%- link('/admin', 'Dashboard') %>
         <%- link('/admin/clubs', 'Clubs and coaches') %>

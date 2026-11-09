@@ -1,0 +1,13 @@
+<%- include('partials/top') %>
+<p class="breadcrumb"><a href="/news">News</a></p>
+<article class="card news-article">
+  <%- include('partials/news_meta', { post }) %>
+  <h1><%= post.title %></h1>
+  <%- include('partials/news_body', { text: post.body }) %>
+  <% if (user && user.role === 'admin') { %>
+    <div class="actions">
+      <a class="btn secondary small" href="/admin/news/<%= post.id %>/edit">Edit</a>
+    </div>
+  <% } %>
+</article>
+<%- include('partials/bottom') %>

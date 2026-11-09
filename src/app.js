@@ -17,6 +17,8 @@ const coachRoutes = require('./routes/coach');
 const accountRoutes = require('./routes/account');
 const adminRoutes = require('./routes/admin');
 const adminClubRoutes = require('./routes/adminClubs');
+const adminNewsRoutes = require('./routes/adminNews');
+const { AUDIENCES, formatBody, summary } = require('./news');
 
 const SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 12;
 
@@ -182,6 +184,11 @@ function createApp({
       documentTypeFor,
       clubInitials,
       clubIconUrl: () => null,
+      newsAudiences: AUDIENCES,
+      formatBody,
+      newsSummary: summary,
+      // created_at is SQLite UTC "YYYY-MM-DD HH:MM:SS"; shown as a date in the server's TZ.
+      postDate: (value) => new Date(`${String(value).replace(' ', 'T')}Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
       eventDatesText: (c) => formatEventDates(getEventDates(db, c.competition_id ?? c.id)),
       deadlineText: (c) => `${formatDate(c.registration_deadline)}, ${c.registration_deadline_time}`,
     };
@@ -239,6 +246,7 @@ function createApp({
   app.use('/coach', coachRoutes);
   app.use('/account', accountRoutes);
   app.use('/admin/clubs', adminClubRoutes);
+  app.use('/admin/news', adminNewsRoutes);
   app.use('/admin', adminRoutes);
 
   app.use((req, res) => {

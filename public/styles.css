@@ -432,3 +432,19 @@ tbody tr.result-row-done:hover td { background: var(--ok-soft); }
 .club-icon-edit:hover .club-icon-edit-label, .club-icon-edit:focus-visible .club-icon-edit-label { opacity: 1; }
 .icon-current { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-4) 0; }
 .icon-remove { margin-top: var(--space-4); }
+/* News */
+label.check { display: flex; align-items: center; gap: var(--space-2); font-weight: 400; color: var(--ink); margin-bottom: var(--space-2); }
+.news-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-2); color: var(--muted); font-size: var(--text-sm); }
+.news-item h2 { margin: 0 0 var(--space-2); }
+.news-item h2 a { color: var(--ink); text-decoration: none; }
+.news-item h2 a:hover { color: var(--chung); text-decoration: underline; }
+.news-item p:not(.news-meta) { color: var(--ink-2); }
+.news-article { max-width: 760px; }
+.news-article h1 { margin-top: 0; }
+.news-body p { line-height: 1.65; margin: 0 0 var(--space-4); overflow-wrap: anywhere; }
+.news-strip { margin-bottom: var(--space-5); }
+.news-strip ul { list-style: none; margin: 0; padding: 0; }
+.news-strip li { padding: var(--space-3) 0; border-top: 1px solid var(--line); }
+.news-strip li:first-child { border-top: 0; padding-top: 0; }
+.news-strip li a { font-weight: 600; }
+.news-strip .news-meta { margin: var(--space-1) 0 0; }

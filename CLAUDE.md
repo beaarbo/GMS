@@ -32,7 +32,8 @@ Express with server-rendered EJS and SQLite (better-sqlite3).
 - `src/services.js`: database operations shared by routes, the seed script and tests.
 - `src/db.js`: schema (`CREATE TABLE IF NOT EXISTS`) plus data migrations in `migrate`, tracked with SQLite's `user_version`. Add a new version for any change to existing data.
 - `src/app.js`: app factory (`createApp`), security headers, sessions, CSRF.
-- `src/routes/`: `public`, `auth`, `coach` (join a club), `club` (approved coaches: fighters and entries), `admin` and `adminClubs` (clubs, coach approvals).
+- `src/athleteImport.js`, `src/news.js`: pure helpers for the spreadsheet athlete import and for news posts (form checks, plain-text body to paragraphs and links).
+- `src/routes/`: `public` (home, competitions, news), `auth`, `coach` (join a club), `club` (approved coaches: fighters, import, entries, club icon), `admin`, `adminClubs` (clubs, coach approvals) and `adminNews`.
 - `views/`, `public/`: templates and static assets.
 - `test/`: `node:test`. `flow.test.js` drives the whole app through supertest on an in-memory database.
 
@@ -55,7 +56,8 @@ Express with server-rendered EJS and SQLite (better-sqlite3).
 - Belts are fixed to Blue, Red and Black (ranks 1 to 3), and every competition's belt groups match.
 - Bouts reference approved registrations, so approvals and reopening are blocked while a bout list exists. Keep that rule, or the draw and foreign keys can break.
 - `closeExpiredCompetitions` runs on each request, so `status` flips to closed once the deadline passes, in the server's `TZ`. Reopening requires a later deadline.
-- Public pages show rules only. Never expose fighter data on them, because many fighters are minors.
+- Public pages show rules only. Never expose fighter data on them, because many fighters are minors. News posts marked for coaches and organisers return 404 to visitors, and club icons are only served to logged-in users.
+- News bodies are plain text: never render them unescaped. `formatBody` splits them into escaped pieces and http(s) links.
 - The database needs a persistent disk, so serverless hosts won't work.
 - `data/` and `.env` are gitignored. `data/gms.sqlite` on this machine holds demo data only.
 

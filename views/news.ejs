@@ -1,0 +1,27 @@
+<%- include('partials/top') %>
+<div class="page-head">
+  <div>
+    <h1>News</h1>
+    <p class="sub">Updates from the organisers.</p>
+  </div>
+  <% if (user && user.role === 'admin') { %>
+    <div class="actions">
+      <a class="btn secondary" href="/admin/news">Manage posts</a>
+      <a class="btn" href="/admin/news/new">New post</a>
+    </div>
+  <% } %>
+</div>
+
+<% if (posts.length === 0) { %>
+  <div class="card"><p class="empty">No news yet. Check back soon.</p></div>
+<% } %>
+
+<% posts.forEach((post) => { %>
+  <article class="card news-item">
+    <%- include('partials/news_meta', { post }) %>
+    <h2><a href="/news/<%= post.id %>"><%= post.title %></a></h2>
+    <p><%= newsSummary(post.body) %></p>
+    <a href="/news/<%= post.id %>">Read more</a>
+  </article>
+<% }) %>
+<%- include('partials/bottom') %>

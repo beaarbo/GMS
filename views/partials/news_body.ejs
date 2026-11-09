@@ -1,0 +1,6 @@
+<%# A post body as paragraphs, line breaks and links. Every piece is escaped. %>
+<div class="news-body">
+  <% formatBody(text).forEach((paragraph) => { %>
+    <p><% paragraph.forEach((line, i) => { %><% if (i > 0) { %><br><% } %><% line.forEach((piece) => { %><% if (piece.url) { %><a href="<%= piece.url %>" rel="noopener nofollow" target="_blank"><%= piece.url %></a><% } else { %><%= piece.text %><% } %><% }) %><% }) %></p>
+  <% }) %>
+</div>

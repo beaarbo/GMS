@@ -1,0 +1,33 @@
+<%- include('../partials/top') %>
+<p class="breadcrumb"><a href="/admin/news">News</a></p>
+<div class="card narrow">
+  <h1><%= title %></h1>
+  <%- include('../partials/errors') %>
+  <form method="post" action="<%= action %>">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <div class="field">
+      <label for="title">Title</label>
+      <input id="title" name="title" value="<%= post.title %>" maxlength="150" required>
+    </div>
+    <div class="field">
+      <label for="body">Post</label>
+      <textarea id="body" name="body" rows="12" maxlength="10000" required><%= post.body %></textarea>
+      <p class="hint">Plain text. Leave a blank line between paragraphs. Web addresses starting with http:// or https:// become links.</p>
+    </div>
+    <fieldset class="date-list">
+      <legend>Who can see it</legend>
+      <% Object.entries(newsAudiences).forEach(([value, label]) => { %>
+        <label class="check"><input type="radio" name="audience" value="<%= value %>" <%= post.audience === value ? 'checked' : '' %> required> <%= label %></label>
+      <% }) %>
+      <p class="hint">Posts for everyone also show on the public home page. Never include athletes' personal details in them.</p>
+    </fieldset>
+    <div class="field">
+      <label class="check"><input type="checkbox" name="pinned" value="1" <%= post.pinned ? 'checked' : '' %>> Pin to the top of the News page</label>
+    </div>
+    <div class="actions">
+      <button class="btn" type="submit"><%= editing ? 'Save changes' : 'Publish' %></button>
+      <a class="btn secondary" href="/admin/news">Cancel</a>
+    </div>
+  </form>
+</div>
+<%- include('../partials/bottom') %>

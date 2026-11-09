@@ -1,0 +1,43 @@
+<%- include('../partials/top') %>
+<p class="breadcrumb"><a href="/admin">Admin dashboard</a></p>
+<div class="page-head">
+  <div>
+    <h1>News</h1>
+    <p class="sub">Post updates for coaches and visitors. <a href="/news">View the News page</a></p>
+  </div>
+  <a class="btn" href="/admin/news/new">New post</a>
+</div>
+
+<section class="card">
+  <% if (posts.length === 0) { %>
+    <p class="empty">No posts yet. Write the first one to share an update.</p>
+  <% } else { %>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Post</th><th>Who can see it</th><th>Posted</th><th></th></tr></thead>
+        <tbody>
+          <% posts.forEach((post) => { %>
+            <tr>
+              <td>
+                <a href="/news/<%= post.id %>"><strong><%= post.title %></strong></a>
+                <% if (post.pinned) { %> <span class="badge open">Pinned</span><% } %>
+              </td>
+              <td><%= newsAudiences[post.audience] %></td>
+              <td class="nowrap"><%= postDate(post.created_at) %><% if (post.author) { %><br><span class="hint"><%= post.author %></span><% } %></td>
+              <td>
+                <div class="actions">
+                  <a class="btn secondary small" href="/admin/news/<%= post.id %>/edit">Edit</a>
+                  <form method="post" action="/admin/news/<%= post.id %>/delete" data-confirm="Delete “<%= post.title %>”? This cannot be undone.">
+                    <input type="hidden" name="_csrf" value="<%= csrf %>">
+                    <button class="btn danger small" type="submit">Delete</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</section>
+<%- include('../partials/bottom') %>

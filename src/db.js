@@ -169,6 +169,20 @@ CREATE TABLE IF NOT EXISTS bouts (
 );
 CREATE INDEX IF NOT EXISTS idx_bouts_competition ON bouts(competition_id);
 
+-- Admin news posts. "public" posts show to everyone, "members" posts only to
+-- logged-in coaches and admins. Bodies are plain text, shown escaped.
+CREATE TABLE IF NOT EXISTS news_posts (
+  id INTEGER PRIMARY KEY,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  audience TEXT NOT NULL DEFAULT 'public' CHECK (audience IN ('public', 'members')),
+  pinned INTEGER NOT NULL DEFAULT 0,
+  author_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_news_created ON news_posts(created_at);
+
 -- Each club's icon, set by its coaches. Select the data column only when serving it.
 CREATE TABLE IF NOT EXISTS club_icons (
   club_id INTEGER PRIMARY KEY REFERENCES clubs(id) ON DELETE CASCADE,

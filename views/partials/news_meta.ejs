@@ -1,0 +1,5 @@
+<p class="news-meta">
+  <% if (post.pinned) { %><span class="badge open">Pinned</span><% } %>
+  <% if (post.audience === 'members') { %><span class="badge pending">Coaches and organisers</span><% } %>
+  <span><%= postDate(post.created_at) %><%= post.author ? ` · ${post.author}` : '' %><%= post.updated_at ? ` · edited ${postDate(post.updated_at)}` : '' %></span>
+</p>
