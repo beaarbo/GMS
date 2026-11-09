@@ -3,7 +3,7 @@
   "configurations": [
     {
       "name": "gms",
-      "runtimeExecutable": "node",
+      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
       "runtimeArgs": ["server.js"],
       "port": 3000
     }
