@@ -8,6 +8,7 @@ const { BELTS, GENDERS, beltName, formatEventDates } = require('./divisions');
 const { createMailer } = require('./mailer');
 const { logActivity } = require('./activity');
 const { MAX_DOCUMENT_BYTES, documentLabel, documentTypeFor } = require('./documents');
+const { MAX_IMPORT_BYTES } = require('./athleteImport');
 const { isRegistrationOpen, today, timeLeft, closeExpiredCompetitions, getEventDates } = require('./services');
 const publicRoutes = require('./routes/public');
 const authRoutes = require('./routes/auth');
@@ -128,22 +129,22 @@ function createApp({
     })
   );
 
-  // Upload forms aren't URL-encoded, so this one is read here, ahead of the CSRF
-  // check that needs its token. Only logged-in users can reach it, and the file
-  // stays in memory until the route has checked who they are and what it is.
-  const readDocument = multer({
-    storage: multer.memoryStorage(),
-    limits: { fileSize: MAX_DOCUMENT_BYTES, files: 1, fields: 5 },
-  }).single('document');
+  // Upload forms aren't URL-encoded, so they are read here, ahead of the CSRF
+  // check that needs their token. Only logged-in users can reach them, and the
+  // file stays in memory until the route has checked who they are and what it is.
+  const uploads = [
+    { path: /^\/club\/fighters\/\d+\/document$/, field: 'document', maxBytes: MAX_DOCUMENT_BYTES, tooBig: 'That file is over the 5 MB limit.' },
+    { path: /^\/club\/fighters\/import$/, field: 'sheet', maxBytes: MAX_IMPORT_BYTES, tooBig: 'That file is over the 1 MB limit.' },
+  ].map((upload) => ({
+    ...upload,
+    read: multer({ storage: multer.memoryStorage(), limits: { fileSize: upload.maxBytes, files: 1, fields: 5 } }).single(upload.field),
+  }));
   app.use((req, res, next) => {
-    const isUpload =
-      req.method === 'POST' &&
-      req.session.userId &&
-      /^\/club\/fighters\/\d+\/document$/.test(req.path) &&
-      req.is('multipart/form-data');
-    if (!isUpload) return next();
-    return readDocument(req, res, (error) => {
-      if (error) req.uploadError = error.code === 'LIMIT_FILE_SIZE' ? 'That file is over the 5 MB limit.' : 'That upload could not be read. Please try again.';
+    if (req.method !== 'POST' || !req.session.userId || !req.is('multipart/form-data')) return next();
+    const upload = uploads.find((u) => u.path.test(req.path));
+    if (!upload) return next();
+    return upload.read(req, res, (error) => {
+      if (error) req.uploadError = error.code === 'LIMIT_FILE_SIZE' ? upload.tooBig : 'That upload could not be read. Please try again.';
       next();
     });
   });

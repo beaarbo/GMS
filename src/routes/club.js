@@ -16,7 +16,8 @@ const {
 const { documentLabel, documentTypeFor, detectFileType, sendDocument } = require('../documents');
 const { layoutBracket, computeMedals, clubAthleteSummary } = require('../bracket');
 const { writeBoutListPdf } = require('../boutlistPdf');
-const { clean, toArray, requireRole, notFound } = require('./helpers');
+const { clean, toArray, requireRole, notFound, wrap } = require('./helpers');
+const { COLUMNS, MAX_IMPORT_ROWS, ImportError, readRows, previewImport, templateXlsx, templateCsv } = require('../athleteImport');
 
 const router = express.Router();
 router.use(requireRole('coach'));
@@ -90,6 +91,91 @@ router.post('/fighters', (req, res) => {
   const label = documentLabel(documentTypeFor(values.belt_rank));
   req.flash('success', `${values.first_name} ${values.last_name} added. Now upload their ${label}, which they need to enter competitions.`);
   return res.redirect(`/club/fighters/${fighterId}/document`);
+});
+
+function clubAthletes(req) {
+  return req.app.locals.db.prepare('SELECT first_name, last_name, date_of_birth FROM fighters WHERE club_id = ?').all(req.user.club_id);
+}
+
+function importPage(res, status = 200, error = null) {
+  return res.status(status).render('club/import', { title: 'Import athletes', error, maxRows: MAX_IMPORT_ROWS });
+}
+
+router.get('/fighters/import', (req, res) => importPage(res));
+
+router.get('/fighters/import/template.xlsx', wrap(async (req, res) => {
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', 'attachment; filename="athlete-import-template.xlsx"');
+  res.send(await templateXlsx());
+}));
+
+router.get('/fighters/import/template.csv', (req, res) => {
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="athlete-import-template.csv"');
+  res.send(templateCsv());
+});
+
+// Step 1: read the sheet and show what would be imported. Nothing is saved yet.
+router.post('/fighters/import', wrap(async (req, res) => {
+  if (req.uploadError) return importPage(res, 400, req.uploadError);
+  if (!req.file) return importPage(res, 400, 'Choose an .xlsx or .csv file to upload.');
+  let preview;
+  try {
+    preview = previewImport(await readRows(req.file.buffer), { existing: clubAthletes(req), todayIso: today() });
+  } catch (error) {
+    if (error instanceof ImportError) return importPage(res, 400, error.message);
+    throw error;
+  }
+  return res.render('club/import_preview', {
+    title: 'Check the import',
+    entries: preview.entries,
+    readyCount: preview.ready.length,
+    readyJson: JSON.stringify(preview.ready),
+  });
+}));
+
+// Step 2: save the rows the coach confirmed. They come back from the browser,
+// so they go through the same checks again, against the club's current list.
+router.post('/fighters/import/confirm', (req, res) => {
+  const { db } = req.app.locals;
+  let submitted;
+  try {
+    submitted = JSON.parse(req.body.rows || '[]');
+  } catch {
+    submitted = null;
+  }
+  if (!Array.isArray(submitted) || submitted.length === 0 || submitted.length > MAX_IMPORT_ROWS) {
+    req.flash('error', 'Nothing was imported. Upload the sheet again.');
+    return res.redirect('/club/fighters/import');
+  }
+  const rows = [
+    COLUMNS.map((c) => c.title),
+    ...submitted.map((a) => [a && a.first_name, a && a.last_name, a && a.gender, a && a.date_of_birth, a && String(a.belt_rank)].map((v) => (typeof v === 'string' ? v : ''))),
+  ];
+  let ready;
+  try {
+    ({ ready } = previewImport(rows, { existing: clubAthletes(req), todayIso: today() }));
+  } catch {
+    ready = [];
+  }
+  const insert = db.prepare(
+    `INSERT INTO fighters (club_id, first_name, last_name, gender, date_of_birth, belt_rank)
+     VALUES (@club_id, @first_name, @last_name, @gender, @date_of_birth, @belt_rank)`
+  );
+  db.transaction(() => ready.forEach((athlete) => insert.run({ ...athlete, club_id: req.user.club_id })))();
+
+  const skipped = submitted.length - ready.length;
+  if (ready.length === 0) {
+    req.flash('error', 'No athletes were imported. They are already in your club, or the rows were not valid.');
+    return res.redirect('/club');
+  }
+  const plural = (n) => `${n} athlete${n === 1 ? '' : 's'}`;
+  req.logActivity('athlete.imported', `Imported ${plural(ready.length)} into ${req.user.club_name} from a spreadsheet`);
+  req.flash(
+    'success',
+    `${plural(ready.length)} imported${skipped > 0 ? `, ${skipped} skipped because they were already added or not valid` : ''}. Upload each athlete's grading card or black belt certificate before entering them in a competition.`
+  );
+  return res.redirect('/club');
 });
 
 // Approval was based on the stored document, so it can't be swapped afterwards.

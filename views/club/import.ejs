@@ -1,0 +1,42 @@
+<%- include('../partials/top') %>
+<p class="breadcrumb"><a href="/club">Club dashboard</a></p>
+<div class="card narrow">
+  <h1>Import athletes</h1>
+  <p class="sub">Add many athletes at once from an Excel or Google Sheets file.</p>
+  <% if (error) { %><div class="notice error" role="alert"><%= error %></div><% } %>
+
+  <h2>1. Fill in the template</h2>
+  <p>Download a template, add one athlete per row, and keep the header row.</p>
+  <div class="actions">
+    <a class="btn secondary" href="/club/fighters/import/template.xlsx">Excel template (.xlsx)</a>
+    <a class="btn secondary" href="/club/fighters/import/template.csv">CSV template</a>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Column</th><th>What to enter</th></tr></thead>
+      <tbody>
+        <tr><td><strong>First name</strong>, <strong>Last name</strong></td><td>As they should appear on the bout list</td></tr>
+        <tr><td><strong>Gender</strong></td><td>M or F</td></tr>
+        <tr><td><strong>Date of birth</strong></td><td>YYYY-MM-DD, for example 2012-03-24. DD/MM/YYYY and Excel date cells also work.</td></tr>
+        <tr><td><strong>Belt</strong></td><td><%= BELTS.map((b) => b.name).join(', ') %></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="hint">Columns can be in any order. Weight isn't in the sheet: you pick a weight class for each competition when you register the athlete. Up to <%= maxRows %> athletes per file.</p>
+  <p class="hint">Using Google Sheets? Choose File &gt; Download &gt; Microsoft Excel (.xlsx) or Comma-separated values (.csv), then upload that file here.</p>
+
+  <h2>2. Upload it</h2>
+  <form method="post" action="/club/fighters/import" enctype="multipart/form-data">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <div class="field">
+      <label for="sheet">Spreadsheet</label>
+      <input id="sheet" name="sheet" type="file" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" required>
+      <p class="hint">.xlsx or .csv, up to 1 MB. You'll see a preview before anything is saved.</p>
+    </div>
+    <div class="actions">
+      <button class="btn" type="submit">Preview import</button>
+      <a class="btn secondary" href="/club">Cancel</a>
+    </div>
+  </form>
+</div>
+<%- include('../partials/bottom') %>

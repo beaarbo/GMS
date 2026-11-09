@@ -1,0 +1,63 @@
+<%- include('../partials/top') %>
+<p class="breadcrumb"><a href="/club/fighters/import">Import athletes</a></p>
+<div class="page-head">
+  <div>
+    <h1>Check the import</h1>
+    <p class="sub">Nothing has been saved yet.</p>
+  </div>
+</div>
+
+<% const problems = entries.filter((e) => e.errors.length > 0).length; %>
+<% const duplicates = entries.filter((e) => e.duplicate).length; %>
+<section class="card">
+  <% if (readyCount > 0) { %>
+    <div class="notice info">
+      <%= readyCount %> athlete<%= readyCount === 1 ? '' : 's' %> will be added to <%= user.club_name %>.
+      <% if (problems > 0) { %><%= problems %> row<%= problems === 1 ? ' has' : 's have' %> problems and will be skipped.<% } %>
+      <% if (duplicates > 0) { %><%= duplicates %> already in your club and will be skipped.<% } %>
+    </div>
+    <form method="post" action="/club/fighters/import/confirm">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <input type="hidden" name="rows" value="<%= readyJson %>">
+      <div class="actions">
+        <button class="btn" type="submit">Import <%= readyCount %> athlete<%= readyCount === 1 ? '' : 's' %></button>
+        <a class="btn secondary" href="/club/fighters/import">Upload a different file</a>
+      </div>
+    </form>
+  <% } else { %>
+    <div class="notice error" role="alert">No rows can be imported. Fix the problems below in your sheet and upload it again.</div>
+    <div class="actions"><a class="btn" href="/club/fighters/import">Upload again</a></div>
+  <% } %>
+</section>
+
+<section class="card">
+  <h2>Rows in the sheet</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th class="num">Row</th><th>Name</th><th>Gender</th><th>Date of birth</th><th>Belt</th><th>Status</th></tr></thead>
+      <tbody>
+        <% entries.forEach((e) => { const a = e.athlete; %>
+          <tr>
+            <td class="num"><%= e.row %></td>
+            <td><strong><%= a.last_name || '?' %>, <%= a.first_name || '?' %></strong></td>
+            <td><%= a.gender ? GENDERS[a.gender] : e.shown.gender %></td>
+            <td class="nowrap"><%= a.date_of_birth ? formatDate(a.date_of_birth) : e.shown.date_of_birth %></td>
+            <td><%= a.belt_rank ? beltName(a.belt_rank) : e.shown.belt %></td>
+            <td>
+              <% if (e.errors.length > 0) { %>
+                <span class="badge rejected">Skipped</span>
+                <% e.errors.forEach((message) => { %><div class="hint"><%= message %></div><% }) %>
+              <% } else if (e.duplicate) { %>
+                <span class="badge closed">Already added</span>
+              <% } else { %>
+                <span class="badge approved">Ready</span>
+              <% } %>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+  <p class="hint">Check that dates of birth are right before importing. Text dates with slashes are read day first (DD/MM/YYYY).</p>
+</section>
+<%- include('../partials/bottom') %>
