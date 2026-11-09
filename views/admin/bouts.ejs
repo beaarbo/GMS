@@ -61,8 +61,13 @@
           <label for="minutes">Minutes per bout</label>
           <input id="minutes" name="minutes" type="number" min="1" max="120" value="<%= competition.bout_minutes %>" required>
         </div>
+        <div class="field">
+          <label for="rest">Minimum rest between bouts (minutes)</label>
+          <input id="rest" name="rest" type="number" min="0" max="240" value="<%= competition.bout_rest_minutes %>" required>
+        </div>
       </div>
-      <p class="hint">Bouts are spread across the competition's <%= dayCount %> event day<%= dayCount === 1 ? '' : 's' %>. To change the days, <a href="/admin/competitions/<%= competition.id %>/edit">edit the competition</a>.</p>
+      <p class="hint">Minutes per bout covers the whole slot on the court. Rest is counted from the end of a fighter's bout to the start of their next one. While a winner rests, the court runs bouts from other divisions, so bout numbers can move between divisions. Use 0 for no minimum.</p>
+      <p class="hint">Bouts are spread across the competition's <%= dayCount %> event day<%= dayCount === 1 ? '' : 's' %><% if (dayCount > 1 && divisions.length > 0) { %>, except divisions pinned to a day below<% } %>. To change the days, <a href="/admin/competitions/<%= competition.id %>/edit">edit the competition</a>.</p>
       <div class="actions">
         <% if (divisions.length === 0) { %>
           <button class="btn" type="submit">Generate bout list</button>
@@ -72,6 +77,41 @@
           <button class="btn secondary" type="submit" data-confirm="Redraw every division? The current draw will be replaced and hidden from coaches until you publish again.">Redraw</button>
           <% } %>
         <% } %>
+      </div>
+    </form>
+  </section>
+<% } %>
+
+<% if (divisions.length > 0 && dayCount > 1) { %>
+  <section class="card">
+    <h2>Division days</h2>
+    <p class="sub">Choose the day each division fights. Divisions left on Auto fill the days in order around the ones you choose. Your choices are kept if you redraw.</p>
+    <form method="post" action="/admin/competitions/<%= competition.id %>/bouts/days">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Division</th><th class="num">Matches</th><th>Now on</th><th>Fights on</th></tr></thead>
+          <tbody>
+            <% divisions.forEach((division) => { const chosen = pinnedDays.get(division.key); %>
+              <tr>
+                <td><label for="day_<%= division.key %>"><%= division.title %></label></td>
+                <td class="num"><%= division.matches %></td>
+                <td class="nowrap">Day <%= division.day %><%= division.court ? `, Court ${division.court}` : '' %></td>
+                <td>
+                  <select id="day_<%= division.key %>" name="day_<%= division.key %>">
+                    <option value="" <%= chosen ? '' : 'selected' %>>Auto</option>
+                    <% dayOptions.forEach((option) => { %>
+                      <option value="<%= option.value %>" <%= chosen === option.value ? 'selected' : '' %>><%= option.label %></option>
+                    <% }) %>
+                  </select>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+      <div class="actions">
+        <button class="btn" type="submit">Save days</button>
       </div>
     </form>
   </section>

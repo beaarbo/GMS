@@ -5,6 +5,7 @@ const {
   DEFAULT_BELT_GROUPS,
   isValidDate,
   formatEventDates,
+  formatDay,
   formatWeightLimits,
   validateSetup,
 } = require('../divisions');
@@ -20,6 +21,8 @@ const {
   deleteBoutList,
   generateBoutList,
   applySchedule,
+  loadDivisionDays,
+  saveDivisionDays,
   loadBoutList,
   hasResults,
   recordResult,
@@ -459,8 +462,12 @@ function readSchedule(body, competition) {
     bout_courts: Number(body.courts ?? competition.bout_courts),
     bout_start: clean(body.start ?? competition.bout_start, 5),
     bout_minutes: Number(body.minutes ?? competition.bout_minutes),
+    bout_rest_minutes: Number(body.rest ?? competition.bout_rest_minutes),
   };
   const errors = [];
+  if (!Number.isInteger(values.bout_rest_minutes) || values.bout_rest_minutes < 0 || values.bout_rest_minutes > 240) {
+    errors.push('Enter between 0 and 240 minutes of rest between bouts.');
+  }
   if (!Number.isInteger(values.bout_courts) || values.bout_courts < 1 || values.bout_courts > 20) {
     errors.push('Enter between 1 and 20 courts.');
   }
@@ -479,8 +486,8 @@ function saveSchedule(req, res) {
   }
   req.app.locals.db
     .prepare(
-      `UPDATE competitions SET bout_courts = @bout_courts,
-         bout_start = @bout_start, bout_minutes = @bout_minutes WHERE id = @id`
+      `UPDATE competitions SET bout_courts = @bout_courts, bout_start = @bout_start,
+         bout_minutes = @bout_minutes, bout_rest_minutes = @bout_rest_minutes WHERE id = @id`
     )
     .run({ ...values, id: req.competition.id });
   return true;
@@ -492,11 +499,14 @@ router.get('/competitions/:id(\\d+)/bouts', (req, res) => {
     ...division,
     layout: layoutBracket(division.bouts, { slotHeight: 30, top: 4 }),
   }));
+  const eventDates = getEventDates(db, req.competition.id);
   res.render('admin/bouts', {
     title: 'Bout list',
     competition: req.competition,
     divisions,
-    dayCount: getEventDates(db, req.competition.id).length,
+    dayCount: eventDates.length,
+    dayOptions: eventDates.map((date, i) => ({ value: i + 1, label: `Day ${i + 1} (${formatDay(date)})` })),
+    pinnedDays: loadDivisionDays(db, req.competition.id),
     resultsRecorded: hasResults(db, req.competition.id),
     totalBouts: divisions.reduce((sum, d) => sum + d.matches, 0),
     counts: db
@@ -638,12 +648,39 @@ router.post('/competitions/:id(\\d+)/results/:boutId(\\d+)', (req, res) => {
 router.post('/competitions/:id(\\d+)/bouts/schedule', (req, res) => {
   if (saveSchedule(req, res)) {
     applySchedule(req.app.locals.db, req.competition.id);
-    const { bout_courts: courts, bout_start: start, bout_minutes: minutes } = req.app.locals.db
-      .prepare('SELECT bout_courts, bout_start, bout_minutes FROM competitions WHERE id = ?')
+    const { bout_courts: courts, bout_start: start, bout_minutes: minutes, bout_rest_minutes: rest } = req.app.locals.db
+      .prepare('SELECT bout_courts, bout_start, bout_minutes, bout_rest_minutes FROM competitions WHERE id = ?')
       .get(req.competition.id);
-    req.logActivity('bouts.scheduled', `Updated the schedule for ${req.competition.name}: ${courts} courts, starting ${start}, ${minutes} minutes per bout`, req.competition.id);
+    req.logActivity(
+      'bouts.scheduled',
+      `Updated the schedule for ${req.competition.name}: ${courts} courts, starting ${start}, ${minutes} minutes per bout, ${rest} minutes rest`,
+      req.competition.id
+    );
     req.flash('success', 'Schedule updated. The draw has not changed.');
   }
+  return res.redirect(boutListPath(req.competition));
+});
+
+// Pins divisions to event days, then reschedules. The draw stays the same.
+router.post('/competitions/:id(\\d+)/bouts/days', (req, res) => {
+  const { db } = req.app.locals;
+  if (!hasBoutList(db, req.competition.id)) {
+    req.flash('error', 'Generate the bout list first.');
+    return res.redirect(boutListPath(req.competition));
+  }
+  const choices = Object.fromEntries(
+    Object.entries(req.body)
+      .filter(([name]) => /^day_[MF]-\d+-\d+-\d+$/.test(name))
+      .map(([name, value]) => [name.slice(4), clean(value, 3)])
+  );
+  const pinned = saveDivisionDays(db, req.competition.id, choices);
+  applySchedule(db, req.competition.id);
+  req.logActivity(
+    'bouts.days_set',
+    `Set division days for ${req.competition.name}: ${pinned} division${pinned === 1 ? '' : 's'} on a chosen day, the rest automatic`,
+    req.competition.id
+  );
+  req.flash('success', 'Division days saved and the schedule updated. The draw has not changed.');
   return res.redirect(boutListPath(req.competition));
 });
 

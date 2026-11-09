@@ -15,6 +15,7 @@ const {
   deadlinePassed,
   loadDivisionSetup,
   createPasswordReset,
+  saveEventDates,
 } = require('../src/services');
 const { divisionOptions, findWeightClass } = require('../src/divisions');
 const { sendDeadlineReminders } = require('../src/notifications');
@@ -480,6 +481,39 @@ test('schedule settings set courts and times without changing the draw', async (
   assert.equal(db.prepare('SELECT bout_start FROM competitions WHERE id = ?').get(compId).bout_start, '08:00');
 });
 
+test('rest time delays a fighter\'s next bout and divisions can be pinned to a day', async () => {
+  const { db, app } = await setup();
+  const { compId, admin } = await closedCompetitionWithFighters(db, app, [
+    ['T', 'Alpha'], ['T', 'Bravo'], ['D', 'Charlie'], ['D', 'Delta'],
+  ]);
+  saveEventDates(db, compId, [`${EVENT_YEAR}-12-01`, `${EVENT_YEAR}-12-02`]);
+  const path = `/admin/competitions/${compId}/bouts`;
+  await post(admin, `${path}/generate`, { courts: '1', start: '10:00', minutes: '15', rest: '30' }, path);
+
+  const times = () => db.prepare('SELECT start_time FROM bouts WHERE is_bye = 0 ORDER BY bout_number').all().map((b) => b.start_time);
+  // The final waits for 30 minutes after the second semifinal ends at 10:30.
+  assert.deepEqual(times(), ['10:00', '10:15', '11:00']);
+
+  await post(admin, `${path}/schedule`, { courts: '1', start: '10:00', minutes: '15', rest: '500' }, path);
+  assert.equal(db.prepare('SELECT bout_rest_minutes FROM competitions WHERE id = ?').get(compId).bout_rest_minutes, 30, 'out-of-range rest is refused');
+
+  const page = await admin.get(path);
+  const key = page.text.match(/name="day_([MF]-\d+-\d+-\d+)"/)[1];
+  const pairs = db.prepare('SELECT blue_registration_id, red_registration_id FROM bouts ORDER BY id').all();
+  await post(admin, `${path}/days`, { [`day_${key}`]: '2', 'day_M-999-1-1': '1' }, path);
+  assert.deepEqual([...new Set(db.prepare('SELECT day FROM bouts').all().map((b) => b.day))], [2]);
+  assert.deepEqual(db.prepare('SELECT blue_registration_id, red_registration_id FROM bouts ORDER BY id').all(), pairs, 'the draw is unchanged');
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM division_days').get().n, 1, 'unknown divisions are ignored');
+
+  // A redraw keeps the chosen day.
+  await post(admin, `${path}/generate`, { courts: '1', start: '10:00', minutes: '15', rest: '30' }, path);
+  assert.deepEqual([...new Set(db.prepare('SELECT day FROM bouts').all().map((b) => b.day))], [2]);
+
+  await post(admin, `${path}/days`, { [`day_${key}`]: '' }, path);
+  assert.deepEqual([...new Set(db.prepare('SELECT day FROM bouts').all().map((b) => b.day))], [1]);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM division_days').get().n, 0);
+});
+
 test('schedule migration clears old draws and keeps competitions', () => {
   const db = openDb(':memory:');
   const compId = createCompetition(db, {
@@ -498,7 +532,7 @@ test('schedule migration clears old draws and keeps competitions', () => {
 
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM bouts').get().n, 0);
   assert.equal(db.prepare('SELECT bout_courts FROM competitions WHERE id = ?').get(compId).bout_courts, 2);
-  assert.equal(db.pragma('user_version', { simple: true }), 5);
+  assert.equal(db.pragma('user_version', { simple: true }), 6);
 });
 
 test('admin creates a club, a coach applies, and only approval unlocks athlete registration', async () => {
@@ -660,7 +694,7 @@ test('migrating old club accounts keeps logins and fighters and approves each co
   const clubColumns = db.pragma('table_info(clubs)').map((c) => c.name);
   assert.ok(!clubColumns.includes('coach_name'));
   assert.equal(db.pragma('foreign_key_check').length, 0);
-  assert.equal(db.pragma('user_version', { simple: true }), 5);
+  assert.equal(db.pragma('user_version', { simple: true }), 6);
 });
 
 test('a fighter alone in a division has no bout number', async () => {
@@ -833,7 +867,7 @@ test('migration turns a day count into consecutive dates', () => {
   const { id } = db.prepare('SELECT id FROM competitions').get();
   assert.deepEqual(getEventDates(db, id), ['2030-01-30', '2030-01-31', '2030-02-01']);
   assert.ok(!db.pragma('table_info(competitions)').some((c) => c.name === 'bout_days'));
-  assert.equal(db.pragma('user_version', { simple: true }), 5);
+  assert.equal(db.pragma('user_version', { simple: true }), 6);
 });
 
 const tokenIn = (message) => message.text.match(/reset-password\/([0-9a-f]{64})/)[1];
@@ -1078,7 +1112,7 @@ test('the results migration removes declared weights and keeps registrations', (
   db.pragma('user_version = 4');
   migrate(db);
   assert.ok(!db.pragma('table_info(registrations)').some((c) => c.name === 'declared_weight_kg'));
-  assert.equal(db.pragma('user_version', { simple: true }), 5);
+  assert.equal(db.pragma('user_version', { simple: true }), 6);
 });
 
 test('athletes need the right document before they can enter', async () => {

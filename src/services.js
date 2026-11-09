@@ -10,7 +10,7 @@ const {
   parseWeightLimits,
   formatDay,
 } = require('./divisions');
-const { buildBracket, assignCourts, formatTime } = require('./bracket');
+const { buildBracket, assignCourts, scheduleCourt, formatTime } = require('./bracket');
 const { logActivity } = require('./activity');
 const { documentLabel, documentTypeFor } = require('./documents');
 
@@ -239,13 +239,64 @@ function secureRandom() {
   return crypto.randomInt(0, 2 ** 32) / 2 ** 32;
 }
 
-// Sets each division's day and court, then numbers and times its bouts. Numbering
-// restarts for each court on each day. Doesn't change who fights whom.
+function divisionKey(row) {
+  return [row.gender, row.age_group_id, row.belt_group_id, row.weight_class_id].join('-');
+}
+
+// Pinned days by division key. Days beyond the competition's dates are ignored.
+function loadDivisionDays(db, competitionId) {
+  const days = getEventDates(db, competitionId).length;
+  return new Map(
+    db
+      .prepare('SELECT * FROM division_days WHERE competition_id = ?')
+      .all(competitionId)
+      .filter((row) => row.day >= 1 && row.day <= days)
+      .map((row) => [divisionKey(row), row.day])
+  );
+}
+
+// Pins divisions to days. `choices` maps division key to a day number, or to
+// null for automatic. Keys that aren't divisions in the bout list are ignored.
+function saveDivisionDays(db, competitionId, choices) {
+  const days = getEventDates(db, competitionId).length;
+  const known = new Map(
+    db
+      .prepare('SELECT DISTINCT gender, age_group_id, belt_group_id, weight_class_id FROM bouts WHERE competition_id = ?')
+      .all(competitionId)
+      .map((row) => [divisionKey(row), row])
+  );
+  const remove = db.prepare(
+    'DELETE FROM division_days WHERE competition_id = ? AND gender = ? AND age_group_id = ? AND belt_group_id = ? AND weight_class_id = ?'
+  );
+  const insert = db.prepare(
+    `INSERT INTO division_days (competition_id, gender, age_group_id, belt_group_id, weight_class_id, day)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  );
+  let pinned = 0;
+  db.transaction(() => {
+    Object.entries(choices).forEach(([key, value]) => {
+      const division = known.get(key);
+      if (!division) return;
+      const ids = [competitionId, division.gender, division.age_group_id, division.belt_group_id, division.weight_class_id];
+      remove.run(...ids);
+      const day = Number(value);
+      if (value !== null && value !== '' && Number.isInteger(day) && day >= 1 && day <= days) {
+        insert.run(...ids, day);
+        pinned += 1;
+      }
+    });
+  })();
+  return pinned;
+}
+
+// Sets each division's day and court, then numbers and times its bouts, keeping
+// each fighter's rest between bouts. Numbering restarts for each court on each
+// day. Doesn't change who fights whom.
 function applySchedule(db, competitionId) {
   const competition = db.prepare('SELECT * FROM competitions WHERE id = ?').get(competitionId);
   const rows = db
     .prepare(
-      `SELECT bt.id, bt.gender, bt.age_group_id, bt.belt_group_id, bt.weight_class_id, bt.is_bye
+      `SELECT bt.id, bt.gender, bt.age_group_id, bt.belt_group_id, bt.weight_class_id, bt.is_bye, bt.round, bt.position
        FROM bouts bt
        JOIN age_groups a ON a.id = bt.age_group_id
        JOIN belt_groups bg ON bg.id = bt.belt_group_id
@@ -257,32 +308,43 @@ function applySchedule(db, competitionId) {
 
   const divisions = new Map();
   rows.forEach((row) => {
-    const key = [row.gender, row.age_group_id, row.belt_group_id, row.weight_class_id].join('-');
-    divisions.set(key, [...(divisions.get(key) || []), row]);
+    const key = divisionKey(row);
+    divisions.set(key, [...(divisions.get(key) || []), { ...row, isBye: row.is_bye === 1 }]);
   });
 
+  const keys = [...divisions.keys()];
   const list = [...divisions.values()];
+  const pinned = loadDivisionDays(db, competitionId);
   const places = assignCourts(
-    list.map((bouts) => bouts.filter((b) => !b.is_bye).length),
-    { courts: competition.bout_courts, days: getEventDates(db, competitionId).length }
+    list.map((bouts) => bouts.filter((b) => !b.isBye).length),
+    {
+      courts: competition.bout_courts,
+      days: getEventDates(db, competitionId).length,
+      fixedDays: keys.map((key) => pinned.get(key) ?? null),
+    }
   );
   const [startHours, startMinutes] = competition.bout_start.split(':').map(Number);
-  const start = startHours * 60 + startMinutes;
-  const used = new Map();
-  const update = db.prepare('UPDATE bouts SET day = ?, court = ?, bout_number = ?, start_time = ? WHERE id = ?');
+  const options = { start: startHours * 60 + startMinutes, minutes: competition.bout_minutes, rest: competition.bout_rest_minutes };
 
+  const courts = new Map();
+  list.forEach((bouts, i) => {
+    const { day, court } = places[i];
+    if (court === null) return;
+    const key = `${day}:${court}`;
+    courts.set(key, [...(courts.get(key) || []), bouts]);
+  });
+  const times = new Map();
+  courts.forEach((courtDivisions) => {
+    scheduleCourt(courtDivisions, options).forEach((slot, id) => times.set(id, slot));
+  });
+
+  const update = db.prepare('UPDATE bouts SET day = ?, court = ?, bout_number = ?, start_time = ? WHERE id = ?');
   db.transaction(() => {
     list.forEach((bouts, i) => {
       const { day, court } = places[i];
       bouts.forEach((bout) => {
-        if (bout.is_bye) {
-          update.run(day, court, null, null, bout.id);
-          return;
-        }
-        const key = `${day}:${court}`;
-        const number = (used.get(key) || 0) + 1;
-        used.set(key, number);
-        update.run(day, court, number, formatTime(start + (number - 1) * competition.bout_minutes), bout.id);
+        const slot = times.get(bout.id);
+        update.run(day, court, slot ? slot.number : null, slot ? formatTime(slot.start) : null, bout.id);
       });
     });
   })();
@@ -375,9 +437,10 @@ function loadBoutList(db, competitionId) {
 
   const divisions = new Map();
   rows.forEach((row) => {
-    const key = [row.gender, row.age_group_id, row.belt_group_id, row.weight_class_id].join('-');
+    const key = divisionKey(row);
     if (!divisions.has(key)) {
       divisions.set(key, {
+        key,
         title: `KYORUGI ${row.belt_group.toUpperCase()}, ${ageLabel(row, competition)}, ${GENDERS[row.gender]}, ${row.weight_class}`,
         day: row.day,
         dayLabel: eventDates[row.day - 1] ? `${row.day} (${formatDay(eventDates[row.day - 1])})` : String(row.day),
@@ -623,6 +686,8 @@ module.exports = {
   deleteBoutList,
   generateBoutList,
   applySchedule,
+  loadDivisionDays,
+  saveDivisionDays,
   loadBoutList,
   hasResults,
   recordResult,

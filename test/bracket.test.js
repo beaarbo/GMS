@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { buildBracket, seedTemplate, assignCourts, formatTime, layoutBracket, computeMedals, clubAthleteSummary } = require('../src/bracket');
+const { buildBracket, seedTemplate, assignCourts, scheduleCourt, formatTime, layoutBracket, computeMedals, clubAthleteSummary } = require('../src/bracket');
 
 function seededRng(seed) {
   let state = seed;
@@ -116,6 +116,35 @@ test('courts balance within a day and days fill in order', () => {
   const twoDays = assignCourts([5, 5, 5, 5], { courts: 1, days: 2 }).map((p) => p.day);
   assert.deepEqual(twoDays, [1, 1, 2, 2]);
   assert.deepEqual(assignCourts([0], { courts: 2, days: 1 }), [{ day: 1, court: null }]);
+});
+
+test('pinned divisions keep their day and the rest fill around them', () => {
+  const days = (fixedDays) => assignCourts([5, 5, 5, 5], { courts: 1, days: 2, fixedDays }).map((p) => p.day);
+  assert.deepEqual(days([2, null, null, null]), [2, 1, 1, 2]);
+  assert.deepEqual(days([null, 1, null, 1]), [2, 1, 2, 1], 'day 1 is already full with the pinned divisions');
+  assert.deepEqual(days([3, 0, 'x', null]), [1, 1, 2, 2], 'days outside the competition count as automatic');
+});
+
+test('a fighter rests between bouts while the court runs other divisions', () => {
+  const four = [
+    { id: 1, round: 1, position: 0, isBye: false },
+    { id: 2, round: 1, position: 1, isBye: false },
+    { id: 3, round: 2, position: 0, isBye: false },
+  ];
+  const two = [{ id: 4, round: 1, position: 0, isBye: false }];
+  const plan = (rest) => [...scheduleCourt([four, two], { start: 540, minutes: 10, rest })].map(([id, s]) => [id, s.number, s.start]);
+
+  assert.deepEqual(plan(0), [[1, 1, 540], [2, 2, 550], [3, 3, 560], [4, 4, 570]]);
+  // The final waits 15 minutes after bout 2, so the other division's bout goes first.
+  assert.deepEqual(plan(15), [[1, 1, 540], [2, 2, 550], [4, 3, 560], [3, 4, 575]]);
+
+  // A fighter coming through a bye has no bout to rest from.
+  const three = [
+    { id: 10, round: 1, position: 0, isBye: true },
+    { id: 11, round: 1, position: 1, isBye: false },
+    { id: 12, round: 2, position: 0, isBye: false },
+  ];
+  assert.deepEqual([...scheduleCourt([three], { start: 0, minutes: 10, rest: 15 })], [[11, { number: 1, start: 0 }], [12, { number: 2, start: 25 }]]);
 });
 
 test('formatTime pads hours and minutes', () => {

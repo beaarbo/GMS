@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS competitions (
   bout_courts INTEGER NOT NULL DEFAULT 2,
   bout_start TEXT NOT NULL DEFAULT '09:00',
   bout_minutes INTEGER NOT NULL DEFAULT 10,
+  bout_rest_minutes INTEGER NOT NULL DEFAULT 0,
   bouts_published_at TEXT,
   reminder_sent_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -167,6 +168,19 @@ CREATE TABLE IF NOT EXISTS bouts (
   winner_registration_id INTEGER REFERENCES registrations(id)
 );
 CREATE INDEX IF NOT EXISTS idx_bouts_competition ON bouts(competition_id);
+
+-- Divisions the admin pinned to an event day. The rest are placed automatically.
+-- Kept apart from bouts so a redraw keeps the choice. Day is a position in the
+-- sorted competition_dates list, like bouts.day.
+CREATE TABLE IF NOT EXISTS division_days (
+  competition_id INTEGER NOT NULL REFERENCES competitions(id) ON DELETE CASCADE,
+  gender TEXT NOT NULL,
+  age_group_id INTEGER NOT NULL REFERENCES age_groups(id) ON DELETE CASCADE,
+  belt_group_id INTEGER NOT NULL REFERENCES belt_groups(id) ON DELETE CASCADE,
+  weight_class_id INTEGER NOT NULL REFERENCES weight_classes(id) ON DELETE CASCADE,
+  day INTEGER NOT NULL,
+  PRIMARY KEY (competition_id, gender, age_group_id, belt_group_id, weight_class_id)
+);
 
 CREATE TABLE IF NOT EXISTS sessions (
   sid TEXT PRIMARY KEY,
@@ -291,12 +305,22 @@ function migrateResults(db) {
   })();
 }
 
+// Version 6: a minimum rest between a fighter's bouts. Existing competitions get
+// none, so their schedules stay as they are until the admin sets one.
+function migrateRest(db) {
+  db.transaction(() => {
+    addColumnIfMissing(db, 'competitions', 'bout_rest_minutes', 'INTEGER NOT NULL DEFAULT 0');
+    db.pragma('user_version = 6');
+  })();
+}
+
 function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 1) migrateBelts(db);
   if (db.pragma('user_version', { simple: true }) < 2) migrateSchedule(db);
   if (db.pragma('user_version', { simple: true }) < 3) migrateCoaches(db);
   if (db.pragma('user_version', { simple: true }) < 4) migrateEventDates(db);
   if (db.pragma('user_version', { simple: true }) < 5) migrateResults(db);
+  if (db.pragma('user_version', { simple: true }) < 6) migrateRest(db);
 }
 
 // Safe on old databases: only tables that don't exist yet are created.

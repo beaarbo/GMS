@@ -95,26 +95,83 @@ function buildBracket(entries, rng = Math.random) {
   return rounds;
 }
 
-// Gives each division a day and court. Days fill in order, so divisions stay in
-// sequence; within a day each goes to the least busy court. Divisions with no
-// fights need no court.
-function assignCourts(fightCounts, { courts, days }) {
+// Gives each division a day and court. `fixedDays[i]` pins division i to a day;
+// the others fill days in order, around the pinned ones, so they stay in
+// sequence. Within a day each division goes to the least busy court. Divisions
+// with no fights need no court.
+function assignCourts(fightCounts, { courts, days, fixedDays = [] }) {
+  const pinned = fightCounts.map((_, i) => {
+    const day = Number(fixedDays[i]);
+    return Number.isInteger(day) && day >= 1 && day <= days ? day : null;
+  });
   const total = fightCounts.reduce((sum, n) => sum + n, 0);
+  const target = total / days;
+  const dayLoad = Array(days + 1).fill(0);
+  fightCounts.forEach((fights, i) => {
+    if (pinned[i]) dayLoad[pinned[i]] += fights;
+  });
+
+  let current = 1;
+  const dayOf = fightCounts.map((fights, i) => {
+    if (pinned[i]) return pinned[i];
+    // Move on once this day is full enough that adding most of the division would overfill it.
+    while (current < days && dayLoad[current] > 0 && dayLoad[current] + fights / 2 > target) current += 1;
+    dayLoad[current] += fights;
+    return current;
+  });
+
   const load = new Map();
-  let before = 0;
-
-  return fightCounts.map((fights) => {
-    const day = total === 0 ? 1 : Math.min(days, Math.floor((before * days) / total) + 1);
+  return fightCounts.map((fights, i) => {
+    const day = dayOf[i];
     if (fights === 0) return { day, court: null };
-
     let court = 1;
     for (let c = 2; c <= courts; c += 1) {
       if ((load.get(`${day}:${c}`) || 0) < (load.get(`${day}:${court}`) || 0)) court = c;
     }
     load.set(`${day}:${court}`, (load.get(`${day}:${court}`) || 0) + fights);
-    before += fights;
     return { day, court };
   });
+}
+
+// Orders and times the bouts of one court on one day. `divisions` are in running
+// order, each a list of { id, round, position, isBye }. A bout can't start until
+// both fighters have rested `rest` minutes since their previous bout ended. Until
+// then the court runs the next bout that is ready, usually from a later division,
+// so it doesn't sit idle. Returns a Map of bout id to { number, start } in minutes.
+function scheduleCourt(divisions, { start, minutes, rest = 0 }) {
+  const queue = [];
+  divisions.forEach((bouts) => {
+    const byPlace = new Map(bouts.map((b) => [`${b.round}:${b.position}`, b]));
+    bouts
+      .filter((b) => !b.isBye)
+      .sort((a, b) => a.round - b.round || a.position - b.position)
+      .forEach((bout) => {
+        const feeders = bout.round === 1
+          ? []
+          : [byPlace.get(`${bout.round - 1}:${bout.position * 2}`), byPlace.get(`${bout.round - 1}:${bout.position * 2 + 1}`)]
+              .filter((f) => f && !f.isBye)
+              .map((f) => f.id);
+        queue.push({ id: bout.id, feeders });
+      });
+  });
+
+  const ends = new Map();
+  const result = new Map();
+  let clock = start;
+  while (queue.length > 0) {
+    const readyAt = (item) => (item.feeders.every((id) => ends.has(id)) ? Math.max(start, ...item.feeders.map((id) => ends.get(id) + rest)) : Infinity);
+    let index = queue.findIndex((item) => readyAt(item) <= clock);
+    if (index === -1) {
+      const times = queue.map(readyAt);
+      clock = Math.min(...times);
+      index = times.indexOf(clock);
+    }
+    const [item] = queue.splice(index, 1);
+    result.set(item.id, { number: result.size + 1, start: clock });
+    ends.set(item.id, clock + minutes);
+    clock += minutes;
+  }
+  return result;
 }
 
 function formatTime(totalMinutes) {
@@ -277,6 +334,7 @@ module.exports = {
   buildBracket,
   seedTemplate,
   assignCourts,
+  scheduleCourt,
   formatTime,
   layoutBracket,
   splitByClub,
