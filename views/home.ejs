@@ -7,23 +7,6 @@
   <% if (!user) { %><a class="btn" href="/register">Create a coach account</a><% } %>
 </div>
 
-<% if (news.length > 0) { %>
-  <section class="card news-strip">
-    <div class="page-head">
-      <h2>Latest news</h2>
-      <a href="/news">All news</a>
-    </div>
-    <ul>
-      <% news.forEach((post) => { %>
-        <li>
-          <a href="/news/<%= post.id %>"><%= post.title %></a>
-          <%- include('partials/news_meta', { post }) %>
-        </li>
-      <% }) %>
-    </ul>
-  </section>
-<% } %>
-
 <% if (competitions.length === 0) { %>
   <div class="card"><p class="empty">No competitions have been posted yet. Check back soon.</p></div>
 <% } %>

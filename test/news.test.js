@@ -62,7 +62,7 @@ test('admins post news; visitors see only public posts', async () => {
   const list = await visitor.get('/news');
   assert.match(list.text, /Weigh-in moved/);
   assert.doesNotMatch(list.text, /Coaches meeting/);
-  assert.match((await visitor.get('/')).text, /Latest news[\s\S]*Weigh-in moved/);
+  assert.doesNotMatch((await visitor.get('/')).text, /Weigh-in moved/, 'the Competitions page has no news');
   assert.equal((await visitor.get(`/news/${membersId}`)).status, 404);
 
   const page = await visitor.get(`/news/${publicId}`);

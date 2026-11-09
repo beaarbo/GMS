@@ -9,7 +9,7 @@ router.get('/', (req, res) => {
   const competitions = db
     .prepare("SELECT * FROM competitions WHERE status IN ('open', 'closed') ORDER BY status = 'closed', event_date")
     .all();
-  res.render('home', { title: 'Competitions', competitions, news: listNews(db, { signedIn: Boolean(req.user), limit: 3 }) });
+  res.render('home', { title: 'Competitions', competitions });
 });
 
 // Members-only posts look like they don't exist to visitors.

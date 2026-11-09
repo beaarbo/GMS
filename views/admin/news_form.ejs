@@ -19,7 +19,7 @@
       <% Object.entries(newsAudiences).forEach(([value, label]) => { %>
         <label class="check"><input type="radio" name="audience" value="<%= value %>" <%= post.audience === value ? 'checked' : '' %> required> <%= label %></label>
       <% }) %>
-      <p class="hint">Posts for everyone also show on the public home page. Never include athletes' personal details in them.</p>
+      <p class="hint">Posts for everyone can be read by visitors who aren't logged in. Never include athletes' personal details in them.</p>
     </fieldset>
     <div class="field">
       <label class="check"><input type="checkbox" name="pinned" value="1" <%= post.pinned ? 'checked' : '' %>> Pin to the top of the News page</label>
