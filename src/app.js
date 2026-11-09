@@ -7,9 +7,9 @@ const session = require('express-session');
 const { BELTS, GENDERS, beltName, formatEventDates } = require('./divisions');
 const { createMailer } = require('./mailer');
 const { logActivity } = require('./activity');
-const { MAX_DOCUMENT_BYTES, documentLabel, documentTypeFor } = require('./documents');
+const { MAX_DOCUMENT_BYTES, MAX_ICON_BYTES, documentLabel, documentTypeFor, clubInitials } = require('./documents');
 const { MAX_IMPORT_BYTES } = require('./athleteImport');
-const { isRegistrationOpen, today, timeLeft, closeExpiredCompetitions, getEventDates } = require('./services');
+const { isRegistrationOpen, today, timeLeft, closeExpiredCompetitions, getEventDates, getClubIcon, clubIconVersions } = require('./services');
 const publicRoutes = require('./routes/public');
 const authRoutes = require('./routes/auth');
 const clubRoutes = require('./routes/club');
@@ -135,6 +135,7 @@ function createApp({
   const uploads = [
     { path: /^\/club\/fighters\/\d+\/document$/, field: 'document', maxBytes: MAX_DOCUMENT_BYTES, tooBig: 'That file is over the 5 MB limit.' },
     { path: /^\/club\/fighters\/import$/, field: 'sheet', maxBytes: MAX_IMPORT_BYTES, tooBig: 'That file is over the 1 MB limit.' },
+    { path: /^\/club\/icon$/, field: 'icon', maxBytes: MAX_ICON_BYTES, tooBig: 'That picture is over the 1 MB limit.' },
   ].map((upload) => ({
     ...upload,
     read: multer({ storage: multer.memoryStorage(), limits: { fileSize: upload.maxBytes, files: 1, fields: 5 } }).single(upload.field),
@@ -179,6 +180,8 @@ function createApp({
       statusLabel: (status) => `${String(status).charAt(0).toUpperCase()}${String(status).slice(1)}`,
       documentLabel,
       documentTypeFor,
+      clubInitials,
+      clubIconUrl: () => null,
       eventDatesText: (c) => formatEventDates(getEventDates(db, c.competition_id ?? c.id)),
       deadlineText: (c) => `${formatDate(c.registration_deadline)}, ${c.registration_deadline_time}`,
     };
@@ -204,7 +207,25 @@ function createApp({
     req.logActivity = (action, summary, competitionId = null) => {
       logActivity(db, { user: req.user, action, summary, competitionId });
     };
+    // Club icon links for templates, read from the database once per page when first needed.
+    let iconVersions = null;
+    res.locals.clubIconUrl = (clubId) => {
+      if (!req.user || !clubId) return null;
+      iconVersions = iconVersions || clubIconVersions(db);
+      const version = iconVersions.get(Number(clubId));
+      return version ? `/club-icons/${clubId}?v=${encodeURIComponent(version)}` : null;
+    };
     next();
+  });
+
+  // Club icons are only shown to logged-in users. The link changes whenever the
+  // icon does, so the browser may keep its copy.
+  app.get('/club-icons/:id(\\d+)', (req, res) => {
+    const icon = req.user ? getClubIcon(db, Number(req.params.id)) : null;
+    if (!icon) return res.status(404).render('error', { title: 'Page not found', message: 'That page does not exist.' });
+    res.setHeader('Content-Type', icon.content_type);
+    res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
+    return res.send(icon.data);
   });
 
   app.use((req, res, next) => {

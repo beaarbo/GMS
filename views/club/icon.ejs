@@ -1,0 +1,33 @@
+<%- include('../partials/top') %>
+<p class="breadcrumb"><a href="/club">Club dashboard</a></p>
+<div class="card narrow">
+  <h1>Club icon</h1>
+  <p class="sub">Shown beside <%= user.club_name %> across the site, for example in the medal standings. Only logged-in coaches and organisers see it.</p>
+  <% if (error) { %><div class="notice error" role="alert"><%= error %></div><% } %>
+
+  <div class="icon-current">
+    <%- include('../partials/club_icon', { clubId: user.club_id, name: user.club_name, size: 'lg' }) %>
+    <span class="hint"><%= hasIcon ? 'Current icon' : 'No icon yet, so the club\'s initials are shown.' %></span>
+  </div>
+
+  <form method="post" action="/club/icon" enctype="multipart/form-data">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <div class="field">
+      <label for="icon"><%= hasIcon ? 'Replace with a new picture' : 'Choose a picture' %></label>
+      <input id="icon" name="icon" type="file" accept="image/jpeg,image/png,image/webp" required>
+      <p class="hint">JPG, PNG or WebP, up to 1 MB. A square picture works best: it's shown in a circle.</p>
+    </div>
+    <div class="actions">
+      <button class="btn" type="submit"><%= hasIcon ? 'Replace' : 'Upload' %></button>
+      <a class="btn secondary" href="/club">Cancel</a>
+    </div>
+  </form>
+
+  <% if (hasIcon) { %>
+    <form class="icon-remove" method="post" action="/club/icon/delete" data-confirm="Remove the club icon?">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <button class="btn danger small" type="submit">Remove icon</button>
+    </form>
+  <% } %>
+</div>
+<%- include('../partials/bottom') %>

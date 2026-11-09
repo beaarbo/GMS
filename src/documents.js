@@ -40,8 +40,25 @@ function sendDocument(res, document) {
   res.send(document.data);
 }
 
+const MAX_ICON_BYTES = 1024 * 1024;
+
+// Club icons are pictures only: no PDF, and no SVG, which can carry scripts.
+function detectIconType(buffer) {
+  const type = detectFileType(buffer);
+  return type && type.contentType.startsWith('image/') ? type : null;
+}
+
+// Short letters shown when a club has no icon, for example "TT" for Tigers Taekwondo.
+function clubInitials(name) {
+  const words = String(name || '').split(/\s+/).filter((w) => /^[\p{L}\p{N}]/u.test(w));
+  return words.slice(0, 2).map((w) => [...w][0].toUpperCase()).join('') || '?';
+}
+
 module.exports = {
   MAX_DOCUMENT_BYTES,
+  MAX_ICON_BYTES,
+  detectIconType,
+  clubInitials,
   documentTypeFor,
   documentLabel,
   detectFileType,

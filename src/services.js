@@ -196,6 +196,28 @@ function saveFighterDocument(db, fighter, { data, contentType, userId = null }) 
   ).run({ fighterId: fighter.id, docType: documentTypeFor(fighter.belt_rank), contentType, data, userId });
 }
 
+function saveClubIcon(db, clubId, { data, contentType, userId = null }) {
+  db.prepare(
+    `INSERT INTO club_icons (club_id, content_type, data, uploaded_by) VALUES (?, ?, ?, ?)
+     ON CONFLICT(club_id) DO UPDATE SET content_type = excluded.content_type, data = excluded.data,
+       uploaded_by = excluded.uploaded_by, uploaded_at = datetime('now')`
+  ).run(clubId, contentType, data, userId);
+}
+
+function getClubIcon(db, clubId) {
+  return db.prepare('SELECT club_id, content_type, data, uploaded_at FROM club_icons WHERE club_id = ?').get(clubId) || null;
+}
+
+function deleteClubIcon(db, clubId) {
+  return db.prepare('DELETE FROM club_icons WHERE club_id = ?').run(clubId).changes > 0;
+}
+
+// When each club's icon last changed, by club id. Used in icon links so a new
+// icon gets a new address and browsers don't show a cached old one.
+function clubIconVersions(db) {
+  return new Map(db.prepare('SELECT club_id, uploaded_at FROM club_icons').all().map((r) => [r.club_id, r.uploaded_at]));
+}
+
 function getFighterDocument(db, fighterId) {
   return db.prepare('SELECT * FROM fighter_documents WHERE fighter_id = ?').get(fighterId) || null;
 }
@@ -680,6 +702,10 @@ module.exports = {
   enterFighter,
   saveFighterDocument,
   getFighterDocument,
+  saveClubIcon,
+  getClubIcon,
+  deleteClubIcon,
+  clubIconVersions,
   hasApprovedRegistration,
   hasActiveRegistration,
   hasBoutList,

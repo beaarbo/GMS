@@ -275,7 +275,7 @@ function computeMedals(divisions) {
   const clubs = new Map();
   const award = (fighter, medal) => {
     if (!fighter) return;
-    if (!clubs.has(fighter.clubId)) clubs.set(fighter.clubId, { club: fighter.club, gold: 0, silver: 0, bronze: 0 });
+    if (!clubs.has(fighter.clubId)) clubs.set(fighter.clubId, { clubId: fighter.clubId, club: fighter.club, gold: 0, silver: 0, bronze: 0 });
     clubs.get(fighter.clubId)[medal] += 1;
   };
   const results = divisions.map((division) => {

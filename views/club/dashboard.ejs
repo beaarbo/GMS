@@ -1,8 +1,14 @@
 <%- include('../partials/top') %>
 <div class="page-head">
-  <div>
-    <h1><%= user.club_name %></h1>
-    <p class="sub">Manage your fighters and competition entries.</p>
+  <div class="club-head">
+    <a class="club-icon-edit" href="/club/icon" title="Change club icon">
+      <%- include('../partials/club_icon', { clubId: user.club_id, name: user.club_name, size: 'lg' }) %>
+      <span class="club-icon-edit-label">Edit</span>
+    </a>
+    <div>
+      <h1><%= user.club_name %></h1>
+      <p class="sub">Manage your fighters and competition entries. <a href="/club/icon">Change club icon</a></p>
+    </div>
   </div>
   <div class="actions">
     <a class="btn secondary" href="/club/fighters/import">Import from spreadsheet</a>

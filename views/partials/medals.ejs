@@ -9,7 +9,7 @@
         <tbody>
           <% medals.table.forEach((row) => { %>
             <tr>
-              <td><strong><%= row.club %></strong></td>
+              <td><span class="club-name"><%- include('club_icon', { clubId: row.clubId, name: row.club, size: 'sm' }) %><strong><%= row.club %></strong></span></td>
               <td class="medal-count"><%= row.gold %></td>
               <td class="medal-count"><%= row.silver %></td>
               <td class="medal-count"><%= row.bronze %></td>

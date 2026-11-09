@@ -68,7 +68,11 @@
     <section class="card">
       <h2>Club</h2>
       <% if (errors.club) { %><div class="notice error" role="alert"><%= errors.club %></div><% } %>
-      <p><%= clubName ? 'You coach for' : 'You are not in a club yet.' %> <% if (clubName) { %><strong><%= clubName %></strong>.<% } %></p>
+      <% if (clubName) { %>
+        <p class="club-name"><%- include('partials/club_icon', { clubId: account.club_id, name: clubName, size: 'md' }) %><span>You coach for <strong><%= clubName %></strong>. <a href="/club/icon">Change club icon</a></span></p>
+      <% } else { %>
+        <p>You are not in a club yet.</p>
+      <% } %>
 
       <% if (pending) { %>
         <div class="notice info">Your request to <%= clubName ? 'move to' : 'join' %> <strong><%= pending.club %></strong> is waiting for an admin.</div>

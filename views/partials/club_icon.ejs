@@ -1,0 +1,3 @@
+<%# A club's icon, or its initials when it has none. Pass clubId, name and size ('sm', 'md' or 'lg'). The name sits beside it, so the picture itself has no alt text. %>
+<% const iconUrl = clubIconUrl(clubId); %>
+<% if (iconUrl) { %><img class="club-icon <%= size %>" src="<%= iconUrl %>" alt=""><% } else { %><span class="club-icon <%= size %> initials" aria-hidden="true"><%= clubInitials(name) %></span><% } %>

@@ -169,6 +169,15 @@ CREATE TABLE IF NOT EXISTS bouts (
 );
 CREATE INDEX IF NOT EXISTS idx_bouts_competition ON bouts(competition_id);
 
+-- Each club's icon, set by its coaches. Select the data column only when serving it.
+CREATE TABLE IF NOT EXISTS club_icons (
+  club_id INTEGER PRIMARY KEY REFERENCES clubs(id) ON DELETE CASCADE,
+  content_type TEXT NOT NULL,
+  data BLOB NOT NULL,
+  uploaded_by INTEGER,
+  uploaded_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- Divisions the admin pinned to an event day. The rest are placed automatically.
 -- Kept apart from bouts so a redraw keeps the choice. Day is a position in the
 -- sorted competition_dates list, like bouts.day.

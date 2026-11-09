@@ -11,9 +11,11 @@ const {
   saveFighterDocument,
   getFighterDocument,
   hasApprovedRegistration,
+  saveClubIcon,
+  deleteClubIcon,
   REGISTRATION_SELECT,
 } = require('../services');
-const { documentLabel, documentTypeFor, detectFileType, sendDocument } = require('../documents');
+const { documentLabel, documentTypeFor, detectFileType, detectIconType, sendDocument } = require('../documents');
 const { layoutBracket, computeMedals, clubAthleteSummary } = require('../bracket');
 const { writeBoutListPdf } = require('../boutlistPdf');
 const { clean, toArray, requireRole, notFound, wrap } = require('./helpers');
@@ -91,6 +93,35 @@ router.post('/fighters', (req, res) => {
   const label = documentLabel(documentTypeFor(values.belt_rank));
   req.flash('success', `${values.first_name} ${values.last_name} added. Now upload their ${label}, which they need to enter competitions.`);
   return res.redirect(`/club/fighters/${fighterId}/document`);
+});
+
+function iconPage(req, res, status = 200, error = null) {
+  return res.status(status).render('club/icon', {
+    title: 'Club icon',
+    hasIcon: Boolean(res.locals.clubIconUrl(req.user.club_id)),
+    error,
+  });
+}
+
+router.get('/icon', (req, res) => iconPage(req, res));
+
+router.post('/icon', (req, res) => {
+  if (req.uploadError) return iconPage(req, res, 400, req.uploadError);
+  if (!req.file) return iconPage(req, res, 400, 'Choose a picture to upload.');
+  const type = detectIconType(req.file.buffer);
+  if (!type) return iconPage(req, res, 400, 'That file type is not accepted. Upload a JPG, PNG or WebP picture.');
+  saveClubIcon(req.app.locals.db, req.user.club_id, { data: req.file.buffer, contentType: type.contentType, userId: req.user.id });
+  req.logActivity('club.icon_updated', `Updated the icon for ${req.user.club_name}`);
+  req.flash('success', 'Club icon saved.');
+  return res.redirect('/club');
+});
+
+router.post('/icon/delete', (req, res) => {
+  if (deleteClubIcon(req.app.locals.db, req.user.club_id)) {
+    req.logActivity('club.icon_removed', `Removed the icon for ${req.user.club_name}`);
+    req.flash('success', 'Club icon removed.');
+  }
+  return res.redirect('/club');
 });
 
 function clubAthletes(req) {
