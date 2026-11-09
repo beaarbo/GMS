@@ -1803,6 +1803,13 @@ test('court screens show the bout on now, what is next and recent results', asyn
   assert.equal((await club.get(`/screens/${compId}/1/1`)).status, 404);
   await post(admin, `${bouts}/publish`, {}, bouts);
   assert.equal((await club.get(`/screens/${compId}/1/1`)).status, 200);
+  // Coaches find them from their bout list and their Home page.
+  const courtLink = new RegExp(`href="/screens/${compId}">Court screens`);
+  assert.match((await club.get(`/club/competitions/${compId}/bouts`)).text, courtLink);
+  assert.match((await club.get('/home')).text, courtLink);
+  const coachIndex = await club.get(`/screens/${compId}`);
+  assert.equal(coachIndex.status, 200);
+  assert.match(coachIndex.text, new RegExp(`href="/club/competitions/${compId}/bouts">Bout list`), 'the way back goes to their bout list');
   assert.equal((await request(app).get(`/screens/${compId}/1/1`)).headers.location, '/login');
   assert.equal((await admin.get(`/screens/${compId}/1/9`)).status, 404);
 });

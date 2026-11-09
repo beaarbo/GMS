@@ -5,7 +5,10 @@
     <h1>Bout list</h1>
     <p class="sub"><%= competition.name %> · <%= competition.venue %>, <%= eventDatesText(competition) %></p>
   </div>
-  <% if (divisions.length > 0) { %><a class="btn" href="/club/competitions/<%= competition.id %>/bouts.pdf">Download PDF</a><% } %>
+  <div class="actions">
+    <a class="btn secondary" href="/screens/<%= competition.id %>">Court screens</a>
+    <% if (divisions.length > 0) { %><a class="btn" href="/club/competitions/<%= competition.id %>/bouts.pdf">Download PDF</a><% } %>
+  </div>
 </div>
 
 <section class="card">
