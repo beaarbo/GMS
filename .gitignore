@@ -4,3 +4,4 @@ data/
 credentials.txt
 .claude/settings.local.json
 *.log
+graphify-out/

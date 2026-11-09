@@ -6,3 +6,4 @@ credentials.txt
 .git
 test
 *.log
+graphify-out
