@@ -132,6 +132,22 @@ function findWeightClass(classes, weightKg) {
   return limited.find((c) => weightKg <= c.max_kg) || classes.find((c) => c.max_kg === null) || null;
 }
 
+const MIN_WEIGH_KG = 10;
+const MAX_WEIGH_KG = 250;
+
+// Checks a weigh-in reading against the class the athlete entered. `classes` are
+// the weight classes of their age group and gender. Returns the class the weight
+// falls into, and whether that is the entered one.
+function checkWeight(classes, enteredClassId, weightKg) {
+  const kg = Number(weightKg);
+  if (!Number.isFinite(kg) || kg < MIN_WEIGH_KG || kg > MAX_WEIGH_KG) {
+    return { ok: false, error: `Enter a weight between ${MIN_WEIGH_KG} and ${MAX_WEIGH_KG} kg.` };
+  }
+  const fits = findWeightClass(classes, Math.round(kg * 10) / 10);
+  if (!fits) return { ok: false, error: 'No weight class fits that weight.' };
+  return { ok: true, fits, made: fits.id === Number(enteredClassId) };
+}
+
 // Works out a fighter's age and belt groups and which weight classes they can
 // choose from, or explains why they can't enter.
 function divisionOptions({ fighter, competition, ageGroups, beltGroups, weightClasses }) {
@@ -205,6 +221,7 @@ function validateSetup({ ageGroups, beltGroups }) {
 }
 
 module.exports = {
+  checkWeight,
   BELTS,
   GENDERS,
   DEFAULT_AGE_GROUPS,

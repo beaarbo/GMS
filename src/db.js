@@ -142,6 +142,11 @@ CREATE TABLE IF NOT EXISTS registrations (
   review_note TEXT NOT NULL DEFAULT '',
   reviewed_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  -- Weigh-in result. Only the outcome is kept, never the weight itself.
+  weigh_status TEXT CHECK (weigh_status IN ('passed', 'no_show', 'disqualified')),
+  weighed_at TEXT,
+  -- The class the coach entered, kept when the athlete is moved at weigh-in.
+  entered_weight_class_id INTEGER REFERENCES weight_classes(id),
   UNIQUE (competition_id, fighter_id)
 );
 CREATE INDEX IF NOT EXISTS idx_registrations_club ON registrations(club_id);
@@ -360,6 +365,17 @@ function migrateRest(db) {
   })();
 }
 
+// Version 7: weigh-in results on registrations. Nobody has been weighed yet, so
+// existing registrations start empty and still go into the draw.
+function migrateWeighIn(db) {
+  db.transaction(() => {
+    addColumnIfMissing(db, 'registrations', 'weigh_status', "TEXT CHECK (weigh_status IN ('passed', 'no_show', 'disqualified'))");
+    addColumnIfMissing(db, 'registrations', 'weighed_at', 'TEXT');
+    addColumnIfMissing(db, 'registrations', 'entered_weight_class_id', 'INTEGER REFERENCES weight_classes(id)');
+    db.pragma('user_version = 7');
+  })();
+}
+
 function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 1) migrateBelts(db);
   if (db.pragma('user_version', { simple: true }) < 2) migrateSchedule(db);
@@ -367,6 +383,7 @@ function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 4) migrateEventDates(db);
   if (db.pragma('user_version', { simple: true }) < 5) migrateResults(db);
   if (db.pragma('user_version', { simple: true }) < 6) migrateRest(db);
+  if (db.pragma('user_version', { simple: true }) < 7) migrateWeighIn(db);
 }
 
 // Safe on old databases: only tables that don't exist yet are created.

@@ -459,6 +459,91 @@ test('the bout list downloads as a PDF for admins only', async () => {
   assert.equal((await club.get(`${path}.pdf`)).status, 403);
 });
 
+test('the weigh-in checks weight classes, moves athletes and leaves no-shows out of the draw', async () => {
+  const { db, app } = await setup();
+  const { compId, admin, club } = await closedCompetitionWithFighters(db, app, [
+    ['T', 'Alpha'], ['T', 'Bravo'], ['D', 'Charlie'], ['D', 'Delta'], ['T', 'Echo'],
+  ]);
+  const path = `/admin/competitions/${compId}/weigh-in`;
+  const reg = (lastName) => db
+    .prepare('SELECT r.* FROM registrations r JOIN fighters f ON f.id = r.fighter_id WHERE f.last_name = ?')
+    .get(lastName);
+  const weigh = (lastName, fields) => post(admin, `${path}/${reg(lastName).id}`, fields, path);
+
+  const page = await admin.get(path);
+  assert.equal(page.status, 200);
+  assert.match(page.text, /Not weighed <strong>5<\/strong>/);
+
+  // Making weight for the entered class passes straight away.
+  await weigh('Alpha', { action: 'check', weight_kg: '47.5' });
+  assert.equal(reg('Alpha').weigh_status, 'passed');
+
+  // Too heavy: nothing changes until the official decides, and the page offers the right class.
+  const entered = reg('Bravo').weight_class_id;
+  const classes = db.prepare('SELECT * FROM weight_classes WHERE age_group_id = ? AND gender = ?').all(reg('Bravo').age_group_id, 'F');
+  const heavier = findWeightClass(classes, 51.2);
+  assert.notEqual(heavier.id, entered);
+  await weigh('Bravo', { action: 'check', weight_kg: '51.2' });
+  assert.equal(reg('Bravo').weigh_status, null);
+  const deciding = await admin.get(path);
+  assert.match(deciding.text, new RegExp(`Move to ${heavier.label}`));
+  assert.doesNotMatch(deciding.text, /51\.2/, 'the weight itself is never shown back or kept');
+  assert.doesNotMatch(deciding.text, /value="keep"/, 'a heavier athlete cannot stay in their class');
+  await weigh('Bravo', { action: 'keep' });
+  assert.equal(reg('Bravo').weigh_status, null, 'keeping is refused for an athlete over their class');
+  await weigh('Bravo', { action: 'move', weight_class_id: String(heavier.id) });
+  assert.deepEqual(
+    (({ weigh_status, weight_class_id, entered_weight_class_id }) => ({ weigh_status, weight_class_id, entered_weight_class_id }))(reg('Bravo')),
+    { weigh_status: 'passed', weight_class_id: heavier.id, entered_weight_class_id: entered }
+  );
+  // A class from another age group or gender is refused.
+  const otherClass = db.prepare('SELECT id FROM weight_classes WHERE competition_id = ? AND gender = ?').get(compId, 'M').id;
+  await weigh('Alpha', { action: 'move', weight_class_id: String(otherClass) });
+  assert.notEqual(reg('Alpha').weight_class_id, otherClass);
+
+  // Lighter than the class: the official may keep them in it.
+  const echoClass = reg('Echo').weight_class_id;
+  await weigh('Echo', { action: 'check', weight_kg: '30' });
+  assert.match((await admin.get(path)).text, /value="keep"/);
+  await weigh('Echo', { action: 'keep' });
+  assert.equal(reg('Echo').weigh_status, 'passed');
+  assert.equal(reg('Echo').weight_class_id, echoClass);
+
+  await weigh('Charlie', { action: 'no_show' });
+  assert.equal(reg('Charlie').weigh_status, 'no_show');
+  assert.equal((await weigh('Delta', { action: 'check', weight_kg: '5' })).status, 302);
+  assert.equal(reg('Delta').weigh_status, null, 'impossible weights are refused');
+
+  // Coaches see their athletes' result.
+  assert.match((await club.get(`/club/competitions/${compId}`)).text, /Made weight/);
+
+  // The draw leaves the no-show out but keeps anyone not weighed yet.
+  const bouts = `/admin/competitions/${compId}/bouts`;
+  const boutPage = (await admin.get(bouts)).text;
+  assert.match(boutPage, /1 approved athlete hasn&#39;t been weighed in yet/);
+  assert.match(boutPage, /<strong>4<\/strong> athletes will be drawn/);
+  await post(admin, `${bouts}/generate`, { courts: '1', start: '09:00', minutes: '10', rest: '0' }, bouts);
+  const drawn = db.prepare('SELECT blue_registration_id AS a, red_registration_id AS b FROM bouts').all().flatMap((b) => [b.a, b.b]).filter(Boolean);
+  assert.ok(!drawn.includes(reg('Charlie').id), 'no-shows are not drawn');
+  assert.ok(drawn.includes(reg('Delta').id) && drawn.includes(reg('Bravo').id));
+
+  // With a bout list, weigh-ins are locked.
+  await weigh('Delta', { action: 'no_show' });
+  assert.equal(reg('Delta').weigh_status, null);
+
+  // Undo puts a moved athlete back in the class their coach entered.
+  await post(admin, `${bouts}/delete`, {}, bouts);
+  await weigh('Bravo', { action: 'reset' });
+  assert.deepEqual(
+    (({ weigh_status, weight_class_id, entered_weight_class_id }) => ({ weigh_status, weight_class_id, entered_weight_class_id }))(reg('Bravo')),
+    { weigh_status: null, weight_class_id: entered, entered_weight_class_id: null }
+  );
+
+  const log = db.prepare("SELECT summary FROM activity_log WHERE action = 'weighin.recorded' ORDER BY id").all().map((r) => r.summary);
+  assert.equal(log.length, 5);
+  assert.ok(log.every((summary) => !/47\.5|51\.2|30/.test(summary)), 'weights stay out of the activity log');
+});
+
 test('schedule settings set courts and times without changing the draw', async () => {
   const { db, app } = await setup();
   const { compId, admin } = await closedCompetitionWithFighters(db, app, [
@@ -536,7 +621,7 @@ test('schedule migration clears old draws and keeps competitions', () => {
 
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM bouts').get().n, 0);
   assert.equal(db.prepare('SELECT bout_courts FROM competitions WHERE id = ?').get(compId).bout_courts, 2);
-  assert.equal(db.pragma('user_version', { simple: true }), 6);
+  assert.equal(db.pragma('user_version', { simple: true }), 7);
 });
 
 test('admin creates a club, a coach applies, and only approval unlocks athlete registration', async () => {
@@ -698,7 +783,7 @@ test('migrating old club accounts keeps logins and fighters and approves each co
   const clubColumns = db.pragma('table_info(clubs)').map((c) => c.name);
   assert.ok(!clubColumns.includes('coach_name'));
   assert.equal(db.pragma('foreign_key_check').length, 0);
-  assert.equal(db.pragma('user_version', { simple: true }), 6);
+  assert.equal(db.pragma('user_version', { simple: true }), 7);
 });
 
 test('a fighter alone in a division has no bout number', async () => {
@@ -872,7 +957,7 @@ test('migration turns a day count into consecutive dates', () => {
   const { id } = db.prepare('SELECT id FROM competitions').get();
   assert.deepEqual(getEventDates(db, id), ['2030-01-30', '2030-01-31', '2030-02-01']);
   assert.ok(!db.pragma('table_info(competitions)').some((c) => c.name === 'bout_days'));
-  assert.equal(db.pragma('user_version', { simple: true }), 6);
+  assert.equal(db.pragma('user_version', { simple: true }), 7);
 });
 
 const tokenIn = (message) => message.text.match(/reset-password\/([0-9a-f]{64})/)[1];
@@ -1117,7 +1202,7 @@ test('the results migration removes declared weights and keeps registrations', (
   db.pragma('user_version = 4');
   migrate(db);
   assert.ok(!db.pragma('table_info(registrations)').some((c) => c.name === 'declared_weight_kg'));
-  assert.equal(db.pragma('user_version', { simple: true }), 6);
+  assert.equal(db.pragma('user_version', { simple: true }), 7);
 });
 
 test('athletes need the right document before they can enter', async () => {

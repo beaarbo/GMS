@@ -1,0 +1,111 @@
+<%- include('../partials/top') %>
+<p class="breadcrumb"><a href="/admin">Admin dashboard</a></p>
+<div class="page-head">
+  <div class="title-row">
+    <%- include('../partials/comp_logo', { competition, size: 'md' }) %>
+    <div>
+      <h1>Weigh-in</h1>
+      <p class="sub"><%= competition.name %> · <%= eventDatesText(competition) %></p>
+    </div>
+  </div>
+  <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/bouts">Bout list</a>
+</div>
+
+<% if (competition.status !== 'closed') { %>
+  <div class="notice info">Close registration before the weigh-in. Only approved athletes are weighed.</div>
+<% } else if (locked) { %>
+  <div class="notice info">The bout list has been generated, so weigh-ins are locked. Delete the bout list to change them, then generate it again.</div>
+<% } %>
+
+<section class="card">
+  <% const link = (show, label, n) => { const q = new URLSearchParams(Object.entries({ ...filters, show }).filter(([, v]) => v)).toString(); return `<a href="?${q}"${filters.show === show ? ' class="current-filter"' : ''}>${label} <strong>${n}</strong></a>`; }; %>
+  <p class="stats">
+    <%- link('', 'All', counts.total) %>
+    <%- link('waiting', 'Not weighed', counts.waiting) %>
+    <%- link('done', 'Made weight', counts.passed) %>
+    <%- link('out', 'No-show or disqualified', counts.no_show + counts.disqualified) %>
+  </p>
+  <% if (counts.moved > 0) { %><p class="hint"><%= counts.moved %> athlete<%= counts.moved === 1 ? ' was' : 's were' %> moved to another weight class.</p><% } %>
+
+  <form class="filters" method="get" action="/admin/competitions/<%= competition.id %>/weigh-in">
+    <% if (filters.show) { %><input type="hidden" name="show" value="<%= filters.show %>"><% } %>
+    <div>
+      <label for="w-q">Athlete</label>
+      <input id="w-q" name="q" value="<%= filters.q %>" placeholder="Search by name" type="search">
+    </div>
+    <div>
+      <label for="w-club">Club</label>
+      <select id="w-club" name="club">
+        <option value="">All clubs</option>
+        <% clubs.forEach(([id, name]) => { %><option value="<%= id %>" <%= filters.club === String(id) ? 'selected' : '' %>><%= name %></option><% }) %>
+      </select>
+    </div>
+    <div class="actions">
+      <button class="btn secondary" type="submit">Filter</button>
+      <% if (filters.q || filters.club) { %><a href="?<%= filters.show ? `show=${filters.show}` : '' %>">Clear</a><% } %>
+    </div>
+  </form>
+</section>
+
+<section class="card">
+  <% if (rows.length === 0) { %>
+    <p class="empty"><%= counts.total === 0 ? 'No approved athletes yet.' : 'No athletes match these filters.' %></p>
+  <% } else { %>
+    <% const canEdit = competition.status === 'closed' && !locked; %>
+    <%# Keeps the official's filters across each step. Search text is escaped, as it's free text. %>
+    <% const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); %>
+    <% const keep = () => Object.entries(filters).filter(([, v]) => v).map(([k, v]) => `<input type="hidden" name="${k}" value="${esc(v)}">`).join(''); %>
+    <div class="table-wrap">
+      <table class="weighin-table">
+        <thead><tr><th>Athlete</th><th>Division</th><th>Weight class</th><th>Result</th><th></th></tr></thead>
+        <tbody>
+          <% rows.forEach((r) => { const action = `/admin/competitions/${competition.id}/weigh-in/${r.id}`; const deciding = pending && pending.registrationId === r.id; %>
+            <tr id="reg-<%= r.id %>" class="<%= deciding ? 'row-attention' : '' %>">
+              <td><strong><%= r.last_name %>, <%= r.first_name %></strong><br><span class="club-name hint"><%- include('../partials/club_icon', { clubId: r.club_id, name: r.club_name, size: 'sm' }) %><%= r.club_name %></span></td>
+              <td><%= GENDERS[r.gender] %> · <%= r.age_group %> · <%= r.belt_group %></td>
+              <td class="nowrap"><strong><%= r.weight_class %></strong><% if (r.entered_weight_class) { %><br><span class="hint">Entered as <%= r.entered_weight_class %></span><% } %></td>
+              <td>
+                <% if (r.weigh_status === 'passed') { %><span class="badge approved"><%= r.entered_weight_class ? 'Moved' : 'Made weight' %></span>
+                <% } else if (r.weigh_status === 'no_show') { %><span class="badge closed">No-show</span>
+                <% } else if (r.weigh_status === 'disqualified') { %><span class="badge rejected">Disqualified</span>
+                <% } else { %><span class="badge pending">Not weighed</span><% } %>
+              </td>
+              <td>
+                <% if (!canEdit) { %>
+                <% } else if (deciding) { %>
+                  <p class="warn-text"><%= pending.lighter ? 'Under' : 'Over' %> <%= pending.entered %>: their weight is in <%= pending.fits %>.</p>
+                  <div class="actions">
+                    <% if (pending.lighter) { %>
+                      <form method="post" action="<%= action %>"><input type="hidden" name="_csrf" value="<%= csrf %>"><%- keep() %><button class="btn small" name="action" value="keep" type="submit">Keep in <%= pending.entered %></button></form>
+                    <% } %>
+                    <form method="post" action="<%= action %>"><input type="hidden" name="_csrf" value="<%= csrf %>"><%- keep() %><input type="hidden" name="weight_class_id" value="<%= pending.fitsId %>"><button class="btn <%= pending.lighter ? 'secondary ' : '' %>small" name="action" value="move" type="submit">Move to <%= pending.fits %></button></form>
+                    <% if (!pending.lighter) { %>
+                      <form method="post" action="<%= action %>"><input type="hidden" name="_csrf" value="<%= csrf %>"><%- keep() %><button class="btn danger small" name="action" value="disqualify" type="submit">Disqualify</button></form>
+                    <% } %>
+                    <form method="post" action="<%= action %>"><input type="hidden" name="_csrf" value="<%= csrf %>"><%- keep() %><button class="btn secondary small" name="action" value="cancel" type="submit">Weigh again</button></form>
+                  </div>
+                <% } else if (!r.weigh_status) { %>
+                  <div class="actions">
+                    <form class="actions" method="post" action="<%= action %>">
+                      <input type="hidden" name="_csrf" value="<%= csrf %>"><%- keep() %>
+                      <input class="weight-input" name="weight_kg" type="number" step="0.1" min="10" max="250" inputmode="decimal" placeholder="kg" aria-label="Weight of <%= r.first_name %> <%= r.last_name %> in kg" required>
+                      <button class="btn small" name="action" value="check" type="submit">Check</button>
+                    </form>
+                    <form method="post" action="<%= action %>"><input type="hidden" name="_csrf" value="<%= csrf %>"><%- keep() %><button class="btn secondary small" name="action" value="no_show" type="submit">No-show</button></form>
+                  </div>
+                <% } else { %>
+                  <form method="post" action="<%= action %>" data-confirm="Undo the weigh-in for <%= r.first_name %> <%= r.last_name %>?<%= r.entered_weight_class ? ` They go back to ${r.entered_weight_class}.` : '' %>">
+                    <input type="hidden" name="_csrf" value="<%= csrf %>"><%- keep() %>
+                    <button class="btn secondary small" name="action" value="reset" type="submit">Undo</button>
+                  </form>
+                <% } %>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+  <p class="hint">Weights aren't saved, only the result. Athletes marked as no-show or disqualified are left out of the draw. Anyone not weighed is still drawn, so weigh everyone before generating the bout list.</p>
+</section>
+<%- include('../partials/bottom') %>

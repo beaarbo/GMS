@@ -29,6 +29,9 @@ const {
   clearResult,
   clearAllResults,
   getFighterDocument,
+  listWeighIns,
+  weighInCounts,
+  recordWeighIn,
   saveCompetitionLogo,
   hasCompetitionLogo,
   listCompetitionFiles,
@@ -272,6 +275,122 @@ router.post('/competitions/:id(\\d+)/status', (req, res) => {
   };
   req.flash('success', messages[status]);
   return res.redirect('/admin');
+});
+
+// Weigh-in filters, kept across each step so the official stays on their list.
+function weighInFilters(source) {
+  const show = ['waiting', 'done', 'out'].includes(source.show) ? source.show : '';
+  const club = /^\d+$/.test(source.club || '') ? source.club : '';
+  const q = clean(source.q, 60);
+  return { show, club, q };
+}
+
+function weighInPath(competition, filters, registrationId = null) {
+  const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value)).toString();
+  return `/admin/competitions/${competition.id}/weigh-in${query ? `?${query}` : ''}${registrationId ? `#reg-${registrationId}` : ''}`;
+}
+
+router.get('/competitions/:id(\\d+)/weigh-in', (req, res) => {
+  const { db } = req.app.locals;
+  const filters = weighInFilters(req.query);
+  const all = listWeighIns(db, req.competition.id);
+  const search = filters.q.toLowerCase();
+  const rows = all.filter((r) => {
+    if (filters.show === 'waiting' && r.weigh_status) return false;
+    if (filters.show === 'done' && r.weigh_status !== 'passed') return false;
+    if (filters.show === 'out' && !['no_show', 'disqualified'].includes(r.weigh_status)) return false;
+    if (filters.club && String(r.club_id) !== filters.club) return false;
+    return !search || `${r.first_name} ${r.last_name}`.toLowerCase().includes(search) || `${r.last_name} ${r.first_name}`.toLowerCase().includes(search);
+  });
+  // An out-of-class result waiting for the official's decision. The next weigh-in step clears it.
+  const pending = req.session.weighDecision && req.session.weighDecision.competitionId === req.competition.id ? req.session.weighDecision : null;
+
+  res.render('admin/weighin', {
+    title: 'Weigh-in',
+    competition: req.competition,
+    rows,
+    filters,
+    query: new URLSearchParams(Object.entries(filters).filter(([, value]) => value)).toString(),
+    counts: weighInCounts(db, req.competition.id),
+    clubs: [...new Map(all.map((r) => [r.club_id, r.club_name])).entries()].sort((a, b) => a[1].localeCompare(b[1])),
+    locked: hasBoutList(db, req.competition.id),
+    pending,
+  });
+});
+
+router.post('/competitions/:id(\\d+)/weigh-in/:regId(\\d+)', (req, res) => {
+  const { db } = req.app.locals;
+  const filters = weighInFilters(req.body);
+  const registrationId = Number(req.params.regId);
+  const athlete = db
+    .prepare(
+      `SELECT f.first_name, f.last_name, c.name AS club FROM registrations r
+       JOIN fighters f ON f.id = r.fighter_id JOIN clubs c ON c.id = r.club_id WHERE r.id = ? AND r.competition_id = ?`
+    )
+    .get(registrationId, req.competition.id);
+  const back = weighInPath(req.competition, filters, registrationId);
+  if (!athlete) return notFound(res);
+  const decision = req.session.weighDecision;
+  delete req.session.weighDecision;
+  if (req.body.action === 'cancel') return res.redirect(back);
+  // Keeping an off-weight athlete in their class is only allowed when this
+  // athlete's last check found them lighter than it, never heavier.
+  const mayKeep = decision && decision.competitionId === req.competition.id && decision.registrationId === registrationId && decision.lighter;
+  if (req.body.action === 'keep' && !mayKeep) {
+    req.flash('error', `${athlete.first_name} ${athlete.last_name}: weigh them again first.`);
+    return res.redirect(back);
+  }
+
+  const result = recordWeighIn(db, req.competition, registrationId, {
+    action: req.body.action,
+    weightKg: req.body.weight_kg,
+    weightClassId: req.body.weight_class_id,
+  });
+  const name = `${athlete.first_name} ${athlete.last_name}`;
+  const who = `${name} (${athlete.club})`;
+  if (!result.ok) {
+    req.flash('error', `${name}: ${result.error}`);
+    return res.redirect(back);
+  }
+  const log = (summary) => req.logActivity('weighin.recorded', summary, req.competition.id);
+  switch (result.outcome) {
+    case 'out_of_class':
+      // Nothing is saved yet. The weight stays server-side for the decision only.
+      req.session.weighDecision = {
+        competitionId: req.competition.id, registrationId, fitsId: result.fits.id, fits: result.fits.label, entered: result.entered, lighter: result.lighter,
+      };
+      req.flash(
+        'error',
+        result.lighter
+          ? `${name} is under ${result.entered}: their weight is in ${result.fits.label}. Keep them in ${result.entered}, or move them.`
+          : `${name} is over ${result.entered}: their weight is in ${result.fits.label}. Move them or disqualify them.`
+      );
+      break;
+    case 'kept':
+      log(`${who} weighed in under ${result.weightClass} and stays in it`);
+      req.flash('success', `${name} stays in ${result.weightClass}.`);
+      break;
+    case 'passed':
+      log(`${who} made weight for ${result.weightClass}`);
+      req.flash('success', `${name} made weight for ${result.weightClass}.`);
+      break;
+    case 'moved':
+      log(`Moved ${who} from ${result.from} to ${result.to} at weigh-in`);
+      req.flash('success', `${name} moved to ${result.to}.`);
+      break;
+    case 'no_show':
+      log(`Marked ${who} as a no-show at weigh-in`);
+      req.flash('success', `${name} marked as a no-show. They won't be drawn.`);
+      break;
+    case 'disqualify':
+      log(`Disqualified ${who} at weigh-in`);
+      req.flash('success', `${name} disqualified. They won't be drawn.`);
+      break;
+    default:
+      log(`Undid the weigh-in for ${who}${result.backTo ? `, back to ${result.backTo}` : ''}`);
+      req.flash('success', `Weigh-in undone for ${name}${result.backTo ? `. They're back in ${result.backTo}` : ''}.`);
+  }
+  return res.redirect(back);
 });
 
 function filesPage(req, res, status = 200, error = null) {
@@ -611,6 +730,7 @@ router.get('/competitions/:id(\\d+)/bouts', (req, res) => {
     dayOptions: eventDates.map((date, i) => ({ value: i + 1, label: `Day ${i + 1} (${formatDay(date)})` })),
     pinnedDays: loadDivisionDays(db, req.competition.id),
     resultsRecorded: hasResults(db, req.competition.id),
+    weighIn: weighInCounts(db, req.competition.id),
     totalBouts: divisions.reduce((sum, d) => sum + d.matches, 0),
     counts: db
       .prepare('SELECT status, COUNT(*) AS n FROM registrations WHERE competition_id = ? GROUP BY status')

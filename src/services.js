@@ -7,6 +7,7 @@ const {
   DEFAULT_BELT_GROUPS,
   GENDERS,
   assignDivision,
+  checkWeight,
   parseWeightLimits,
   formatDay,
 } = require('./divisions');
@@ -449,11 +450,109 @@ function applySchedule(db, competitionId) {
   })();
 }
 
+// Athletes who didn't turn up or were disqualified at weigh-in aren't drawn.
+const DRAWN = "r.status = 'approved' AND (r.weigh_status IS NULL OR r.weigh_status = 'passed')";
+
+// Approved athletes and their weigh-in result, in division order.
+function listWeighIns(db, competitionId) {
+  return db
+    .prepare(
+      `${REGISTRATION_SELECT.replace('FROM registrations r', ', ew.label AS entered_weight_class FROM registrations r')}
+       LEFT JOIN weight_classes ew ON ew.id = r.entered_weight_class_id
+       WHERE r.competition_id = ? AND r.status = 'approved' ORDER BY ${DIVISION_ORDER}`
+    )
+    .all(competitionId);
+}
+
+function weighInCounts(db, competitionId) {
+  const counts = { waiting: 0, passed: 0, moved: 0, no_show: 0, disqualified: 0, total: 0 };
+  db.prepare("SELECT weigh_status, entered_weight_class_id FROM registrations WHERE competition_id = ? AND status = 'approved'")
+    .all(competitionId)
+    .forEach((r) => {
+      counts.total += 1;
+      if (!r.weigh_status) counts.waiting += 1;
+      else counts[r.weigh_status] += 1;
+      if (r.entered_weight_class_id) counts.moved += 1;
+    });
+  return counts;
+}
+
+// The weight classes an approved registration could move between: same
+// competition, age group and gender.
+function classesForRegistration(db, registration) {
+  return db
+    .prepare(
+      `SELECT w.* FROM weight_classes w
+       WHERE w.competition_id = ? AND w.age_group_id = ? AND w.gender = (SELECT gender FROM fighters WHERE id = ?)
+       ORDER BY w.max_kg IS NULL, w.max_kg`
+    )
+    .all(registration.competition_id, registration.age_group_id, registration.fighter_id);
+}
+
+// Records one weigh-in step for an approved registration. Actions:
+// check (weightKg): marks it passed if the weight makes the entered class,
+//   otherwise changes nothing and returns the class it fits instead.
+// move (weightClassId): moves to another class of the same age group and gender, passed.
+// no_show, disqualify: leave the athlete out of the draw.
+// reset: back to not weighed, and back to the entered class if they were moved.
+function recordWeighIn(db, competition, registrationId, { action, weightKg, weightClassId }) {
+  if (competition.status !== 'closed') return { ok: false, error: 'Close registration before the weigh-in.' };
+  if (hasBoutList(db, competition.id)) return { ok: false, error: 'Delete the bout list before changing weigh-ins, so the draw stays correct.' };
+  const registration = db
+    .prepare("SELECT * FROM registrations WHERE id = ? AND competition_id = ? AND status = 'approved'")
+    .get(registrationId, competition.id);
+  if (!registration) return { ok: false, error: 'That athlete is not an approved entry in this competition.' };
+
+  const classes = classesForRegistration(db, registration);
+  const labelOf = (id) => (classes.find((c) => c.id === id) || {}).label;
+  const save = db.prepare(
+    `UPDATE registrations SET weigh_status = @status, weighed_at = @at, weight_class_id = @classId,
+       entered_weight_class_id = @enteredId WHERE id = @id`
+  );
+  const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+  const base = { id: registration.id, classId: registration.weight_class_id, enteredId: registration.entered_weight_class_id, at: now };
+
+  if (action === 'check') {
+    const result = checkWeight(classes, registration.weight_class_id, weightKg);
+    if (!result.ok) return result;
+    if (!result.made) {
+      const enteredClass = classes.find((c) => c.id === registration.weight_class_id);
+      // Under the class rather than over it: many events let them fight up.
+      const lighter = result.fits.max_kg !== null && (enteredClass.max_kg === null || result.fits.max_kg < enteredClass.max_kg);
+      return { ok: true, outcome: 'out_of_class', fits: result.fits, entered: enteredClass.label, lighter };
+    }
+    save.run({ ...base, status: 'passed' });
+    return { ok: true, outcome: 'passed', weightClass: labelOf(registration.weight_class_id) };
+  }
+  // Only after a check found them lighter than their class; the route enforces that.
+  if (action === 'keep') {
+    save.run({ ...base, status: 'passed' });
+    return { ok: true, outcome: 'kept', weightClass: labelOf(registration.weight_class_id) };
+  }
+  if (action === 'move') {
+    const target = classes.find((c) => c.id === Number(weightClassId));
+    if (!target) return { ok: false, error: 'Choose a weight class for their age group and gender.' };
+    const enteredId = registration.entered_weight_class_id || registration.weight_class_id;
+    save.run({ ...base, status: 'passed', classId: target.id, enteredId: target.id === enteredId ? null : enteredId });
+    return { ok: true, outcome: 'moved', from: labelOf(registration.weight_class_id), to: target.label };
+  }
+  if (action === 'no_show' || action === 'disqualify') {
+    save.run({ ...base, status: action === 'no_show' ? 'no_show' : 'disqualified' });
+    return { ok: true, outcome: action };
+  }
+  if (action === 'reset') {
+    const enteredId = registration.entered_weight_class_id || registration.weight_class_id;
+    save.run({ ...base, status: null, at: null, classId: enteredId, enteredId: null });
+    return { ok: true, outcome: 'reset', backTo: registration.entered_weight_class_id ? labelOf(enteredId) : null };
+  }
+  return { ok: false, error: 'Unknown weigh-in action.' };
+}
+
 // Draws every division from the approved registrations, replacing any earlier
 // draw. Returns the number of fighters drawn.
 function generateBoutList(db, competitionId, rng = secureRandom) {
   const approved = db
-    .prepare(`${REGISTRATION_SELECT} WHERE r.competition_id = ? AND r.status = 'approved' ORDER BY ${DIVISION_ORDER}`)
+    .prepare(`${REGISTRATION_SELECT} WHERE r.competition_id = ? AND ${DRAWN} ORDER BY ${DIVISION_ORDER}`)
     .all(competitionId);
 
   const divisions = new Map();
@@ -801,6 +900,10 @@ module.exports = {
   hasBoutList,
   deleteBoutList,
   generateBoutList,
+  listWeighIns,
+  weighInCounts,
+  classesForRegistration,
+  recordWeighIn,
   applySchedule,
   loadDivisionDays,
   saveDivisionDays,

@@ -14,7 +14,23 @@ const {
   isValidDate,
   DEFAULT_AGE_GROUPS,
   DEFAULT_BELT_GROUPS,
+  checkWeight,
 } = require('../src/divisions');
+
+test('a weigh-in reading is checked against the entered class', () => {
+  const classes = [
+    { id: 1, label: '-45 kg', max_kg: 45 },
+    { id: 2, label: '-48 kg', max_kg: 48 },
+    { id: 3, label: '+48 kg', max_kg: null },
+  ];
+  assert.deepEqual(checkWeight(classes, 2, '48'), { ok: true, fits: classes[1], made: true }, 'the limit itself makes weight');
+  assert.equal(checkWeight(classes, 2, '45.0').made, false, 'lighter than the class still fails it');
+  assert.equal(checkWeight(classes, 2, '45.0').fits.id, 1);
+  assert.equal(checkWeight(classes, 2, '48.04').fits.id, 2, 'readings round to 0.1 kg');
+  assert.equal(checkWeight(classes, 2, '48.1').fits.id, 3);
+  assert.equal(checkWeight(classes, 2, 'heavy').ok, false);
+  assert.equal(checkWeight(classes, 2, '300').ok, false);
+});
 
 test('competitionAge by birth year ignores the birthday', () => {
   assert.equal(competitionAge('2010-12-31', '2026-01-15', 'year'), 16);
