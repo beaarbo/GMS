@@ -1,5 +1,6 @@
 <%- include('../partials/top') %>
-<p class="breadcrumb"><a href="/admin">Admin dashboard</a></p>
+<% const isAdmin = user.role === 'admin'; %>
+<p class="breadcrumb"><% if (isAdmin) { %><a href="/admin">Admin dashboard</a><% } else { %><a href="/official">Competition day</a><% } %></p>
 <div class="page-head">
   <div class="title-row">
     <%- include('../partials/comp_logo', { competition, size: 'md' }) %>
@@ -8,7 +9,7 @@
       <p class="sub"><%= competition.name %> · <%= eventDatesText(competition) %></p>
     </div>
   </div>
-  <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/bouts">Bout list</a>
+  <% if (isAdmin) { %><a class="btn secondary" href="/admin/competitions/<%= competition.id %>/bouts">Bout list</a><% } %>
 </div>
 
 <% if (competition.status !== 'closed') { %>

@@ -34,6 +34,30 @@
 </section>
 
 <section class="card">
+  <h2>Add an official</h2>
+  <p class="sub">Officials run the weigh-in, record results and use the court screens. They can't approve entries, draw bout lists or change settings.</p>
+  <form method="post" action="/admin/accounts/officials">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <div class="form-row">
+      <div class="field">
+        <label for="o-name">Name</label>
+        <input id="o-name" name="full_name" maxlength="100" required>
+      </div>
+      <div class="field">
+        <label for="o-email">Email</label>
+        <input id="o-email" name="email" type="email" required>
+      </div>
+      <div class="field">
+        <label for="o-password">Starting password</label>
+        <input id="o-password" name="password" type="password" minlength="10" maxlength="72" autocomplete="new-password" required>
+      </div>
+    </div>
+    <p class="hint">Give them the password privately. They can change it on My account.</p>
+    <button class="btn" type="submit">Add official</button>
+  </form>
+</section>
+
+<section class="card">
   <% if (accounts.length === 0) { %>
     <p class="empty">No accounts match.</p>
   <% } else { %>
@@ -48,6 +72,11 @@
               <td class="nowrap"><%= a.phone || '–' %></td>
               <td>
                 <% if (a.type === 'admin') { %><span class="badge open">Admin</span>
+                <% } else if (a.type === 'official') { %><span class="badge open">Official</span>
+                  <form class="inline-form" method="post" action="/admin/accounts/officials/<%= a.id %>/remove" data-confirm="Remove <%= a.full_name %>'s official account? They'll be logged out.">
+                    <input type="hidden" name="_csrf" value="<%= csrf %>">
+                    <button class="btn danger small" type="submit">Remove</button>
+                  </form>
                 <% } else if (a.type === 'coach') { %><span class="badge approved">Coach</span>
                 <% } else if (a.type === 'pending') { %><span class="badge pending">Awaiting approval</span>
                 <% } else { %><span class="badge draft">No club</span><% } %>

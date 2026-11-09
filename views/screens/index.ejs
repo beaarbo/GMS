@@ -1,0 +1,30 @@
+<%- include('../partials/top') %>
+<p class="breadcrumb"><% if (user.role === 'coach') { %><a href="/club/competitions/<%= competition.id %>/bouts">Bout list</a><% } else { %><a href="/admin/competitions/<%= competition.id %>/results">Results</a><% } %></p>
+<div class="page-head">
+  <div class="title-row">
+    <%- include('../partials/comp_logo', { competition, size: 'md' }) %>
+    <div>
+      <h1>Court screens</h1>
+      <p class="sub"><%= competition.name %> · Open one on the TV or tablet at each mat. It refreshes by itself.</p>
+    </div>
+  </div>
+</div>
+
+<% if (days.length === 0) { %>
+  <div class="card"><p class="empty">There are no bouts yet.</p></div>
+<% } %>
+<% days.forEach((d) => { %>
+  <section class="section">
+    <div class="section-head"><h2><%= d.label %></h2></div>
+    <div class="card-grid">
+      <% d.courts.forEach((c) => { %>
+        <article class="card">
+          <h3 class="card-title">Court <%= c.court %></h3>
+          <p class="sub"><%= c.done %> of <%= c.total %> bouts finished</p>
+          <div class="actions"><a class="btn" href="/screens/<%= competition.id %>/<%= c.day %>/<%= c.court %>">Open screen</a></div>
+        </article>
+      <% }) %>
+    </div>
+  </section>
+<% }) %>
+<%- include('../partials/bottom') %>

@@ -90,7 +90,7 @@ After closing registration, open **Bout list** on the admin dashboard, enter the
 - Fighters from the same club are drawn into opposite halves, so two club-mates can only meet in the final. Clubs with more fighters are shared as evenly as possible.
 - Fighters are placed at random into standard seed positions, so seed numbers show bracket position, not ranking. When a division isn't a full bracket (2, 4, 8, 16 and so on), the top seed positions get first-round byes.
 - A fighter alone in a division is listed with no opponent. They get no bout number, court or time.
-- Each division is assigned to one court. Bout numbers restart for each court on each day, and times follow from the start time and minutes per bout. The schedule doesn't allow for breaks or for fighters who are in several bouts.
+- Each division is assigned to one court. Bout numbers restart for each court on each day, and times follow from the start time and minutes per bout. A minimum rest between an athlete's bouts can be set: while a winner rests, the court runs bouts from other divisions. On multi-day events, divisions can be pinned to a day under **Division days**.
 - **Download PDF** exports one A4 page per division. **Update schedule** changes courts and times but keeps the draw. **Redraw** replaces the draw with a new random one.
 
 **Publish to coaches** shows the list to coaches with athletes in it and emails them. They see a summary of each athlete's next bout, the brackets for their divisions, and a PDF of those divisions. Redrawing hides the list until it's published again.
@@ -98,6 +98,21 @@ After closing registration, open **Bout list** on the admin dashboard, enter the
 **Record results** lists bouts by day and court. Click the winner and they move into their next bout. Results then appear on the brackets, the PDF and the coaches' pages, and build the medal standings: gold and silver from the final, and bronze for each losing semifinalist. A fighter alone in a division gets no medal and isn't counted. A result can only be undone or changed while the next bout has none. Clear all results before redrawing or deleting a list.
 
 While a bout list exists, approvals can't change and registration can't reopen. Delete the list first, because any change to the fighters would make the draw wrong.
+
+**Change this division**, under each bracket, edits one division without redrawing the rest, as long as it has no results yet:
+
+- **Swap** two athletes' places in the first round.
+- **Withdraw** an athlete, for example after an injury, with an optional reason that their coach sees. Their first opponent gets a bye. If the athlete had the bye themselves, the division is laid out again in seed order. Withdrawn athletes stay out of later redraws.
+- **Reinstate** a withdrawn athlete from the list above the brackets. Their division is redrawn to include them.
+- **Redraw this division** makes a new random draw for that division only.
+
+## Competition day
+
+**Weigh-in**, on a closed competition, checks each approved athlete against the weight class their coach chose. Athletes over their class are moved up or disqualified, athletes under it can stay or move down, and no-shows are marked. Only the result is kept, not the weight. No-shows and disqualified athletes are left out of the draw.
+
+**Officials** are accounts an admin adds on the **Accounts** page, with a starting password the official can change. They see **Competition day**, where they can run the weigh-in, record results and open court screens for closed competitions. They can't approve entries, draw bout lists, change settings or manage accounts.
+
+**Court screens** show one court on one day, for a TV or tablet at the mat: the bout on now with the blue and red athletes, the next three bouts and the latest results. They refresh every 15 seconds without JavaScript. Admins and officials can open them once a bout list exists, and coaches once it's published. They need a login, because they show athletes' names.
 
 ## Deploy it
 

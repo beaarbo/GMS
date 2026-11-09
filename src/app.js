@@ -17,6 +17,9 @@ const coachHomeRoutes = require('./routes/coachHome');
 const coachRoutes = require('./routes/coach');
 const accountRoutes = require('./routes/account');
 const adminRoutes = require('./routes/admin');
+const competitionDayRoutes = require('./routes/competitionDay');
+const officialRoutes = require('./routes/official');
+const screenRoutes = require('./routes/screens');
 const adminClubRoutes = require('./routes/adminClubs');
 const adminNewsRoutes = require('./routes/adminNews');
 const adminBackupRoutes = require('./routes/adminBackups');
@@ -282,7 +285,11 @@ function createApp({
   app.use('/admin/clubs', adminClubRoutes);
   app.use('/admin/news', adminNewsRoutes);
   app.use('/admin/backups', adminBackupRoutes);
+  // Weigh-in and results first: officials may use them, the rest of /admin they may not.
+  app.use('/admin', competitionDayRoutes.router);
   app.use('/admin', adminRoutes);
+  app.use('/official', officialRoutes);
+  app.use('/screens', screenRoutes);
 
   app.use((req, res) => {
     res.status(404).render('error', { title: 'Page not found', message: 'That page does not exist.' });

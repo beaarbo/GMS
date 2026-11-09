@@ -1,5 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const request = require('supertest');
 const Database = require('better-sqlite3');
 const { openDb, migrate, initialise } = require('../src/db');
@@ -17,6 +20,8 @@ const {
   createPasswordReset,
   saveEventDates,
   saveCompetitionLogo,
+  createCoachAccount,
+  createOfficialAccount,
 } = require('../src/services');
 const { divisionOptions, findWeightClass } = require('../src/divisions');
 const { sendDeadlineReminders } = require('../src/notifications');
@@ -629,7 +634,7 @@ test('schedule migration clears old draws and keeps competitions', () => {
 
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM bouts').get().n, 0);
   assert.equal(db.prepare('SELECT bout_courts FROM competitions WHERE id = ?').get(compId).bout_courts, 2);
-  assert.equal(db.pragma('user_version', { simple: true }), 7);
+  assert.equal(db.pragma('user_version', { simple: true }), 9);
 });
 
 test('admin creates a club, a coach applies, and only approval unlocks athlete registration', async () => {
@@ -794,7 +799,7 @@ test('migrating old club accounts keeps logins and fighters and approves each co
   const clubColumns = db.pragma('table_info(clubs)').map((c) => c.name);
   assert.ok(!clubColumns.includes('coach_name'));
   assert.equal(db.pragma('foreign_key_check').length, 0);
-  assert.equal(db.pragma('user_version', { simple: true }), 7);
+  assert.equal(db.pragma('user_version', { simple: true }), 9);
 });
 
 test('a fighter alone in a division has no bout number', async () => {
@@ -968,7 +973,7 @@ test('migration turns a day count into consecutive dates', () => {
   const { id } = db.prepare('SELECT id FROM competitions').get();
   assert.deepEqual(getEventDates(db, id), ['2030-01-30', '2030-01-31', '2030-02-01']);
   assert.ok(!db.pragma('table_info(competitions)').some((c) => c.name === 'bout_days'));
-  assert.equal(db.pragma('user_version', { simple: true }), 7);
+  assert.equal(db.pragma('user_version', { simple: true }), 9);
 });
 
 const tokenIn = (message) => message.text.match(/reset-password\/([0-9a-f]{64})/)[1];
@@ -1213,7 +1218,7 @@ test('the results migration removes declared weights and keeps registrations', (
   db.pragma('user_version = 4');
   migrate(db);
   assert.ok(!db.pragma('table_info(registrations)').some((c) => c.name === 'declared_weight_kg'));
-  assert.equal(db.pragma('user_version', { simple: true }), 7);
+  assert.equal(db.pragma('user_version', { simple: true }), 9);
 });
 
 test('athletes need the right document before they can enter', async () => {
@@ -1642,4 +1647,192 @@ test('CSV export neutralises spreadsheet formulas', async () => {
   const admin = await login(app, 'admin@test.test');
   const csv = await admin.get(`/admin/competitions/${compId}/export.csv`);
   assert.ok(csv.text.includes(`"'=HYPERLINK(""x"")"`));
+});
+
+// Officials, manual bracket changes and court screens.
+
+const boutsOf = (db) => db.prepare('SELECT * FROM bouts ORDER BY round, position').all();
+const regOf = (db, lastName) => db
+  .prepare('SELECT r.* FROM registrations r JOIN fighters f ON f.id = r.fighter_id WHERE f.last_name = ?')
+  .get(lastName);
+const divisionKeyOf = (db) => {
+  const b = db.prepare('SELECT gender, age_group_id, belt_group_id, weight_class_id FROM bouts LIMIT 1').get();
+  return [b.gender, b.age_group_id, b.belt_group_id, b.weight_class_id].join('-');
+};
+const firstRound = (db) => db.prepare('SELECT * FROM bouts WHERE round = 1 ORDER BY position').all()
+  .flatMap((b) => [b.blue_registration_id, b.red_registration_id]);
+
+test('officials run the weigh-in and results, and nothing else', async () => {
+  const { db, app } = await setup();
+  const { compId, admin } = await closedCompetitionWithFighters(db, app, [['T', 'Alpha'], ['D', 'Bravo']]);
+
+  const accounts = '/admin/accounts';
+  const short = await post(admin, `${accounts}/officials`, { full_name: 'Olive Official', email: 'olive@test.test', password: 'short' }, accounts);
+  assert.equal(short.status, 302);
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'official'").get().n, 0, 'a short password is refused');
+  await post(admin, `${accounts}/officials`, { full_name: 'Olive Official', email: 'olive@test.test', password: PASSWORD }, accounts);
+  assert.match((await admin.get(`${accounts}?type=official`)).text, /Olive Official[\s\S]*Official/);
+
+  const official = request.agent(app);
+  const token = await csrfFrom(official, '/login');
+  const signIn = await official.post('/login').type('form').send({ _csrf: token, email: 'olive@test.test', password: PASSWORD });
+  assert.equal(signIn.headers.location, '/official');
+  const home = await official.get('/official');
+  assert.match(home.text, /Competition day/);
+  assert.match(home.text, new RegExp(`/admin/competitions/${compId}/weigh-in`));
+
+  // Weigh-in and results are open to them.
+  assert.equal((await official.get(`/admin/competitions/${compId}/weigh-in`)).status, 200);
+  const alpha = regOf(db, 'Alpha');
+  await post(official, `/admin/competitions/${compId}/weigh-in/${alpha.id}`, { action: 'no_show' }, `/admin/competitions/${compId}/weigh-in`);
+  assert.equal(regOf(db, 'Alpha').weigh_status, 'no_show');
+  assert.equal((await official.get(`/admin/competitions/${compId}/results`)).status, 200);
+
+  // Everything else stays admin-only.
+  for (const page of ['/admin', `/admin/competitions/${compId}/bouts`, '/admin/accounts', '/admin/clubs', '/admin/backups', `/admin/competitions/${compId}/registrations`]) {
+    assert.equal((await official.get(page)).status, 403, page);
+  }
+  const clear = await post(official, `/admin/competitions/${compId}/results/clear-all`, {}, '/official');
+  assert.equal(clear.status, 403);
+  assert.equal((await official.get('/home')).headers.location, '/official');
+
+  // A competition still open for registration isn't theirs to touch.
+  const open = openCompetition(db, { name: 'Later' });
+  assert.equal((await official.get(`/admin/competitions/${open}/weigh-in`)).status, 404);
+
+  // Removing the account ends their access at once.
+  const { id: officialId } = db.prepare("SELECT id FROM users WHERE role = 'official'").get();
+  await post(admin, `${accounts}/officials/${officialId}/remove`, {}, accounts);
+  assert.equal((await official.get('/official')).headers.location, '/login');
+  const log = db.prepare("SELECT action FROM activity_log WHERE action LIKE 'account.official%' ORDER BY id").all().map((r) => r.action);
+  assert.deepEqual(log, ['account.official_added', 'account.official_removed']);
+  assert.ok(!db.prepare("SELECT summary FROM activity_log WHERE action = 'account.official_added'").get().summary.includes(PASSWORD));
+});
+
+test('admins swap, withdraw and reinstate athletes in one division', async () => {
+  const { db, app } = await setup();
+  const { compId, admin, club } = await closedCompetitionWithFighters(db, app, [
+    ['T', 'Alpha'], ['T', 'Bravo'], ['D', 'Charlie'], ['D', 'Delta'],
+  ]);
+  const bouts = `/admin/competitions/${compId}/bouts`;
+  await post(admin, `${bouts}/generate`, { courts: '1', start: '09:00', minutes: '10', rest: '0' }, bouts);
+  const key = divisionKeyOf(db);
+  assert.match((await admin.get(bouts)).text, /Change this division/);
+
+  // Swap: two athletes trade places and nothing else moves.
+  const before = firstRound(db);
+  const [a, b] = [before[0], before[2]];
+  await post(admin, `${bouts}/swap`, { division: key, first: String(a), second: String(b) }, bouts);
+  const swapped = firstRound(db);
+  assert.deepEqual(swapped, [b, before[1], a, before[3]]);
+  assert.ok(boutsOf(db).every((bout) => bout.is_bye || bout.bout_number), 'bouts are still numbered and timed');
+
+  // Withdraw with an opponent: the opponent gets a bye and the withdrawn athlete is kept out of later draws.
+  const opponent = swapped[1];
+  await post(admin, `${bouts}/withdraw`, { division: key, registration: String(b), note: 'Injured knee' }, bouts);
+  const afterWithdraw = db.prepare('SELECT * FROM bouts WHERE round = 1 ORDER BY position').all();
+  assert.equal(afterWithdraw[0].is_bye, 1);
+  assert.equal(afterWithdraw[0].red_registration_id, opponent);
+  assert.ok(db.prepare('SELECT withdrawn_at FROM registrations WHERE id = ?').get(b).withdrawn_at);
+  const second = db.prepare('SELECT * FROM bouts WHERE round = 2').get();
+  assert.equal(second.blue_registration_id, opponent, 'the bye moves them into the next round');
+  const name = db.prepare('SELECT f.last_name FROM registrations r JOIN fighters f ON f.id = r.fighter_id WHERE r.id = ?').get(b).last_name;
+  const coachPage = await club.get(`/club/competitions/${compId}`);
+  if (['Alpha', 'Bravo'].includes(name)) assert.match(coachPage.text, /Withdrawn by the organiser[\s\S]*Injured knee/);
+
+  // Withdrawing the athlete with the bye lays the division out again in seed order.
+  const reseed = await post(admin, `${bouts}/withdraw`, { division: key, registration: String(opponent) }, bouts);
+  assert.equal(reseed.status, 302);
+  const twoLeft = boutsOf(db);
+  assert.equal(twoLeft.length, 1, 'two athletes left means one bout');
+  assert.equal(twoLeft[0].is_bye, 0);
+
+  // A full redraw leaves both withdrawn athletes out.
+  await post(admin, `${bouts}/generate`, { courts: '1', start: '09:00', minutes: '10', rest: '0' }, bouts);
+  const drawn = boutsOf(db).flatMap((x) => [x.blue_registration_id, x.red_registration_id]).filter(Boolean);
+  assert.ok(!drawn.includes(b) && !drawn.includes(opponent));
+
+  // Reinstating puts them back by redrawing the division.
+  assert.match((await admin.get(bouts)).text, /Withdrawn athletes[\s\S]*Injured knee/);
+  await post(admin, `${bouts}/reinstate`, { registration: String(b) }, bouts);
+  assert.equal(db.prepare('SELECT withdrawn_at FROM registrations WHERE id = ?').get(b).withdrawn_at, null);
+  assert.ok(boutsOf(db).some((x) => x.blue_registration_id === b || x.red_registration_id === b));
+
+  // Once a division has a result, its bracket is locked.
+  const playable = db.prepare('SELECT id FROM bouts WHERE is_bye = 0 AND blue_registration_id IS NOT NULL AND red_registration_id IS NOT NULL').get();
+  await post(admin, `/admin/competitions/${compId}/results/${playable.id}`, { winner: 'blue' }, `/admin/competitions/${compId}/results`);
+  const locked = firstRound(db);
+  const [x, y] = locked.filter(Boolean);
+  await post(admin, `${bouts}/swap`, { division: key, first: String(x), second: String(y) }, bouts);
+  assert.deepEqual(firstRound(db), locked, 'no swap once results exist');
+  assert.match((await admin.get(bouts)).text, /This division has results, so its bracket can&#39;t change|This division has results, so its bracket can't change/);
+
+  const log = db.prepare("SELECT action FROM activity_log WHERE action IN ('bouts.swapped', 'bouts.withdrawn', 'bouts.reinstated') ORDER BY id").all().map((r) => r.action);
+  assert.deepEqual(log, ['bouts.swapped', 'bouts.withdrawn', 'bouts.withdrawn', 'bouts.reinstated']);
+});
+
+test('court screens show the bout on now, what is next and recent results', async () => {
+  const { db, app } = await setup();
+  const { compId, admin, club } = await closedCompetitionWithFighters(db, app, [
+    ['T', 'Alpha'], ['T', 'Bravo'], ['D', 'Charlie'], ['D', 'Delta'],
+  ]);
+  const bouts = `/admin/competitions/${compId}/bouts`;
+  await post(admin, `${bouts}/generate`, { courts: '1', start: '09:00', minutes: '10', rest: '0' }, bouts);
+
+  const index = await admin.get(`/screens/${compId}`);
+  assert.equal(index.status, 200);
+  assert.match(index.text, new RegExp(`href="/screens/${compId}/1/1">Open screen`));
+
+  const screen = await admin.get(`/screens/${compId}/1/1`);
+  assert.equal(screen.status, 200);
+  assert.match(screen.text, /<meta http-equiv="refresh" content="15">/);
+  assert.match(screen.text, /Now fighting[\s\S]*Bout 1 /);
+  assert.match(screen.text, /Up next[\s\S]*Winner of Bout 1/);
+  assert.match(screen.text, /No results yet/);
+  assert.doesNotMatch(screen.text, /class="nav"/, 'no site menu on a court screen');
+
+  // After a result, the next bout is on and the winner appears under recent results.
+  const first = db.prepare('SELECT * FROM bouts WHERE bout_number = 1').get();
+  await post(admin, `/admin/competitions/${compId}/results/${first.id}`, { winner: 'blue' }, `/admin/competitions/${compId}/results`);
+  const winner = db.prepare('SELECT f.last_name, f.first_name FROM registrations r JOIN fighters f ON f.id = r.fighter_id WHERE r.id = ?').get(first.blue_registration_id);
+  const later = (await admin.get(`/screens/${compId}/1/1`)).text;
+  assert.match(later, /Now fighting[\s\S]*Bout 2 /);
+  assert.match(later, new RegExp(`Recent results[\\s\\S]*${winner.last_name} ${winner.first_name}</strong> won`));
+
+  // Coaches only once published, visitors never, and unknown courts don't exist.
+  assert.equal((await club.get(`/screens/${compId}/1/1`)).status, 404);
+  await post(admin, `${bouts}/publish`, {}, bouts);
+  assert.equal((await club.get(`/screens/${compId}/1/1`)).status, 200);
+  assert.equal((await request(app).get(`/screens/${compId}/1/1`)).headers.location, '/login');
+  assert.equal((await admin.get(`/screens/${compId}/1/9`)).status, 404);
+});
+
+test('rebuilding the users table for officials keeps every linked row', async () => {
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'gms-migrate-')), 'gms.sqlite');
+  let db = openDb(file);
+  const clubId = createClub(db, { name: 'Tigers', city: 'City' });
+  const coachId = await createCoachAccount(db, { full_name: 'Coach', phone: '1', email: 'c@test.test', password: PASSWORD });
+  applyToClub(db, coachId, clubId);
+  db.prepare('INSERT INTO password_resets (user_id, token_hash, expires_at, created_at) VALUES (?, ?, ?, ?)').run(coachId, 'h', 1, 1);
+  db.prepare("INSERT INTO news_posts (title, body, author_id) VALUES ('T', 'B', ?)").run(coachId);
+  // Put the users table back as it was before officials existed.
+  db.pragma('foreign_keys = OFF');
+  db.exec(`
+    CREATE TABLE users_old (id INTEGER PRIMARY KEY, email TEXT NOT NULL COLLATE NOCASE UNIQUE, password_hash TEXT NOT NULL,
+      role TEXT NOT NULL CHECK (role IN ('admin', 'coach')), full_name TEXT NOT NULL DEFAULT '', phone TEXT NOT NULL DEFAULT '',
+      club_id INTEGER REFERENCES clubs(id) ON DELETE SET NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')));
+    INSERT INTO users_old SELECT * FROM users; DROP TABLE users; ALTER TABLE users_old RENAME TO users;
+  `);
+  db.pragma('foreign_keys = ON');
+  db.pragma('user_version = 7');
+  db.close();
+
+  db = openDb(file);
+  assert.equal(db.pragma('user_version', { simple: true }), 9);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM club_applications').get().n, 1);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM password_resets').get().n, 1);
+  assert.equal(db.prepare('SELECT author_id FROM news_posts').get().author_id, coachId);
+  assert.ok(await createOfficialAccount(db, { full_name: 'O', email: 'o@test.test', password: PASSWORD }));
+  assert.deepEqual(db.pragma('foreign_key_check'), []);
+  db.close();
 });

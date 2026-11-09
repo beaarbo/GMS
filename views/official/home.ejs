@@ -1,0 +1,38 @@
+<%- include('../partials/top') %>
+<div class="page-head">
+  <div>
+    <h1>Competition day</h1>
+    <p class="sub">Run the weigh-in, record results and open the court screens.</p>
+  </div>
+</div>
+
+<% if (competitions.length === 0) { %>
+  <div class="card"><p class="empty">No competitions are ready yet. They appear here once registration closes.</p></div>
+<% } else { %>
+  <div class="card-grid">
+    <% competitions.forEach((c) => { %>
+      <article class="card">
+        <div class="title-row">
+          <%- include('../partials/comp_logo', { competition: c, size: 'md' }) %>
+          <span class="badge closed">Registration closed</span>
+        </div>
+        <h3 class="card-title"><%= c.name %></h3>
+        <p class="sub"><%= eventDatesText(c) %> · <%= c.venue %></p>
+        <p class="stats card-stats">
+          <span>Weighed <strong><%= c.weighIn.total - c.weighIn.waiting %>/<%= c.weighIn.total %></strong></span>
+          <% if (c.hasBouts) { %><span>Results <strong><%= c.bouts.done %>/<%= c.bouts.total %></strong></span><% } %>
+        </p>
+        <div class="actions">
+          <a class="btn<%= c.hasBouts ? ' secondary' : '' %>" href="/admin/competitions/<%= c.id %>/weigh-in">Weigh-in</a>
+          <% if (c.hasBouts) { %>
+            <a class="btn" href="/admin/competitions/<%= c.id %>/results">Record results</a>
+            <a class="btn secondary" href="/screens/<%= c.id %>">Court screens</a>
+          <% } else { %>
+            <span class="hint">Results open once the organiser draws the bout list.</span>
+          <% } %>
+        </div>
+      </article>
+    <% }) %>
+  </div>
+<% } %>
+<%- include('../partials/bottom') %>

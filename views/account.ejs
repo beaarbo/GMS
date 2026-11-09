@@ -2,7 +2,7 @@
 <div class="page-head">
   <div>
     <h1>My account</h1>
-    <p class="sub"><%= account.role === 'admin' ? 'Admin account' : 'Coach account' %> · <%= account.email %></p>
+    <p class="sub"><%= { admin: 'Admin account', official: 'Official account', coach: 'Coach account' }[account.role] %> · <%= account.email %></p>
   </div>
 </div>
 

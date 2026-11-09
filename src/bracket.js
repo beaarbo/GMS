@@ -72,8 +72,27 @@ function nextPowerOfTwo(n) {
 function buildBracket(entries, rng = Math.random) {
   if (entries.length === 0) return [];
   if (entries.length === 1) return [[{ blue: { ...entries[0], seed: 1 }, red: null, isBye: true }]];
+  return roundsFromSlots(drawSlots(entries, seedTemplate(nextPowerOfTwo(entries.length)), entries.length, rng));
+}
 
-  const slots = drawSlots(entries, seedTemplate(nextPowerOfTwo(entries.length)), entries.length, rng);
+// First-round slots in seed order, with no club separation and no randomness:
+// used when an admin's change means a division has to be laid out again.
+function seededSlots(entries) {
+  if (entries.length <= 1) return entries.map((e) => ({ ...e, seed: 1 }));
+  return seedTemplate(nextPowerOfTwo(entries.length)).map((seed) => (seed <= entries.length ? { ...entries[seed - 1], seed } : null));
+}
+
+// A first-round pair with nobody in it can't be shown or played.
+function slotsAreValid(slots) {
+  if (slots.length === 1) return Boolean(slots[0]);
+  if (slots.length < 2 || (slots.length & (slots.length - 1)) !== 0) return false;
+  for (let i = 0; i < slots.length; i += 2) if (!slots[i] && !slots[i + 1]) return false;
+  return true;
+}
+
+// Builds every round from the first-round slots: pairs in order, nulls are byes.
+function roundsFromSlots(slots) {
+  if (slots.length === 1) return [[{ blue: slots[0], red: null, isBye: true }]];
   const rounds = [];
 
   let current = [];
@@ -332,6 +351,9 @@ function clubAthleteSummary(divisions, clubId) {
 
 module.exports = {
   buildBracket,
+  roundsFromSlots,
+  seededSlots,
+  slotsAreValid,
   seedTemplate,
   assignCourts,
   scheduleCourt,

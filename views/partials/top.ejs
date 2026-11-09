@@ -18,6 +18,7 @@
         if (href === '/') return currentPath === '/' || currentPath.startsWith('/competitions');
         if (href === '/news') return currentPath === '/news' || currentPath.startsWith('/news/') || currentPath.startsWith('/admin/news');
         if (href === '/admin') return currentPath === '/admin' || currentPath.startsWith('/admin/competitions') || currentPath.startsWith('/admin/fighters');
+        if (href === '/official') return currentPath === '/official' || currentPath.startsWith('/admin/competitions') || currentPath.startsWith('/screens');
         return currentPath === href || currentPath.startsWith(`${href}/`);
       };
       const link = (href, label) => `<a href="${href}"${current(href) ? ' aria-current="page"' : ''}>${label}</a>`;
@@ -26,6 +27,8 @@
       <%# Each role's own pages first, then the pages everyone shares, then admin tools. %>
       <% if (user && user.role === 'admin') { %>
         <%- link('/admin', 'Dashboard') %>
+      <% } else if (user && user.role === 'official') { %>
+        <%- link('/official', 'Competition day') %>
       <% } else if (user) { %>
         <%- link('/home', 'Home') %>
         <%- user.club_id ? link('/club', 'Club dashboard') : link('/coach', 'Join a club') %>

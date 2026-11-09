@@ -72,6 +72,7 @@
                 <% if (r.weigh_status === 'passed') { %><span class="badge approved"><%= r.entered_weight_class_id ? 'Moved at weigh-in' : 'Made weight' %></span>
                 <% } else if (r.weigh_status === 'no_show') { %><span class="badge closed">No-show at weigh-in</span>
                 <% } else if (r.weigh_status === 'disqualified') { %><span class="badge rejected">Disqualified at weigh-in</span><% } %>
+                <% if (r.withdrawn_at) { %><span class="badge closed">Withdrawn by the organiser</span><% if (r.withdrawal_note) { %><div class="hint"><%= r.withdrawal_note %></div><% } %><% } %>
                 <% if (r.review_note) { %><div class="hint"><%= r.review_note %></div><% } %>
               </td>
               <td>

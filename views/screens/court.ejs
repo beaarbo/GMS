@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <%# Refreshes itself, so it works on any screen with no JavaScript. %>
+  <meta http-equiv="refresh" content="<%= refreshSeconds %>">
+  <title>Court <%= court %> · <%= competition.name %></title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="screen">
+<% const side = (bout, color) => { const f = bout[color]; return f ? { name: f.name, club: f.club } : { name: bout[`${color}Placeholder`] || 'To be decided', club: '' }; }; %>
+<header class="screen-head">
+  <div>
+    <p class="screen-court">Court <%= court %></p>
+    <p class="screen-sub"><%= competition.name %> · <%= dayLabel %></p>
+  </div>
+  <div class="screen-sub screen-right">
+    <%= done %> of <%= total %> bouts done<br>Updated <%= updatedAt %>
+  </div>
+</header>
+
+<main class="screen-main">
+  <section class="screen-now">
+    <h1 class="screen-label">Now fighting</h1>
+    <% if (now) { const blue = side(now, 'blue'); const red = side(now, 'red'); %>
+      <p class="screen-bout">Bout <%= now.number %> · <%= now.time %> · <%= now.title %></p>
+      <div class="screen-versus">
+        <div class="screen-corner blue"><span class="screen-corner-label">Blue</span><strong><%= blue.name %></strong><span><%= blue.club %></span></div>
+        <div class="screen-vs">vs</div>
+        <div class="screen-corner red"><span class="screen-corner-label">Red</span><strong><%= red.name %></strong><span><%= red.club %></span></div>
+      </div>
+    <% } else if (next.length > 0) { %>
+      <p class="screen-empty">Waiting for earlier results.</p>
+    <% } else { %>
+      <p class="screen-empty">All bouts on this court are finished.</p>
+    <% } %>
+  </section>
+
+  <div class="screen-columns">
+    <section>
+      <h2 class="screen-label">Up next</h2>
+      <% if (next.length === 0) { %><p class="screen-empty">Nothing else on this court.</p><% } %>
+      <ol class="screen-list">
+        <% next.forEach((b) => { const blue = side(b, 'blue'); const red = side(b, 'red'); %>
+          <li>
+            <span class="screen-number"><%= b.number %></span>
+            <div><strong><span class="blue-text"><%= blue.name %></span> vs <span class="red-text"><%= red.name %></span></strong><br><span class="screen-sub"><%= b.time %> · <%= b.title %></span></div>
+          </li>
+        <% }) %>
+      </ol>
+    </section>
+    <section>
+      <h2 class="screen-label">Recent results</h2>
+      <% if (recent.length === 0) { %><p class="screen-empty">No results yet.</p><% } %>
+      <ol class="screen-list">
+        <% recent.forEach((b) => { %>
+          <li>
+            <span class="screen-number"><%= b.number %></span>
+            <div><strong><%= b.winner.name %></strong> won<br><span class="screen-sub"><%= b.winner.club %> · <%= b.title %></span></div>
+          </li>
+        <% }) %>
+      </ol>
+    </section>
+  </div>
+</main>
+</body>
+</html>

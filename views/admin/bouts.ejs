@@ -126,8 +126,37 @@
   </section>
 <% } %>
 
-<% divisions.forEach((division) => { %>
+<% if (withdrawn.length > 0) { %>
   <section class="card">
+    <h2>Withdrawn athletes</h2>
+    <p class="sub">Reinstating an athlete redraws their division to put them back in. That only works while the division has no results.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Athlete</th><th>Reason</th><th></th></tr></thead>
+        <tbody>
+          <% withdrawn.forEach((w) => { %>
+            <tr>
+              <td><strong><%= w.last_name %>, <%= w.first_name %></strong><br><span class="hint"><%= w.club_name %></span></td>
+              <td><%= w.withdrawal_note || '–' %></td>
+              <td>
+                <form method="post" action="/admin/competitions/<%= competition.id %>/bouts/reinstate" data-confirm="Reinstate <%= w.first_name %> <%= w.last_name %>? Their division will be redrawn.">
+                  <input type="hidden" name="_csrf" value="<%= csrf %>">
+                  <input type="hidden" name="registration" value="<%= w.id %>">
+                  <button class="btn secondary small" type="submit">Reinstate</button>
+                </form>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+<% } %>
+
+<% divisions.forEach((division) => { %>
+  <% const athletes = division.bouts.filter((b) => b.round === 1).flatMap((b) => [b.blue, b.red]).filter(Boolean); %>
+  <% const divisionHasResults = division.bouts.some((b) => b.winner); %>
+  <section class="card" id="division-<%= division.key %>">
     <div class="division-head">
       <h2><%= division.title %></h2>
       <p class="stats">
@@ -138,6 +167,45 @@
       </p>
     </div>
     <%- include('../partials/bracket', { division, highlightClubId: null }) %>
+    <details class="division-edit">
+      <summary>Change this division</summary>
+      <% if (divisionHasResults) { %>
+        <p class="hint">This division has results, so its bracket can't change. Undo its results on the Results page first.</p>
+      <% } else { %>
+        <% const athleteOptions = (selected = 0) => athletes.map((a, i) => `<option value="${a.registrationId}"${i === selected ? ' selected' : ''}>${a.name.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])} (${String(a.club).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])})</option>`).join(''); %>
+        <% if (athletes.length >= 2) { %>
+          <form class="division-edit-row" method="post" action="/admin/competitions/<%= competition.id %>/bouts/swap">
+            <input type="hidden" name="_csrf" value="<%= csrf %>">
+            <input type="hidden" name="division" value="<%= division.key %>">
+            <label>Swap places
+              <select name="first" required><%- athleteOptions() %></select>
+            </label>
+            <label>with
+              <select name="second" required><%- athleteOptions(1) %></select>
+            </label>
+            <button class="btn secondary small" type="submit">Swap</button>
+          </form>
+        <% } %>
+        <form class="division-edit-row" method="post" action="/admin/competitions/<%= competition.id %>/bouts/withdraw" data-confirm="Withdraw this athlete from the bout list?">
+          <input type="hidden" name="_csrf" value="<%= csrf %>">
+          <input type="hidden" name="division" value="<%= division.key %>">
+          <label>Withdraw
+            <select name="registration" required><%- athleteOptions() %></select>
+          </label>
+          <label>Reason <span class="hint">(optional)</span>
+            <input name="note" maxlength="200" placeholder="For example: injured">
+          </label>
+          <button class="btn danger small" type="submit">Withdraw</button>
+        </form>
+        <form class="division-edit-row" method="post" action="/admin/competitions/<%= competition.id %>/bouts/redraw-division" data-confirm="Redraw this division? Its bracket will be replaced with a new random draw.">
+          <input type="hidden" name="_csrf" value="<%= csrf %>">
+          <input type="hidden" name="division" value="<%= division.key %>">
+          <button class="btn secondary small" type="submit">Redraw this division</button>
+          <span class="hint">A new random draw for this division only. Club-mates are kept apart as usual.</span>
+        </form>
+        <% if (competition.bouts_published_at) { %><p class="hint">The bout list is published, so coaches see changes straight away.</p><% } %>
+      <% } %>
+    </details>
   </section>
 <% }) %>
 <%- include('../partials/bottom') %>

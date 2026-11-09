@@ -1,6 +1,7 @@
 // The coach's main page: upcoming competitions first, then news.
 const express = require('express');
 const { today, isRegistrationOpen, listNews } = require('../services');
+const { homeFor } = require('./helpers');
 
 const router = express.Router();
 
@@ -9,7 +10,7 @@ router.get('/', (req, res) => {
     req.flash('error', 'Please log in to continue.');
     return res.redirect('/login');
   }
-  if (req.user.role === 'admin') return res.redirect('/admin');
+  if (req.user.role !== 'coach') return res.redirect(homeFor(req.user));
 
   const { db } = req.app.locals;
   const clubId = req.user.club_id;

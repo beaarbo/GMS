@@ -11,7 +11,7 @@ const {
   parseWeightLimits,
   formatDay,
 } = require('./divisions');
-const { buildBracket, assignCourts, scheduleCourt, formatTime } = require('./bracket');
+const { buildBracket, roundsFromSlots, seededSlots, slotsAreValid, assignCourts, scheduleCourt, formatTime } = require('./bracket');
 const { logActivity } = require('./activity');
 const { documentLabel, documentTypeFor } = require('./documents');
 
@@ -451,7 +451,7 @@ function applySchedule(db, competitionId) {
 }
 
 // Athletes who didn't turn up or were disqualified at weigh-in aren't drawn.
-const DRAWN = "r.status = 'approved' AND (r.weigh_status IS NULL OR r.weigh_status = 'passed')";
+const DRAWN = "r.status = 'approved' AND (r.weigh_status IS NULL OR r.weigh_status = 'passed') AND r.withdrawn_at IS NULL";
 
 // Approved athletes and their weigh-in result, in division order.
 function listWeighIns(db, competitionId) {
@@ -548,6 +548,38 @@ function recordWeighIn(db, competition, registrationId, { action, weightKg, weig
   return { ok: false, error: 'Unknown weigh-in action.' };
 }
 
+// Writes one division's rounds as bouts. `division` has its gender and group ids.
+function writeDivisionBouts(db, competitionId, division, rounds) {
+  const insert = db.prepare(
+    `INSERT INTO bouts (competition_id, gender, age_group_id, belt_group_id, weight_class_id, round, total_rounds,
+       position, blue_registration_id, red_registration_id, is_bye, blue_seed, red_seed)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+  rounds.forEach((bouts, roundIndex) => {
+    bouts.forEach((bout, position) => {
+      insert.run(
+        competitionId, division.gender, division.age_group_id, division.belt_group_id, division.weight_class_id,
+        roundIndex + 1, rounds.length, position,
+        bout.blue ? bout.blue.registrationId : null,
+        bout.red ? bout.red.registrationId : null,
+        bout.isBye ? 1 : 0,
+        bout.blue ? bout.blue.seed : null,
+        bout.red ? bout.red.seed : null
+      );
+    });
+  });
+}
+
+const DIVISION_WHERE = 'competition_id = ? AND gender = ? AND age_group_id = ? AND belt_group_id = ? AND weight_class_id = ?';
+
+function divisionFromKey(key) {
+  const match = /^([MF])-(\d+)-(\d+)-(\d+)$/.exec(String(key || ''));
+  if (!match) return null;
+  return { gender: match[1], age_group_id: Number(match[2]), belt_group_id: Number(match[3]), weight_class_id: Number(match[4]) };
+}
+
+const divisionIds = (competitionId, d) => [competitionId, d.gender, d.age_group_id, d.belt_group_id, d.weight_class_id];
+
 // Draws every division from the approved registrations, replacing any earlier
 // draw. Returns the number of fighters drawn.
 function generateBoutList(db, competitionId, rng = secureRandom) {
@@ -561,41 +593,133 @@ function generateBoutList(db, competitionId, rng = secureRandom) {
     divisions.set(key, [...(divisions.get(key) || []), r]);
   });
 
-  const insert = db.prepare(
-    `INSERT INTO bouts (competition_id, gender, age_group_id, belt_group_id, weight_class_id, round, total_rounds,
-       position, blue_registration_id, red_registration_id, is_bye, blue_seed, red_seed)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  );
-
   db.transaction(() => {
     deleteBoutList(db, competitionId);
     divisions.forEach((registrations) => {
-      const [first] = registrations;
       const entries = registrations.map((r) => ({ registrationId: r.id, clubId: r.club_id }));
-      const rounds = buildBracket(entries, rng);
-      rounds.forEach((bouts, roundIndex) => {
-        bouts.forEach((bout, position) => {
-          insert.run(
-            competitionId,
-            first.gender,
-            first.age_group_id,
-            first.belt_group_id,
-            first.weight_class_id,
-            roundIndex + 1,
-            rounds.length,
-            position,
-            bout.blue ? bout.blue.registrationId : null,
-            bout.red ? bout.red.registrationId : null,
-            bout.isBye ? 1 : 0,
-            bout.blue ? bout.blue.seed : null,
-            bout.red ? bout.red.seed : null
-          );
-        });
-      });
+      writeDivisionBouts(db, competitionId, registrations[0], buildBracket(entries, rng));
     });
     applySchedule(db, competitionId);
   })();
   return approved.length;
+}
+
+// Checks a manual change to one division can go ahead. Returns the division or an error.
+function editableDivision(db, competition, key) {
+  const division = divisionFromKey(key);
+  if (!division) return { ok: false, error: 'Unknown division.' };
+  const ids = divisionIds(competition.id, division);
+  if (!db.prepare(`SELECT 1 FROM bouts WHERE ${DIVISION_WHERE} LIMIT 1`).get(...ids)) return { ok: false, error: 'That division has no bouts.' };
+  if (db.prepare(`SELECT 1 FROM bouts WHERE ${DIVISION_WHERE} AND winner_registration_id IS NOT NULL LIMIT 1`).get(...ids)) {
+    return { ok: false, error: 'This division has results. Undo them before changing its bracket.' };
+  }
+  return { ok: true, division, ids };
+}
+
+// The division's first-round slots, top to bottom, as { registrationId, clubId, seed } or null.
+function firstRoundSlots(db, ids) {
+  const rows = db.prepare(`SELECT * FROM bouts WHERE ${DIVISION_WHERE} AND round = 1 ORDER BY position`).all(...ids);
+  const clubOf = (regId) => (regId ? db.prepare('SELECT club_id FROM registrations WHERE id = ?').get(regId).club_id : null);
+  const slot = (regId, seed) => (regId ? { registrationId: regId, clubId: clubOf(regId), seed } : null);
+  if (rows.length === 1 && rows[0].is_bye && rows[0].total_rounds === 1) return [slot(rows[0].blue_registration_id || rows[0].red_registration_id, 1)];
+  return rows.flatMap((r) => [slot(r.blue_registration_id, r.blue_seed), slot(r.red_registration_id, r.red_seed)]);
+}
+
+function replaceDivision(db, competitionId, division, ids, slots) {
+  db.transaction(() => {
+    db.prepare(`DELETE FROM bouts WHERE ${DIVISION_WHERE}`).run(...ids);
+    const real = slots.filter(Boolean);
+    if (real.length > 0) writeDivisionBouts(db, competitionId, division, roundsFromSlots(slotsAreValid(slots) ? slots : seededSlots(real)));
+    applySchedule(db, competitionId);
+  })();
+}
+
+// Swaps two athletes' places in a division's first round. Seeds belong to the
+// places, so each takes the other's seed.
+function swapAthletes(db, competition, key, registrationA, registrationB) {
+  const check = editableDivision(db, competition, key);
+  if (!check.ok) return check;
+  const slots = firstRoundSlots(db, check.ids);
+  const a = slots.findIndex((s) => s && s.registrationId === Number(registrationA));
+  const b = slots.findIndex((s) => s && s.registrationId === Number(registrationB));
+  if (a === -1 || b === -1 || a === b) return { ok: false, error: 'Choose two different athletes from this division.' };
+  [slots[a], slots[b]] = [{ ...slots[b], seed: slots[a].seed }, { ...slots[a], seed: slots[b].seed }];
+  replaceDivision(db, competition.id, check.division, check.ids, slots);
+  return { ok: true };
+}
+
+// Takes an athlete out of a drawn division. Their first opponent gets a bye. If
+// they had the bye themselves, the division is laid out again in seed order.
+function withdrawAthlete(db, competition, key, registrationId, note = '') {
+  const check = editableDivision(db, competition, key);
+  if (!check.ok) return check;
+  const slots = firstRoundSlots(db, check.ids);
+  const index = slots.findIndex((s) => s && s.registrationId === Number(registrationId));
+  if (index === -1) return { ok: false, error: 'That athlete is not in this division.' };
+  slots[index] = null;
+  const reseeded = !slotsAreValid(slots);
+  db.transaction(() => {
+    db.prepare("UPDATE registrations SET withdrawn_at = datetime('now'), withdrawal_note = ? WHERE id = ?").run(note, Number(registrationId));
+    replaceDivision(db, competition.id, check.division, check.ids, reseeded ? seededSlots(slots.filter(Boolean).sort((x, y) => x.seed - y.seed)) : slots);
+  })();
+  return { ok: true, reseeded };
+}
+
+// Puts a withdrawn athlete back and redraws their division to include them,
+// which only works while that division has no results.
+function reinstateAthlete(db, competition, registrationId) {
+  const registration = db
+    .prepare(
+      `SELECT r.*, f.gender FROM registrations r JOIN fighters f ON f.id = r.fighter_id
+       WHERE r.id = ? AND r.competition_id = ? AND r.withdrawn_at IS NOT NULL`
+    )
+    .get(Number(registrationId), competition.id);
+  if (!registration) return { ok: false, error: 'That athlete is not withdrawn.' };
+  const key = divisionKey(registration);
+  const ids = divisionIds(competition.id, divisionFromKey(key));
+  if (db.prepare(`SELECT 1 FROM bouts WHERE ${DIVISION_WHERE} AND winner_registration_id IS NOT NULL LIMIT 1`).get(...ids)) {
+    return { ok: false, error: 'Their division has results, so they can\'t be put back in. Undo its results first.' };
+  }
+  let redraw;
+  db.transaction(() => {
+    db.prepare("UPDATE registrations SET withdrawn_at = NULL, withdrawal_note = '' WHERE id = ?").run(registration.id);
+    redraw = redrawDivision(db, competition, key);
+  })();
+  return { ok: true, key, athletes: redraw.athletes };
+}
+
+// Draws one division again from its current entries, leaving the others alone.
+function redrawDivision(db, competition, key, rng = secureRandom) {
+  const division = divisionFromKey(key);
+  if (!division) return { ok: false, error: 'Unknown division.' };
+  const ids = divisionIds(competition.id, division);
+  if (db.prepare(`SELECT 1 FROM bouts WHERE ${DIVISION_WHERE} AND winner_registration_id IS NOT NULL LIMIT 1`).get(...ids)) {
+    return { ok: false, error: 'This division has results. Undo them before redrawing it.' };
+  }
+  const entries = db
+    .prepare(
+      `SELECT r.id AS registrationId, r.club_id AS clubId FROM registrations r JOIN fighters f ON f.id = r.fighter_id
+       WHERE r.competition_id = ? AND f.gender = ? AND r.age_group_id = ? AND r.belt_group_id = ? AND r.weight_class_id = ? AND ${DRAWN}`
+    )
+    .all(...ids);
+  db.transaction(() => {
+    db.prepare(`DELETE FROM bouts WHERE ${DIVISION_WHERE}`).run(...ids);
+    if (entries.length > 0) writeDivisionBouts(db, competition.id, division, buildBracket(entries, rng));
+    applySchedule(db, competition.id);
+  })();
+  return { ok: true, athletes: entries.length };
+}
+
+// Withdrawn athletes per division key, for the bout list page.
+function listWithdrawn(db, competitionId) {
+  return db
+    .prepare(
+      `SELECT r.id, r.withdrawal_note, r.age_group_id, r.belt_group_id, r.weight_class_id, f.gender, f.first_name, f.last_name, c.name AS club_name
+       FROM registrations r JOIN fighters f ON f.id = r.fighter_id JOIN clubs c ON c.id = r.club_id
+       WHERE r.competition_id = ? AND r.withdrawn_at IS NOT NULL ORDER BY f.last_name, f.first_name`
+    )
+    .all(competitionId)
+    .map((r) => ({ ...r, key: divisionKey(r) }));
 }
 
 function ageLabel(row, competition) {
@@ -812,6 +936,26 @@ async function createCoachAccount(db, { full_name, phone, email, password }) {
   );
 }
 
+// Officials run the weigh-in, record results and use court screens. An admin
+// creates them with a starting password, which they can change on My account.
+async function createOfficialAccount(db, { full_name, email, password }) {
+  const hash = await bcrypt.hash(password, 12);
+  return Number(
+    db
+      .prepare("INSERT INTO users (email, password_hash, role, full_name) VALUES (?, ?, 'official', ?)")
+      .run(email, hash, full_name).lastInsertRowid
+  );
+}
+
+// Removes an official's account. Any open session ends with it, because each
+// request looks the user up afresh. Activity log entries keep their name.
+function removeOfficial(db, userId) {
+  const official = db.prepare("SELECT id, full_name, email FROM users WHERE id = ? AND role = 'official'").get(userId);
+  if (!official) return null;
+  db.prepare('DELETE FROM users WHERE id = ?').run(official.id);
+  return official;
+}
+
 // Returns { ok, error? }. A coach belongs to one club and has one open application.
 // A coach already in a club can apply to another; they move only once approved.
 function applyToClub(db, userId, clubId) {
@@ -900,6 +1044,11 @@ module.exports = {
   hasBoutList,
   deleteBoutList,
   generateBoutList,
+  swapAthletes,
+  withdrawAthlete,
+  reinstateAthlete,
+  redrawDivision,
+  listWithdrawn,
   listWeighIns,
   weighInCounts,
   classesForRegistration,
@@ -920,6 +1069,8 @@ module.exports = {
   ensureAdmin,
   createClub,
   createCoachAccount,
+  createOfficialAccount,
+  removeOfficial,
   applyToClub,
   approveApplication,
   rejectApplication,

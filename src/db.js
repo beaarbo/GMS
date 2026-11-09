@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY,
   email TEXT NOT NULL COLLATE NOCASE UNIQUE,
   password_hash TEXT NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('admin', 'coach')),
+  role TEXT NOT NULL CHECK (role IN ('admin', 'coach', 'official')),
   full_name TEXT NOT NULL DEFAULT '',
   phone TEXT NOT NULL DEFAULT '',
   club_id INTEGER REFERENCES clubs(id) ON DELETE SET NULL,
@@ -147,6 +147,9 @@ CREATE TABLE IF NOT EXISTS registrations (
   weighed_at TEXT,
   -- The class the coach entered, kept when the athlete is moved at weigh-in.
   entered_weight_class_id INTEGER REFERENCES weight_classes(id),
+  -- Taken out of a drawn bout list by an admin, for example after an injury.
+  withdrawn_at TEXT,
+  withdrawal_note TEXT NOT NULL DEFAULT '',
   UNIQUE (competition_id, fighter_id)
 );
 CREATE INDEX IF NOT EXISTS idx_registrations_club ON registrations(club_id);
@@ -376,6 +379,50 @@ function migrateWeighIn(db) {
   })();
 }
 
+// Version 8: an "official" role. SQLite can't change a CHECK constraint, so the
+// users table is rebuilt the way SQLite documents: with foreign keys off, so the
+// tables pointing at users (applications, resets, news) keep their rows.
+function migrateOfficialRole(db) {
+  const { sql } = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users'").get();
+  if (!sql.includes("'official'")) {
+    db.pragma('foreign_keys = OFF');
+    try {
+      db.transaction(() => {
+        db.exec(`
+          CREATE TABLE users_new (
+            id INTEGER PRIMARY KEY,
+            email TEXT NOT NULL COLLATE NOCASE UNIQUE,
+            password_hash TEXT NOT NULL,
+            role TEXT NOT NULL CHECK (role IN ('admin', 'coach', 'official')),
+            full_name TEXT NOT NULL DEFAULT '',
+            phone TEXT NOT NULL DEFAULT '',
+            club_id INTEGER REFERENCES clubs(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+          );
+          INSERT INTO users_new (id, email, password_hash, role, full_name, phone, club_id, created_at)
+            SELECT id, email, password_hash, role, full_name, phone, club_id, created_at FROM users;
+          DROP TABLE users;
+          ALTER TABLE users_new RENAME TO users;
+        `);
+        const broken = db.pragma('foreign_key_check');
+        if (broken.length > 0) throw new Error(`Rebuilding users broke ${broken.length} foreign key(s).`);
+      })();
+    } finally {
+      db.pragma('foreign_keys = ON');
+    }
+  }
+  db.pragma('user_version = 8');
+}
+
+// Version 9: athletes can be withdrawn from a drawn bout list. Nobody is yet.
+function migrateWithdrawals(db) {
+  db.transaction(() => {
+    addColumnIfMissing(db, 'registrations', 'withdrawn_at', 'TEXT');
+    addColumnIfMissing(db, 'registrations', 'withdrawal_note', "TEXT NOT NULL DEFAULT ''");
+    db.pragma('user_version = 9');
+  })();
+}
+
 function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 1) migrateBelts(db);
   if (db.pragma('user_version', { simple: true }) < 2) migrateSchedule(db);
@@ -384,6 +431,8 @@ function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 5) migrateResults(db);
   if (db.pragma('user_version', { simple: true }) < 6) migrateRest(db);
   if (db.pragma('user_version', { simple: true }) < 7) migrateWeighIn(db);
+  if (db.pragma('user_version', { simple: true }) < 8) migrateOfficialRole(db);
+  if (db.pragma('user_version', { simple: true }) < 9) migrateWithdrawals(db);
 }
 
 // Safe on old databases: only tables that don't exist yet are created.

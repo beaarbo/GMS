@@ -7,13 +7,15 @@ function toArray(value) {
   return Array.isArray(value) ? value : [value];
 }
 
+// Takes one role or a list, for example requireRole(['admin', 'official']).
 function requireRole(role) {
+  const allowed = Array.isArray(role) ? role : [role];
   return (req, res, next) => {
     if (!req.user) {
       req.flash('error', 'Please log in to continue.');
       return res.redirect('/login');
     }
-    if (req.user.role !== role) {
+    if (!allowed.includes(req.user.role)) {
       return res.status(403).render('error', {
         title: 'Not allowed',
         message: 'Your account does not have access to this page.',
@@ -35,6 +37,7 @@ function passwordError(password) {
 
 function homeFor(user) {
   if (user.role === 'admin') return '/admin';
+  if (user.role === 'official') return '/official';
   return user.club_id ? '/home' : '/coach';
 }
 

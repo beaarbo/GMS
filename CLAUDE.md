@@ -34,7 +34,7 @@ Express with server-rendered EJS and SQLite (better-sqlite3).
 - `src/app.js`: app factory (`createApp`), security headers, sessions, CSRF.
 - `src/backups.js`: database snapshots with SQLite's online backup, checked before they're kept. `server.js` makes one a day (and restores one named in `RESTORE_BACKUP` before opening the database), and `createApp` takes `backups: { dir, keep }` for the admin Backups page.
 - `src/athleteImport.js`, `src/news.js`: pure helpers for the spreadsheet athlete import and for news posts (form checks, plain-text body to paragraphs and links).
-- `src/routes/`: `public` (home, competitions, news), `auth`, `coachHome` (`/home`, where approved coaches land: upcoming competitions, then news), `coach` (join a club), `club` (approved coaches: fighters, import, entries, club icon), `admin`, `adminClubs` (clubs, coach approvals), `adminNews` and `adminBackups`.
+- `src/routes/`: `public` (home, competitions, news), `auth`, `coachHome` (`/home`, where approved coaches land: upcoming competitions, then news), `coach` (join a club), `club` (approved coaches: fighters, import, entries, club icon), `admin`, `adminClubs` (clubs, coach approvals), `adminNews`, `adminBackups`, `competitionDay` (weigh-in and results, shared by admins and officials, mounted on `/admin` before `admin`), `official` (`/official`, an official's start page) and `screens` (court screens).
 - `views/`, `public/`: templates and static assets.
 - `test/`: `node:test`. `flow.test.js` drives the whole app through supertest on an in-memory database.
 
@@ -57,6 +57,8 @@ Express with server-rendered EJS and SQLite (better-sqlite3).
 - Email links use `PUBLIC_URL`, never the request's Host header. Reset tokens are stored only as hashes.
 - Belts are fixed to Blue, Red and Black (ranks 1 to 3), and every competition's belt groups match.
 - Bouts reference approved registrations, so approvals and reopening are blocked while a bout list exists. Keep that rule, or the draw and foreign keys can break.
+- Roles are `admin`, `coach` and `official`. `requireRole` takes one role or a list. Officials only reach `competitionDay` routes (weigh-in and results of closed competitions), `/official` and court screens; everything else under `/admin` stays `requireRole('admin')`, so new admin routes are admin-only by default. Clearing all results stays admin-only.
+- Manual bracket changes (`swapAthletes`, `withdrawAthlete`, `reinstateAthlete`, `redrawDivision`) work on one division and are refused once it has a result. A withdrawn registration keeps `status = 'approved'` but has `withdrawn_at`, and `DRAWN` leaves it out of every draw.
 - `closeExpiredCompetitions` runs on each request, so `status` flips to closed once the deadline passes, in the server's `TZ`. Reopening requires a later deadline.
 - Public pages show rules only. Never expose fighter data on them, because many fighters are minors. News posts marked for coaches and organisers return 404 to visitors, and club icons are only served to logged-in users.
 - A competition can't open for registration (publish or reopen) without a logo and a description. Logos are in `competition_logos` and attachments in `competition_files`, both BLOBs. They follow the competition's visibility: drafts are admin-only. Attachments are always sent as downloads.

@@ -1,20 +1,24 @@
 <%- include('../partials/top') %>
-<p class="breadcrumb"><a href="/admin/competitions/<%= competition.id %>/bouts">Bout list</a></p>
+<% const isAdmin = user.role === 'admin'; %>
+<p class="breadcrumb"><% if (isAdmin) { %><a href="/admin/competitions/<%= competition.id %>/bouts">Bout list</a><% } else { %><a href="/official">Competition day</a><% } %></p>
 <div class="page-head">
   <div>
     <h1>Results</h1>
     <p class="sub"><%= competition.name %> · <%= done %> of <%= total %> bouts recorded</p>
   </div>
-  <% if (done > 0) { %>
-    <form method="post" action="/admin/competitions/<%= competition.id %>/results/clear-all" data-confirm="Clear every recorded result? This cannot be undone.">
-      <input type="hidden" name="_csrf" value="<%= csrf %>">
-      <button class="btn danger" type="submit">Clear all results</button>
-    </form>
-  <% } %>
+  <div class="actions">
+    <% if (total > 0) { %><a class="btn secondary" href="/screens/<%= competition.id %>">Court screens</a><% } %>
+    <% if (isAdmin && done > 0) { %>
+      <form method="post" action="/admin/competitions/<%= competition.id %>/results/clear-all" data-confirm="Clear every recorded result? This cannot be undone.">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <button class="btn danger" type="submit">Clear all results</button>
+      </form>
+    <% } %>
+  </div>
 </div>
 
 <% if (total === 0) { %>
-  <section class="card"><p class="empty">There are no bouts to record. <a href="/admin/competitions/<%= competition.id %>/bouts">Generate the bout list</a> first.</p></section>
+  <section class="card"><p class="empty">There are no bouts to record. <% if (isAdmin) { %><a href="/admin/competitions/<%= competition.id %>/bouts">Generate the bout list</a> first.<% } else { %>The organiser needs to draw the bout list first.<% } %></p></section>
 <% } else { %>
   <section class="card">
     <form method="get" class="filters">
