@@ -23,6 +23,8 @@
     </fieldset>
     <div class="field">
       <label class="check"><input type="checkbox" name="pinned" value="1" <%= post.pinned ? 'checked' : '' %>> Pin to the top of the News page</label>
+      <label class="check"><input type="checkbox" name="email_coaches" value="1" <%= post.email_coaches ? 'checked' : '' %>> <%= editing ? 'Email the updated post to every coach' : 'Email this post to every coach' %></label>
+      <p class="hint">Each coach gets their own email with the post's text and a link to it.<%= editing ? ' Leave this unticked for small fixes, so coaches aren\'t emailed again.' : '' %></p>
     </div>
     <div class="actions">
       <button class="btn" type="submit"><%= editing ? 'Save changes' : 'Publish' %></button>

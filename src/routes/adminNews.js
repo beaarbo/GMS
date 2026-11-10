@@ -2,6 +2,7 @@
 const express = require('express');
 const { listNews, getNews, createNews, updateNews, deleteNews } = require('../services');
 const { readPost } = require('../news');
+const { notifyNewsPosted } = require('../notifications');
 const { requireRole, notFound } = require('./helpers');
 
 const router = express.Router();
@@ -25,12 +26,25 @@ router.get('/', (req, res) => {
 
 router.get('/new', (req, res) => form(res, { action: '/admin/news' }));
 
+// Emails the post to every coach when the admin ticked the box. Sending runs in
+// the background, so the page doesn't wait on the mail service; send() never throws.
+function emailCoaches(req, post) {
+  if (req.body.email_coaches !== '1') return 0;
+  const { db, notify } = req.app.locals;
+  const coaches = db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'coach'").get().n;
+  if (coaches > 0) notifyNewsPosted(notify, post);
+  return coaches;
+}
+
+const emailedText = (n) => (n > 0 ? ` It's being emailed to ${n} coach${n === 1 ? '' : 'es'}.` : '');
+
 router.post('/', (req, res) => {
   const { values, errors } = readPost(req.body);
-  if (errors.length > 0) return form(res, { post: values, action: '/admin/news', errors, status: 400 });
+  if (errors.length > 0) return form(res, { post: { ...values, email_coaches: req.body.email_coaches === '1' }, action: '/admin/news', errors, status: 400 });
   const id = createNews(req.app.locals.db, values, req.user.id);
-  req.logActivity('news.posted', `Posted news: ${values.title}`);
-  req.flash('success', 'News post published.');
+  const emailed = emailCoaches(req, { ...values, id });
+  req.logActivity('news.posted', `Posted news: ${values.title}${emailed ? `, emailed to ${emailed} coaches` : ''}`);
+  req.flash('success', `News post published.${emailedText(emailed)}`);
   return res.redirect(`/news/${id}`);
 });
 
@@ -49,8 +63,9 @@ router.post('/:id(\\d+)', (req, res) => {
     return form(res, { post: { ...values, id: post.id }, action: `/admin/news/${post.id}`, errors, status: 400, editing: true });
   }
   updateNews(db, post.id, values);
-  req.logActivity('news.updated', `Updated news: ${values.title}`);
-  req.flash('success', 'News post updated.');
+  const emailed = emailCoaches(req, { ...values, id: post.id });
+  req.logActivity('news.updated', `Updated news: ${values.title}${emailed ? `, emailed to ${emailed} coaches` : ''}`);
+  req.flash('success', `News post updated.${emailedText(emailed)}`);
   return res.redirect(`/news/${post.id}`);
 });
 

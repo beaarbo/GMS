@@ -85,12 +85,18 @@ The site emails people about:
 - **Registration decisions:** each club gets one summary per review action, with rejection reasons.
 - **Deadline reminders:** every approved coach gets one when a deadline is within 3 days. Moving the deadline allows another.
 - **Bout lists:** coaches with athletes in the draw hear when it's published.
+- **News:** every coach, when the admin ticks **Email this post to every coach** while publishing or editing a post.
+- **Division moves:** an athlete's coaches, when the admin moves them into another division.
 
 If a message fails to send, the error is logged and the page carries on. To find out why emails aren't arriving, open **Email** in the admin menu: it shows the current settings (never the password) and sends a test email, showing the mail server's answer and what to change. For Gmail, use an App Password rather than your normal password, with `SMTP_HOST=smtp.gmail.com` and `SMTP_PORT=587`.
 
 ## Registration deadlines
 
 Each competition has a deadline date and closing time, set by the admin and shown to coaches with the time left. Registration closes by itself when the time passes, using the server's time zone (`TZ`). To reopen it, edit the competition to set a later deadline, then click **Reopen registration**.
+
+## Merging small divisions
+
+**Divisions** flags any division with no opponent. Each one offers **Move to**, a list of other divisions of the same gender that have entries, with the closest fit first: the same age and belt groups in the next heavier weight class, then the next lighter, then the nearest age or belt group. Moving updates the athletes' entries, emails their coaches, and shows "moved here from…" with **Undo move**. Like approvals, moves are blocked once a bout list exists. A moved athlete's weigh-in can't be undone until the move is.
 
 ## Bout lists
 

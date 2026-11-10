@@ -50,12 +50,14 @@ const {
   reinstateAthlete,
   redrawDivision,
   listWithdrawn,
+  mergeDivision,
+  unmergeRegistration,
   REGISTRATION_SELECT,
   DIVISION_ORDER,
 } = require('../services');
 const { sendDocument, detectIconType, detectAttachmentType, safeFilename, MAX_ICON_BYTES, MAX_NEW_COMPETITION_FILES } = require('../documents');
 const { ACTIVITY_CATEGORIES, listActivity, countActivity, formatActivityTime } = require('../activity');
-const { notifyRegistrationDecisions, notifyBoutListPublished } = require('../notifications');
+const { notifyRegistrationDecisions, notifyBoutListPublished, notifyDivisionMerged } = require('../notifications');
 const { layoutBracket, computeMedals } = require('../bracket');
 const { writeBoutListPdf } = require('../boutlistPdf');
 const { clean, toArray, requireRole, notFound, wrap, passwordError } = require('./helpers');
@@ -664,26 +666,96 @@ function approvedOrPending(db, competitionId) {
     .all(competitionId);
 }
 
+// "Male · Junior · Black Belt · -59 kg" for any division key of the competition.
+function divisionTitler(db, competitionId) {
+  const setup = loadDivisionSetup(db, competitionId);
+  const byId = (list) => new Map(list.map((x) => [x.id, x]));
+  const ages = byId(setup.ageGroups);
+  const belts = byId(setup.beltGroups);
+  const weights = byId(setup.weightClasses);
+  return (key) => {
+    const [gender, age, belt, weight] = String(key).split('-');
+    const parts = [GENDERS[gender], (ages.get(Number(age)) || {}).name, (belts.get(Number(belt)) || {}).name, (weights.get(Number(weight)) || {}).label];
+    return parts.every(Boolean) ? parts.join(' · ') : 'another division';
+  };
+}
+
+// Closest fits first for moving a lone athlete: same age and belt groups, next
+// heavier class, then lighter; then the nearest age group, then belt group.
+function mergeTargets(division, divisions) {
+  const weightOf = (d) => (d.maxKg === null ? Infinity : d.maxKg);
+  const score = (t) => {
+    const weightGap = weightOf(t) === weightOf(division) ? 0 : weightOf(t) > weightOf(division) ? 1 : 2;
+    return Math.abs(t.minAge - division.minAge) * 1000 + Math.abs(t.minRank - division.minRank) * 100 + weightGap * 10
+      + Math.min(9, Math.abs((Number.isFinite(weightOf(t)) ? weightOf(t) : 999) - (Number.isFinite(weightOf(division)) ? weightOf(division) : 999)) / 10);
+  };
+  return divisions.filter((t) => t.key !== division.key && t.gender === division.gender).sort((a, b) => score(a) - score(b));
+}
+
 router.get('/competitions/:id(\\d+)/divisions', (req, res) => {
+  const { db } = req.app.locals;
+  const titleOf = divisionTitler(db, req.competition.id);
   const divisions = new Map();
-  approvedOrPending(req.app.locals.db, req.competition.id).forEach((r) => {
+  approvedOrPending(db, req.competition.id).forEach((r) => {
     const key = [r.gender, r.age_group_id, r.belt_group_id, r.weight_class_id].join('-');
     if (!divisions.has(key)) {
       divisions.set(key, {
+        key,
+        gender: r.gender,
+        minAge: r.min_age,
+        minRank: r.min_rank,
+        maxKg: r.max_kg,
         title: `${GENDERS[r.gender]} · ${r.age_group} · ${r.belt_group} · ${r.weight_class}`,
         approved: [],
         pending: 0,
       });
     }
     const division = divisions.get(key);
-    if (r.status === 'approved') division.approved.push(r);
+    if (r.status === 'approved') division.approved.push({ ...r, mergedFromTitle: r.merged_from ? titleOf(r.merged_from) : null });
     else division.pending += 1;
+  });
+  const list = [...divisions.values()];
+  list.forEach((d) => {
+    d.lone = d.approved.length + d.pending < 2;
+    d.targets = d.lone ? mergeTargets(d, list) : [];
   });
   res.render('admin/divisions', {
     title: 'Divisions',
     competition: req.competition,
-    divisions: [...divisions.values()],
+    divisions: list,
+    locked: hasBoutList(db, req.competition.id),
   });
+});
+
+router.post('/competitions/:id(\\d+)/divisions/merge', (req, res) => {
+  const { db, notify } = req.app.locals;
+  const titleOf = divisionTitler(db, req.competition.id);
+  const from = clean(req.body.from, 40);
+  const to = clean(req.body.to, 40);
+  const result = mergeDivision(db, req.competition, from, to);
+  const back = `/admin/competitions/${req.competition.id}/divisions`;
+  if (!result.ok) {
+    req.flash('error', result.error);
+    return res.redirect(back);
+  }
+  const moves = result.moved.map((m) => ({ ...m, from: titleOf(from), to: titleOf(to) }));
+  notifyDivisionMerged(notify, req.competition, moves);
+  req.logActivity('registration.merged', `Moved ${moves.map((m) => m.name).join(', ')} from ${titleOf(from)} to ${titleOf(to)}`, req.competition.id);
+  req.flash('success', `${moves.map((m) => m.name).join(', ')} moved to ${titleOf(to)}. Their coach${moves.length === 1 ? ' was' : 'es were'} emailed.`);
+  return res.redirect(back);
+});
+
+router.post('/competitions/:id(\\d+)/divisions/unmerge', (req, res) => {
+  const { db } = req.app.locals;
+  const titleOf = divisionTitler(db, req.competition.id);
+  const name = athleteName(db, req.body.registration);
+  const result = unmergeRegistration(db, req.competition, req.body.registration);
+  if (!result.ok) req.flash('error', result.error);
+  else {
+    req.logActivity('registration.unmerged', `Moved ${name} back to ${titleOf(result.key)}`, req.competition.id);
+    req.flash('success', `${name} is back in ${titleOf(result.key)}.`);
+  }
+  return res.redirect(`/admin/competitions/${req.competition.id}/divisions`);
 });
 
 function boutListPath(competition) {

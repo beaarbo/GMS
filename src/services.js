@@ -541,6 +541,8 @@ function recordWeighIn(db, competition, registrationId, { action, weightKg, weig
     return { ok: true, outcome: action };
   }
   if (action === 'reset') {
+    // Undoing the weigh-in would put the old weight class back without the old age group.
+    if (registration.merged_from) return { ok: false, error: 'This athlete was moved to another division. Undo that on the Divisions page first.' };
     const enteredId = registration.entered_weight_class_id || registration.weight_class_id;
     save.run({ ...base, status: null, at: null, classId: enteredId, enteredId: null });
     return { ok: true, outcome: 'reset', backTo: registration.entered_weight_class_id ? labelOf(enteredId) : null };
@@ -708,6 +710,57 @@ function redrawDivision(db, competition, key, rng = secureRandom) {
     applySchedule(db, competition.id);
   })();
   return { ok: true, athletes: entries.length };
+}
+
+// A division key's parts, checked against the competition: the age group, belt
+// group and weight class must be its own, and the class must belong to that age
+// group and gender. Returns the parts, or null.
+function realDivision(db, competitionId, key) {
+  const d = divisionFromKey(key);
+  if (!d) return null;
+  const ok = db.prepare('SELECT 1 FROM age_groups WHERE id = ? AND competition_id = ?').get(d.age_group_id, competitionId)
+    && db.prepare('SELECT 1 FROM belt_groups WHERE id = ? AND competition_id = ?').get(d.belt_group_id, competitionId)
+    && db.prepare('SELECT 1 FROM weight_classes WHERE id = ? AND competition_id = ? AND age_group_id = ? AND gender = ?')
+      .get(d.weight_class_id, competitionId, d.age_group_id, d.gender);
+  return ok ? d : null;
+}
+
+// Moves every active entry (pending or approved) of one division into another
+// of the same gender, so a lone athlete gets an opponent. Each entry remembers
+// where it came from, for undo. Not while a bout list exists, like approvals.
+function mergeDivision(db, competition, fromKey, toKey) {
+  if (hasBoutList(db, competition.id)) return { ok: false, error: 'Delete the bout list before moving athletes between divisions.' };
+  const from = realDivision(db, competition.id, fromKey);
+  const to = realDivision(db, competition.id, toKey);
+  if (!from || !to) return { ok: false, error: 'Choose a division from this competition.' };
+  if (fromKey === toKey) return { ok: false, error: 'Choose a different division to move them into.' };
+  if (from.gender !== to.gender) return { ok: false, error: 'Athletes can only move to a division of the same gender.' };
+  const moving = db
+    .prepare(
+      `SELECT r.id, r.club_id, f.first_name, f.last_name FROM registrations r JOIN fighters f ON f.id = r.fighter_id
+       WHERE r.competition_id = ? AND r.status != 'rejected' AND f.gender = ? AND r.age_group_id = ? AND r.belt_group_id = ? AND r.weight_class_id = ?`
+    )
+    .all(competition.id, from.gender, from.age_group_id, from.belt_group_id, from.weight_class_id);
+  if (moving.length === 0) return { ok: false, error: 'That division has no entries to move.' };
+  const update = db.prepare(
+    `UPDATE registrations SET age_group_id = ?, belt_group_id = ?, weight_class_id = ?, merged_from = COALESCE(merged_from, ?)
+     WHERE id = ?`
+  );
+  db.transaction(() => moving.forEach((r) => update.run(to.age_group_id, to.belt_group_id, to.weight_class_id, fromKey, r.id)))();
+  return { ok: true, moved: moving.map((r) => ({ id: r.id, clubId: r.club_id, name: `${r.first_name} ${r.last_name}` })) };
+}
+
+// Puts a merged entry back in the division it was moved out of.
+function unmergeRegistration(db, competition, registrationId) {
+  if (hasBoutList(db, competition.id)) return { ok: false, error: 'Delete the bout list before moving athletes between divisions.' };
+  const registration = db
+    .prepare('SELECT * FROM registrations WHERE id = ? AND competition_id = ? AND merged_from IS NOT NULL')
+    .get(Number(registrationId), competition.id);
+  const from = registration && realDivision(db, competition.id, registration.merged_from);
+  if (!from) return { ok: false, error: 'That entry was not moved.' };
+  db.prepare('UPDATE registrations SET age_group_id = ?, belt_group_id = ?, weight_class_id = ?, merged_from = NULL WHERE id = ?')
+    .run(from.age_group_id, from.belt_group_id, from.weight_class_id, registration.id);
+  return { ok: true, key: registration.merged_from };
 }
 
 // Withdrawn athletes per division key, for the bout list page.
@@ -1085,6 +1138,8 @@ module.exports = {
   reinstateAthlete,
   redrawDivision,
   listWithdrawn,
+  mergeDivision,
+  unmergeRegistration,
   listWeighIns,
   weighInCounts,
   classesForRegistration,

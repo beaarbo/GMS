@@ -11,12 +11,19 @@
   </div>
 </div>
 
+<% const loneCount = divisions.filter((d) => d.lone).length; %>
+<% if (loneCount > 0 && !locked) { %>
+  <div class="notice info"><%= loneCount %> division<%= loneCount === 1 ? ' has' : 's have' %> no opponent yet. Move the athlete into another division of the same gender to give them a bout. Their coach is emailed, and it can be undone until the bout list is drawn.</div>
+<% } else if (locked) { %>
+  <div class="notice info">The bout list has been drawn, so athletes can't move between divisions. Delete the bout list first to change them.</div>
+<% } %>
+
 <% if (divisions.length === 0) { %>
   <div class="card"><p class="empty">No athletes are registered yet.</p></div>
 <% } %>
 
 <% divisions.forEach((d) => { %>
-  <section class="card">
+  <section class="card" id="division-<%= d.key %>">
     <div class="division-head">
       <h2><%= d.title %></h2>
       <p class="stats">
@@ -29,12 +36,38 @@
     <% } else { %>
       <ol class="fighter-list">
         <% d.approved.forEach((r) => { %>
-          <li><strong><%= r.last_name %>, <%= r.first_name %></strong> · <%= r.club_name %></li>
+          <li>
+            <strong><%= r.last_name %>, <%= r.first_name %></strong> · <%= r.club_name %>
+            <% if (r.mergedFromTitle) { %>
+              <span class="hint">· moved here from <%= r.mergedFromTitle %></span>
+              <% if (!locked) { %>
+                <form class="inline-form" method="post" action="/admin/competitions/<%= competition.id %>/divisions/unmerge">
+                  <input type="hidden" name="_csrf" value="<%= csrf %>">
+                  <input type="hidden" name="registration" value="<%= r.id %>">
+                  <button class="btn secondary small" type="submit">Undo move</button>
+                </form>
+              <% } %>
+            <% } %>
+          </li>
         <% }) %>
       </ol>
     <% } %>
-    <% if (d.approved.length + d.pending < 2) { %>
+    <% if (d.lone) { %>
       <p class="warn-text">No opponent yet in this division.</p>
+      <% if (!locked && d.targets.length > 0) { %>
+        <form class="division-edit-row" method="post" action="/admin/competitions/<%= competition.id %>/divisions/merge" data-confirm="Move everyone in this division? Their coach will be emailed.">
+          <input type="hidden" name="_csrf" value="<%= csrf %>">
+          <input type="hidden" name="from" value="<%= d.key %>">
+          <label>Move to
+            <select name="to" required>
+              <% d.targets.forEach((t, i) => { %><option value="<%= t.key %>"><%= t.title %> (<%= t.approved.length + t.pending %>)<%= i === 0 ? ' · closest' : '' %></option><% }) %>
+            </select>
+          </label>
+          <button class="btn secondary small" type="submit">Move</button>
+        </form>
+      <% } else if (!locked) { %>
+        <p class="hint">There's no other <%= d.gender === 'M' ? 'male' : 'female' %> division with entries to move into.</p>
+      <% } %>
     <% } %>
   </section>
 <% }) %>

@@ -634,7 +634,7 @@ test('schedule migration clears old draws and keeps competitions', () => {
 
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM bouts').get().n, 0);
   assert.equal(db.prepare('SELECT bout_courts FROM competitions WHERE id = ?').get(compId).bout_courts, 2);
-  assert.equal(db.pragma('user_version', { simple: true }), 9);
+  assert.equal(db.pragma('user_version', { simple: true }), 10);
 });
 
 test('admin creates a club, a coach applies, and only approval unlocks athlete registration', async () => {
@@ -799,7 +799,7 @@ test('migrating old club accounts keeps logins and fighters and approves each co
   const clubColumns = db.pragma('table_info(clubs)').map((c) => c.name);
   assert.ok(!clubColumns.includes('coach_name'));
   assert.equal(db.pragma('foreign_key_check').length, 0);
-  assert.equal(db.pragma('user_version', { simple: true }), 9);
+  assert.equal(db.pragma('user_version', { simple: true }), 10);
 });
 
 test('a fighter alone in a division has no bout number', async () => {
@@ -973,7 +973,7 @@ test('migration turns a day count into consecutive dates', () => {
   const { id } = db.prepare('SELECT id FROM competitions').get();
   assert.deepEqual(getEventDates(db, id), ['2030-01-30', '2030-01-31', '2030-02-01']);
   assert.ok(!db.pragma('table_info(competitions)').some((c) => c.name === 'bout_days'));
-  assert.equal(db.pragma('user_version', { simple: true }), 9);
+  assert.equal(db.pragma('user_version', { simple: true }), 10);
 });
 
 const tokenIn = (message) => message.text.match(/reset-password\/([0-9a-f]{64})/)[1];
@@ -1218,7 +1218,7 @@ test('the results migration removes declared weights and keeps registrations', (
   db.pragma('user_version = 4');
   migrate(db);
   assert.ok(!db.pragma('table_info(registrations)').some((c) => c.name === 'declared_weight_kg'));
-  assert.equal(db.pragma('user_version', { simple: true }), 9);
+  assert.equal(db.pragma('user_version', { simple: true }), 10);
 });
 
 test('athletes need the right document before they can enter', async () => {
@@ -1835,7 +1835,7 @@ test('rebuilding the users table for officials keeps every linked row', async ()
   db.close();
 
   db = openDb(file);
-  assert.equal(db.pragma('user_version', { simple: true }), 9);
+  assert.equal(db.pragma('user_version', { simple: true }), 10);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM club_applications').get().n, 1);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM password_resets').get().n, 1);
   assert.equal(db.prepare('SELECT author_id FROM news_posts').get().author_id, coachId);
@@ -2019,4 +2019,77 @@ test('the admin dashboard gives an overview, and competitions are managed on the
   // Coaches still see the public list under Competitions.
   const coachPage = (await (await login(app, 'tigers@test.test')).get('/home')).text;
   assert.match(coachPage, /<a href="\/">Competitions<\/a>/);
+});
+
+test('a news post can be emailed to every coach', async () => {
+  const { db, app, mailer } = await setup();
+  await signUpClub(app, 'Tigers', 'tigers@test.test');
+  await signUpCoach(app, 'waiting@test.test');
+  const admin = await login(app, 'admin@test.test');
+
+  assert.match((await admin.get('/admin/news/new')).text, /name="email_coaches" value="1"/);
+  // Without the box ticked, nobody is emailed.
+  await post(admin, '/admin/news', { title: 'Quiet', body: 'No email.', audience: 'public' }, '/admin/news/new');
+  assert.equal(mailer.sent.filter((m) => m.subject.startsWith('News:')).length, 0);
+
+  const res = await post(admin, '/admin/news', { title: 'Weigh-in moved', body: 'Now at 8am.', audience: 'members', email_coaches: '1' }, '/admin/news/new');
+  const id = Number(res.headers.location.match(/\/news\/(\d+)/)[1]);
+  const news = mailer.sent.filter((m) => m.subject === 'News: Weigh-in moved');
+  assert.deepEqual(news.map((m) => m.to).sort(), ['tigers@test.test', 'waiting@test.test'], 'every coach, each in their own email');
+  assert.match(news[0].text, /Now at 8am\.[\s\S]*https:\/\/gms\.test\/news\//);
+  assert.ok(!mailer.sent.some((m) => m.subject.startsWith('News:') && m.to === 'admin@test.test'), 'admins are not on the list');
+  assert.match(db.prepare("SELECT summary FROM activity_log WHERE action = 'news.posted' ORDER BY id DESC").get().summary, /emailed to 2 coaches/);
+
+  // Editing doesn't email again unless asked.
+  await post(admin, `/admin/news/${id}`, { title: 'Weigh-in moved', body: 'Now at 8:30am.', audience: 'members' }, `/admin/news/${id}/edit`);
+  assert.equal(mailer.sent.filter((m) => m.subject === 'News: Weigh-in moved').length, 2);
+});
+
+test('a lone athlete can be moved into another division, with undo and a coach email', async () => {
+  const { db, app, mailer } = await setup();
+  const { compId, admin } = await closedCompetitionWithFighters(db, app, [['T', 'Alpha'], ['T', 'Bravo'], ['D', 'Charlie']]);
+  const reg = (lastName) => db.prepare('SELECT r.* FROM registrations r JOIN fighters f ON f.id = r.fighter_id WHERE f.last_name = ?').get(lastName);
+  // Put Charlie alone in the next class up, as if their coach had entered them there.
+  const main = reg('Alpha');
+  const classes = db.prepare('SELECT * FROM weight_classes WHERE age_group_id = ? AND gender = ? AND max_kg IS NOT NULL ORDER BY max_kg').all(main.age_group_id, 'F');
+  const heavier = classes[classes.findIndex((c) => c.id === main.weight_class_id) + 1];
+  db.prepare('UPDATE registrations SET weight_class_id = ? WHERE id = ?').run(heavier.id, reg('Charlie').id);
+  const key = (r) => ['F', r.age_group_id, r.belt_group_id, r.weight_class_id].join('-');
+  const loneKey = key(reg('Charlie'));
+  const mainKey = key(main);
+
+  const path = `/admin/competitions/${compId}/divisions`;
+  const page = (await admin.get(path)).text;
+  assert.match(page, /1 division has no opponent yet/);
+  assert.match(page, new RegExp(`name="from" value="${loneKey}"[\\s\\S]*?<option value="${mainKey}">[^<]*closest`), 'the main division is suggested first');
+
+  // Only real divisions of the same gender are accepted.
+  const male = db.prepare("SELECT id FROM weight_classes WHERE age_group_id = ? AND gender = 'M'").get(main.age_group_id).id;
+  await post(admin, `${path}/merge`, { from: loneKey, to: `M-${main.age_group_id}-${main.belt_group_id}-${male}` }, path);
+  assert.equal(reg('Charlie').merged_from, null);
+
+  await post(admin, `${path}/merge`, { from: loneKey, to: mainKey }, path);
+  const moved = reg('Charlie');
+  assert.equal(key(moved), mainKey);
+  assert.equal(moved.merged_from, loneKey);
+  const email = mailer.sent.find((m) => m.subject === 'Division change: Open');
+  assert.equal(email.to, 'dragons@test.test', 'only the athlete\'s own coach is told');
+  assert.match(email.text, /Ana Charlie: from Female/);
+  assert.match((await admin.get(path)).text, /moved here from Female[\s\S]*Undo move/);
+
+  // A weigh-in undo can't split them from their new age group; undoing the move puts them back.
+  await post(admin, `/admin/competitions/${compId}/weigh-in/${moved.id}`, { action: 'no_show' }, `/admin/competitions/${compId}/weigh-in`);
+  await post(admin, `/admin/competitions/${compId}/weigh-in/${moved.id}`, { action: 'reset' }, `/admin/competitions/${compId}/weigh-in`);
+  assert.equal(reg('Charlie').weigh_status, 'no_show', 'reset is refused while moved');
+  await post(admin, `${path}/unmerge`, { registration: String(moved.id) }, path);
+  assert.equal(key(reg('Charlie')), loneKey);
+  assert.equal(reg('Charlie').merged_from, null);
+
+  // Not once a bout list exists.
+  const bouts = `/admin/competitions/${compId}/bouts`;
+  await post(admin, `${bouts}/generate`, { courts: '1', start: '09:00', minutes: '10', rest: '0' }, bouts);
+  await post(admin, `${path}/merge`, { from: loneKey, to: mainKey }, path);
+  assert.equal(key(reg('Charlie')), loneKey);
+  const actions = db.prepare("SELECT action FROM activity_log WHERE action LIKE 'registration.%merged' ORDER BY id").all().map((r) => r.action);
+  assert.deepEqual(actions, ['registration.merged', 'registration.unmerged']);
 });

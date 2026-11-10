@@ -147,6 +147,9 @@ CREATE TABLE IF NOT EXISTS registrations (
   weighed_at TEXT,
   -- The class the coach entered, kept when the athlete is moved at weigh-in.
   entered_weight_class_id INTEGER REFERENCES weight_classes(id),
+  -- The division (gender-age-belt-weight ids) an admin moved this entry out of,
+  -- to give a lone athlete an opponent. Undo restores it.
+  merged_from TEXT,
   -- Taken out of a drawn bout list by an admin, for example after an injury.
   withdrawn_at TEXT,
   withdrawal_note TEXT NOT NULL DEFAULT '',
@@ -423,6 +426,15 @@ function migrateWithdrawals(db) {
   })();
 }
 
+// Version 10: entries can be moved into another division to give a lone athlete
+// an opponent. None have been yet.
+function migrateMerges(db) {
+  db.transaction(() => {
+    addColumnIfMissing(db, 'registrations', 'merged_from', 'TEXT');
+    db.pragma('user_version = 10');
+  })();
+}
+
 function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 1) migrateBelts(db);
   if (db.pragma('user_version', { simple: true }) < 2) migrateSchedule(db);
@@ -433,6 +445,7 @@ function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 7) migrateWeighIn(db);
   if (db.pragma('user_version', { simple: true }) < 8) migrateOfficialRole(db);
   if (db.pragma('user_version', { simple: true }) < 9) migrateWithdrawals(db);
+  if (db.pragma('user_version', { simple: true }) < 10) migrateMerges(db);
 }
 
 // Safe on old databases: only tables that don't exist yet are created.

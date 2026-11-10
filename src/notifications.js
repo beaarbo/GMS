@@ -157,7 +157,29 @@ async function sendDeadlineReminders(ctx, now = Date.now()) {
   return due.length;
 }
 
+// A news post, emailed to every coach who asked for it on publishing. Returns how many.
+async function notifyNewsPosted(ctx, post) {
+  const coaches = ctx.db.prepare("SELECT email FROM users WHERE role = 'coach'").all().map((u) => u.email);
+  await sendAll(ctx, coaches, `News: ${post.title}`, `${post.title}\n\n${post.body}\n\nRead it on the site: ${ctx.publicUrl}/news/${post.id}\n`);
+  return coaches.length;
+}
+
+// Tells each club's coaches which of their athletes moved division, and where to.
+// `moves` are { clubId, name, from, to }, with division titles.
+function notifyDivisionMerged(ctx, competition, moves) {
+  const byClub = new Map();
+  moves.forEach((m) => byClub.set(m.clubId, [...(byClub.get(m.clubId) || []), m]));
+  return Promise.all([...byClub.entries()].map(([clubId, clubMoves]) => sendAll(
+    ctx,
+    clubCoachEmails(ctx.db, clubId),
+    `Division change: ${competition.name}`,
+    `The organiser moved ${clubMoves.length === 1 ? 'an athlete' : 'athletes'} from your club into another division, so ${clubMoves.length === 1 ? 'they have' : 'they have'} an opponent:\n\n${clubMoves.map((m) => `- ${m.name}: from ${m.from} to ${m.to}`).join('\n')}\n\nSee your entries: ${ctx.publicUrl}/club/competitions/${competition.id}\n`
+  )));
+}
+
 module.exports = {
+  notifyNewsPosted,
+  notifyDivisionMerged,
   sendPasswordReset,
   notifyAdminsOfApplication,
   notifyAccountChange,
