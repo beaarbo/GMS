@@ -59,6 +59,8 @@ CREATE TABLE IF NOT EXISTS competitions (
   bout_start TEXT NOT NULL DEFAULT '09:00',
   bout_minutes INTEGER NOT NULL DEFAULT 10,
   bout_rest_minutes INTEGER NOT NULL DEFAULT 0,
+  -- Most entries one club may have in a single division. NULL: no limit.
+  max_per_club_division INTEGER,
   bouts_published_at TEXT,
   reminder_sent_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -435,6 +437,15 @@ function migrateMerges(db) {
   })();
 }
 
+// Version 11: an optional cap on entries per club in each division. Existing
+// competitions get none, so nothing they already accept changes.
+function migrateClubLimit(db) {
+  db.transaction(() => {
+    addColumnIfMissing(db, 'competitions', 'max_per_club_division', 'INTEGER');
+    db.pragma('user_version = 11');
+  })();
+}
+
 function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 1) migrateBelts(db);
   if (db.pragma('user_version', { simple: true }) < 2) migrateSchedule(db);
@@ -446,6 +457,7 @@ function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 8) migrateOfficialRole(db);
   if (db.pragma('user_version', { simple: true }) < 9) migrateWithdrawals(db);
   if (db.pragma('user_version', { simple: true }) < 10) migrateMerges(db);
+  if (db.pragma('user_version', { simple: true }) < 11) migrateClubLimit(db);
 }
 
 // Safe on old databases: only tables that don't exist yet are created.

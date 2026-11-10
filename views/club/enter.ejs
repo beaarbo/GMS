@@ -4,6 +4,7 @@
   <div>
     <h1><%= competition.name %></h1>
     <p class="sub"><%= eventDatesText(competition) %> · <%= competition.venue %> · Registration deadline: <%= deadlineText(competition) %> · <%= open ? timeLeft(competition) : 'Closed' %></p>
+    <% if (competition.max_per_club_division) { %><p class="sub">Your club can enter at most <strong><%= competition.max_per_club_division %></strong> athlete<%= competition.max_per_club_division === 1 ? '' : 's' %> in each division.</p><% } %>
   </div>
   <div class="actions">
     <% if (competition.bouts_published_at) { %><a class="btn" href="/club/competitions/<%= competition.id %>/bouts">View bout list</a><% } %>

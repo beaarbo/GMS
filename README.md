@@ -94,6 +94,10 @@ If a message fails to send, the error is logged and the page carries on. To find
 
 Each competition has a deadline date and closing time, set by the admin and shown to coaches with the time left. Registration closes by itself when the time passes, using the server's time zone (`TZ`). To reopen it, edit the competition to set a later deadline, then click **Reopen registration**.
 
+## Club limit per division
+
+**Most athletes from one club per division**, on the competition form, caps how many entries one club can have in a single division (gender, age, belt and weight). Blank means no limit. Coaches see the rule on the competition page and their entry page, and an entry over the limit is refused with the reason. Rejected entries don't count, so rejecting one frees a place. Lowering the limit keeps entries already made, and the admin's own moves (weigh-in, merging divisions) aren't limited.
+
 ## Merging small divisions
 
 **Divisions** flags any division with no opponent. Each one offers **Move to**, a list of other divisions of the same gender that have entries, with the closest fit first: the same age and belt groups in the next heavier weight class, then the next lighter, then the nearest age or belt group. Moving updates the athletes' entries, emails their coaches, and shows "moved here from…" with **Undo move**. Like approvals, moves are blocked once a bout list exists. A moved athlete's weigh-in can't be undone until the move is.

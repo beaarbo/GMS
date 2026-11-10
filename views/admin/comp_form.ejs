@@ -48,6 +48,11 @@
       </select>
     </div>
     <div class="field">
+      <label for="max_per_club_division">Most athletes from one club per division <span class="hint">(optional)</span></label>
+      <input id="max_per_club_division" name="max_per_club_division" type="number" min="1" max="50" step="1" inputmode="numeric" value="<%= competition.max_per_club_division ?? '' %>" placeholder="No limit">
+      <p class="hint">For example 2: a club can enter at most two athletes in each division (each gender, age, belt and weight). Leave blank for no limit. Lowering it later keeps entries already made.</p>
+    </div>
+    <div class="field">
       <label for="description">Description</label>
       <textarea id="description" name="description" rows="8" maxlength="5000" required><%= competition.description || '' %></textarea>
       <p class="hint">Shown on the competition page. Plain text: leave a blank line between paragraphs, and web addresses become links.</p>

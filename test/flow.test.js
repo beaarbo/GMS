@@ -634,7 +634,7 @@ test('schedule migration clears old draws and keeps competitions', () => {
 
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM bouts').get().n, 0);
   assert.equal(db.prepare('SELECT bout_courts FROM competitions WHERE id = ?').get(compId).bout_courts, 2);
-  assert.equal(db.pragma('user_version', { simple: true }), 10);
+  assert.equal(db.pragma('user_version', { simple: true }), 11);
 });
 
 test('admin creates a club, a coach applies, and only approval unlocks athlete registration', async () => {
@@ -799,7 +799,7 @@ test('migrating old club accounts keeps logins and fighters and approves each co
   const clubColumns = db.pragma('table_info(clubs)').map((c) => c.name);
   assert.ok(!clubColumns.includes('coach_name'));
   assert.equal(db.pragma('foreign_key_check').length, 0);
-  assert.equal(db.pragma('user_version', { simple: true }), 10);
+  assert.equal(db.pragma('user_version', { simple: true }), 11);
 });
 
 test('a fighter alone in a division has no bout number', async () => {
@@ -973,7 +973,7 @@ test('migration turns a day count into consecutive dates', () => {
   const { id } = db.prepare('SELECT id FROM competitions').get();
   assert.deepEqual(getEventDates(db, id), ['2030-01-30', '2030-01-31', '2030-02-01']);
   assert.ok(!db.pragma('table_info(competitions)').some((c) => c.name === 'bout_days'));
-  assert.equal(db.pragma('user_version', { simple: true }), 10);
+  assert.equal(db.pragma('user_version', { simple: true }), 11);
 });
 
 const tokenIn = (message) => message.text.match(/reset-password\/([0-9a-f]{64})/)[1];
@@ -1218,7 +1218,7 @@ test('the results migration removes declared weights and keeps registrations', (
   db.pragma('user_version = 4');
   migrate(db);
   assert.ok(!db.pragma('table_info(registrations)').some((c) => c.name === 'declared_weight_kg'));
-  assert.equal(db.pragma('user_version', { simple: true }), 10);
+  assert.equal(db.pragma('user_version', { simple: true }), 11);
 });
 
 test('athletes need the right document before they can enter', async () => {
@@ -1835,7 +1835,7 @@ test('rebuilding the users table for officials keeps every linked row', async ()
   db.close();
 
   db = openDb(file);
-  assert.equal(db.pragma('user_version', { simple: true }), 10);
+  assert.equal(db.pragma('user_version', { simple: true }), 11);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM club_applications').get().n, 1);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM password_resets').get().n, 1);
   assert.equal(db.prepare('SELECT author_id FROM news_posts').get().author_id, coachId);
@@ -2092,4 +2092,47 @@ test('a lone athlete can be moved into another division, with undo and a coach e
   assert.equal(key(reg('Charlie')), loneKey);
   const actions = db.prepare("SELECT action FROM activity_log WHERE action LIKE 'registration.%merged' ORDER BY id").all().map((r) => r.action);
   assert.deepEqual(actions, ['registration.merged', 'registration.unmerged']);
+});
+
+test('a competition can limit how many athletes one club enters in a division', async () => {
+  const { db, app } = await setup();
+  const compId = openCompetition(db, { max_per_club_division: 2 });
+  const tigers = await signUpClub(app, 'Tigers', 'tigers@test.test');
+  const dragons = await signUpClub(app, 'Dragons', 'dragons@test.test');
+  const form = `/club/competitions/${compId}`;
+  const enter = async (agent, lastName, kg) => {
+    await addFighter(agent, { last_name: lastName, date_of_birth: JUNIOR_DOB });
+    const fighter = db.prepare('SELECT id FROM fighters WHERE last_name = ?').get(lastName);
+    await post(agent, `${form}/enter`, { fighter_ids: String(fighter.id), ...weightField(db, fighter, kg) }, form);
+    return db.prepare('SELECT * FROM registrations WHERE fighter_id = ?').get(fighter.id);
+  };
+
+  assert.match((await tigers.get(form)).text, /Your club can enter at most <strong>2<\/strong> athletes in each division/);
+  assert.ok(await enter(tigers, 'One', 48));
+  assert.ok(await enter(tigers, 'Two', 48));
+  assert.equal(await enter(tigers, 'Three', 48), undefined, 'a third in the same division is refused');
+  const refused = await tigers.get(form);
+  assert.match(refused.text, /Three: Your club already has 2 athletes in -49 kg/);
+
+  assert.ok(await enter(tigers, 'Light', 40), 'another division is fine');
+  assert.ok(await enter(dragons, 'Other', 48), 'another club is not affected');
+
+  // A rejected entry frees its place.
+  db.prepare("UPDATE registrations SET status = 'rejected' WHERE fighter_id = (SELECT id FROM fighters WHERE last_name = 'One')").run();
+  const three = db.prepare("SELECT id FROM fighters WHERE last_name = 'Three'").get();
+  await post(tigers, `${form}/enter`, { fighter_ids: String(three.id), ...weightField(db, three, 48) }, form);
+  assert.ok(db.prepare('SELECT 1 FROM registrations WHERE fighter_id = ?').get(three.id));
+
+  // The admin sets it on the competition form; blank means no limit.
+  const admin = await login(app, 'admin@test.test');
+  const edit = `/admin/competitions/${compId}`;
+  const base = { name: 'Open', venue: 'Hall', description: 'Details.', event_dates: `${EVENT_YEAR}-12-01`, registration_deadline: `${EVENT_YEAR}-11-01`, registration_deadline_time: '23:59' };
+  assert.match((await admin.get(`${edit}/edit`)).text, /name="max_per_club_division"[^>]*value="2"/);
+  assert.equal((await post(admin, edit, { ...base, max_per_club_division: '0' }, `${edit}/edit`)).status, 400);
+  await post(admin, edit, { ...base, max_per_club_division: '3' }, `${edit}/edit`);
+  assert.equal(db.prepare('SELECT max_per_club_division AS n FROM competitions WHERE id = ?').get(compId).n, 3);
+  assert.match((await request(app).get(`/competitions/${compId}`)).text, /at most <strong>3<\/strong> athletes per division/);
+  await post(admin, edit, { ...base, max_per_club_division: '' }, `${edit}/edit`);
+  assert.equal(db.prepare('SELECT max_per_club_division AS n FROM competitions WHERE id = ?').get(compId).n, null);
+  assert.doesNotMatch((await request(app).get(`/competitions/${compId}`)).text, /athletes per division/);
 });

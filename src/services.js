@@ -129,10 +129,10 @@ function createCompetition(db, { event_dates: eventDates, ...fields }) {
   return db.transaction(() => {
     const id = db
       .prepare(
-        `INSERT INTO competitions (name, event_date, registration_deadline, registration_deadline_time, venue, description, age_basis, status)
-         VALUES (@name, @event_date, @registration_deadline, @registration_deadline_time, @venue, @description, @age_basis, @status)`
+        `INSERT INTO competitions (name, event_date, registration_deadline, registration_deadline_time, venue, description, age_basis, status, max_per_club_division)
+         VALUES (@name, @event_date, @registration_deadline, @registration_deadline_time, @venue, @description, @age_basis, @status, @max_per_club_division)`
       )
-      .run({ description: '', age_basis: 'year', status: 'draft', registration_deadline_time: '23:59', ...fields }).lastInsertRowid;
+      .run({ description: '', age_basis: 'year', status: 'draft', registration_deadline_time: '23:59', max_per_club_division: null, ...fields }).lastInsertRowid;
     saveEventDates(db, id, eventDates || [fields.event_date]);
     saveDivisionSetup(db, id, { ageGroups: DEFAULT_AGE_GROUPS, beltGroups: DEFAULT_BELT_GROUPS });
     return Number(id);
@@ -158,6 +158,23 @@ function enterFighter(db, competition, fighter, weightClassId) {
     .get(competition.id, fighter.id);
   if (existing && existing.status !== 'rejected') {
     return { ok: false, error: 'Already registered for this competition.' };
+  }
+
+  // The competition may cap one club's entries in a division. Rejected entries don't count.
+  const limit = competition.max_per_club_division;
+  if (limit) {
+    const { n } = db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM registrations
+         WHERE competition_id = ? AND club_id = ? AND status != 'rejected' AND age_group_id = ? AND belt_group_id = ? AND weight_class_id = ?`
+      )
+      .get(competition.id, fighter.club_id, placement.ageGroup.id, placement.beltGroup.id, placement.weightClass.id);
+    if (n >= limit) {
+      return {
+        ok: false,
+        error: `Your club already has ${n} athlete${n === 1 ? '' : 's'} in ${placement.weightClass.label} for this age and belt group, the most this competition allows per club.`,
+      };
+    }
   }
 
   const values = {

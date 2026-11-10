@@ -85,8 +85,13 @@ function readCompetition(body, lockedFirstDay = null) {
     venue: clean(body.venue),
     description: typeof body.description === 'string' ? body.description.replace(/\r\n?/g, '\n').trim().slice(0, 5000) : '',
     age_basis: body.age_basis === 'date' ? 'date' : 'year',
+    // Blank means no limit.
+    max_per_club_division: clean(body.max_per_club_division, 3) === '' ? null : Number(clean(body.max_per_club_division, 3)),
   };
   const errors = [];
+  if (values.max_per_club_division !== null && (!Number.isInteger(values.max_per_club_division) || values.max_per_club_division < 1 || values.max_per_club_division > 50)) {
+    errors.push('Enter a club limit per division between 1 and 50, or leave it blank for no limit.');
+  }
   if (!values.name) errors.push('Enter a competition name.');
   if (!values.venue) errors.push('Enter a venue.');
   if (!values.description) errors.push('Enter a description for clubs.');
@@ -299,7 +304,8 @@ router.post('/competitions/:id(\\d+)', (req, res) => {
     if (deadlineMoved) db.prepare('UPDATE competitions SET reminder_sent_at = NULL WHERE id = ?').run(req.competition.id);
     db.prepare(
       `UPDATE competitions SET name = @name, registration_deadline = @registration_deadline,
-         registration_deadline_time = @registration_deadline_time, venue = @venue, description = @description, age_basis = @age_basis WHERE id = @id`
+         registration_deadline_time = @registration_deadline_time, venue = @venue, description = @description, age_basis = @age_basis,
+         max_per_club_division = @max_per_club_division WHERE id = @id`
     ).run({ ...fields, id: req.competition.id });
     saveEventDates(db, req.competition.id, eventDates);
     // Keeps the draw, but moves bouts onto the new list of days.
