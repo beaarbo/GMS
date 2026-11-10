@@ -49,20 +49,18 @@
 <% if (hasPoomsae(competition)) { %>
   <section class="card">
     <h2>Poomsae divisions</h2>
-    <p class="sub">Individual, pair (2 athletes) and team (3 athletes) events, each grouped by gender, age group and belt group. Pairs and teams of boys and girls together compete as mixed, and are placed by their oldest athlete and highest belt.
+    <p class="sub">Individual, pair (2 athletes) and team (3 athletes) events, divided by age group and then belt group, with boys and girls apart. Pairs and teams of boys and girls together compete as mixed, and are placed by their oldest athlete and highest belt.
       Entries are ranked by their judged score.
-      <% if (!hasKyorugi(competition)) { %><%= competition.age_basis === 'year' ? 'Age is the competition year minus the birth year.' : 'Age is taken on the first day of the event.' %><% } %>
+      <%= competition.age_basis === 'year' ? 'Age is the competition year minus the birth year.' : 'Age is taken on the first day of the event.' %>
       <% if (competition.max_per_club_division) { %>Each club can enter at most <strong><%= competition.max_per_club_division %></strong> entr<%= competition.max_per_club_division === 1 ? 'y' : 'ies' %> per division.<% } %></p>
-    <% if (!hasKyorugi(competition)) { %>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Age group</th><th>Ages</th></tr></thead>
-          <tbody>
-            <% setup.ageGroups.forEach((g) => { %><tr><td><strong><%= g.name %></strong></td><td class="nowrap"><%= g.min_age %>–<%= g.max_age %></td></tr><% }) %>
-          </tbody>
-        </table>
-      </div>
-    <% } %>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Poomsae age group</th><th>Ages</th></tr></thead>
+        <tbody>
+          <% setup.poomsaeAgeGroups.forEach((g) => { %><tr><td><strong><%= g.name %></strong></td><td class="nowrap"><%= g.min_age %>–<%= g.max_age %></td></tr><% }) %>
+        </tbody>
+      </table>
+    </div>
   </section>
 <% } %>
 

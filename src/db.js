@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const Database = require('better-sqlite3');
 const { DEFAULT_BELT_GROUPS } = require('./divisions');
+const { DEFAULT_POOMSAE_AGE_GROUPS } = require('./poomsae');
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS clubs (
@@ -243,6 +244,15 @@ CREATE TABLE IF NOT EXISTS division_days (
   PRIMARY KEY (competition_id, gender, age_group_id, belt_group_id, weight_class_id)
 );
 
+-- Poomsae has its own age groups (Under 30, Under 40...), apart from kyorugi's.
+CREATE TABLE IF NOT EXISTS poomsae_age_groups (
+  id INTEGER PRIMARY KEY,
+  competition_id INTEGER NOT NULL REFERENCES competitions(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  min_age INTEGER NOT NULL,
+  max_age INTEGER NOT NULL
+);
+
 -- Poomsae entries: one athlete (individual), two (pair) or three (team) from
 -- one club. Divisions are event + gender (X: mixed) + age group + belt group,
 -- stored at entry time like registrations. score is the final judged score.
@@ -252,7 +262,7 @@ CREATE TABLE IF NOT EXISTS poomsae_entries (
   club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
   event TEXT NOT NULL CHECK (event IN ('individual', 'pair', 'team')),
   gender TEXT NOT NULL CHECK (gender IN ('M', 'F', 'X')),
-  age_group_id INTEGER NOT NULL REFERENCES age_groups(id),
+  age_group_id INTEGER NOT NULL REFERENCES poomsae_age_groups(id),
   belt_group_id INTEGER NOT NULL REFERENCES belt_groups(id),
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
   review_note TEXT NOT NULL DEFAULT '',
@@ -485,6 +495,62 @@ function migrateEvents(db) {
   })();
 }
 
+// Version 13: poomsae gets its own age groups. Each competition gets the
+// default brackets, and entries made under version 12 (which used the kyorugi
+// age groups) move to the bracket of their oldest athlete, or the nearest one.
+// The entries table is rebuilt to point at the new groups, with foreign keys off
+// so poomsae_members keeps its rows, as in version 8.
+function migratePoomsaeAges(db) {
+  db.pragma('foreign_keys = OFF');
+  try {
+    db.transaction(() => {
+      const insert = db.prepare('INSERT INTO poomsae_age_groups (competition_id, name, min_age, max_age) VALUES (?, ?, ?, ?)');
+      db.prepare('SELECT id FROM competitions WHERE id NOT IN (SELECT competition_id FROM poomsae_age_groups)').all().forEach(({ id }) => {
+        DEFAULT_POOMSAE_AGE_GROUPS.forEach((g) => insert.run(id, g.name, g.min_age, g.max_age));
+      });
+      const { sql } = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'poomsae_entries'").get();
+      if (!sql.includes('poomsae_age_groups')) {
+        db.exec(`
+          CREATE TABLE poomsae_entries_new (
+            id INTEGER PRIMARY KEY,
+            competition_id INTEGER NOT NULL REFERENCES competitions(id) ON DELETE CASCADE,
+            club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+            event TEXT NOT NULL CHECK (event IN ('individual', 'pair', 'team')),
+            gender TEXT NOT NULL CHECK (gender IN ('M', 'F', 'X')),
+            age_group_id INTEGER NOT NULL REFERENCES poomsae_age_groups(id),
+            belt_group_id INTEGER NOT NULL REFERENCES belt_groups(id),
+            status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+            review_note TEXT NOT NULL DEFAULT '',
+            reviewed_at TEXT,
+            score REAL,
+            scored_at TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+          );
+          INSERT INTO poomsae_entries_new SELECT id, competition_id, club_id, event, gender, age_group_id, belt_group_id,
+            status, review_note, reviewed_at, score, scored_at, created_at FROM poomsae_entries;
+          DROP TABLE poomsae_entries;
+          ALTER TABLE poomsae_entries_new RENAME TO poomsae_entries;
+          CREATE INDEX IF NOT EXISTS idx_poomsae_entries_competition ON poomsae_entries(competition_id);
+        `);
+        const groups = db.prepare('SELECT * FROM poomsae_age_groups WHERE competition_id = ?');
+        const move = db.prepare('UPDATE poomsae_entries SET age_group_id = ? WHERE id = ?');
+        db.prepare(
+          'SELECT e.id, e.competition_id, MAX(m.age_at_event) AS age FROM poomsae_entries e JOIN poomsae_members m ON m.entry_id = e.id GROUP BY e.id'
+        ).all().forEach((entry) => {
+          const gap = (g) => (entry.age < g.min_age ? g.min_age - entry.age : entry.age > g.max_age ? entry.age - g.max_age : 0);
+          const [best] = groups.all(entry.competition_id).sort((a, b) => gap(a) - gap(b));
+          move.run(best.id, entry.id);
+        });
+      }
+      const broken = db.pragma('foreign_key_check');
+      if (broken.length > 0) throw new Error(`Moving poomsae entries broke ${broken.length} foreign key(s).`);
+      db.pragma('user_version = 13');
+    })();
+  } finally {
+    db.pragma('foreign_keys = ON');
+  }
+}
+
 function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 1) migrateBelts(db);
   if (db.pragma('user_version', { simple: true }) < 2) migrateSchedule(db);
@@ -498,6 +564,7 @@ function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 10) migrateMerges(db);
   if (db.pragma('user_version', { simple: true }) < 11) migrateClubLimit(db);
   if (db.pragma('user_version', { simple: true }) < 12) migrateEvents(db);
+  if (db.pragma('user_version', { simple: true }) < 13) migratePoomsaeAges(db);
 }
 
 // Safe on old databases: only tables that don't exist yet are created.

@@ -13,6 +13,7 @@ const {
   loadDivisionSetup,
   countRegistrations,
   saveDivisionSetup,
+  savePoomsaeAgeGroups,
   getEventDates,
   saveEventDates,
   createCompetition,
@@ -64,7 +65,7 @@ const { writeBoutListPdf } = require('../boutlistPdf');
 const { clean, toArray, requireRole, notFound, wrap, passwordError } = require('./helpers');
 const { resultsPath } = require('./competitionDay');
 const { createBackup, pruneBackups, listBackups } = require('../backups');
-const { EVENT_TYPES } = require('../poomsae');
+const { EVENT_TYPES, hasKyorugi, hasPoomsae, validatePoomsaeAgeGroups } = require('../poomsae');
 
 const router = express.Router();
 router.use(requireRole('admin'));
@@ -520,41 +521,62 @@ function readSetup(body) {
   return { ageGroups, beltGroups: DEFAULT_BELT_GROUPS };
 }
 
+// Poomsae age group rows from the form. Rows left blank are dropped.
+function readPoomsaeAges(body) {
+  const names = toArray(body.poomsae_name);
+  return names
+    .map((_, i) => ({
+      name: clean(names[i], 60),
+      minRaw: clean(toArray(body.poomsae_min)[i]),
+      maxRaw: clean(toArray(body.poomsae_max)[i]),
+    }))
+    .filter((g) => g.name || g.minRaw || g.maxRaw)
+    .map((g) => ({ ...g, min_age: g.minRaw === '' ? NaN : Number(g.minRaw), max_age: g.maxRaw === '' ? NaN : Number(g.maxRaw) }));
+}
+
+function setupPage(res, competition, { status = 200, ageRows, poomsaeRows, beltRows, errors = [], locked = false }) {
+  return res.status(status).render('admin/setup', { title: 'Division setup', competition, ageRows, poomsaeRows, beltRows, errors, locked });
+}
+
 router.get('/competitions/:id(\\d+)/setup', (req, res) => {
   const { db } = req.app.locals;
   const setup = loadDivisionSetup(db, req.competition.id);
-  res.render('admin/setup', {
-    title: 'Division setup',
-    competition: req.competition,
+  return setupPage(res, req.competition, {
     ageRows: setupRowsForForm(setup),
+    poomsaeRows: setup.poomsaeAgeGroups,
     beltRows: setup.beltGroups,
-    errors: [],
     locked: countRegistrations(db, req.competition.id) > 0,
   });
 });
 
+// Each event's part is read and saved only when the competition holds that event.
 router.post('/competitions/:id(\\d+)/setup', (req, res) => {
   const { db } = req.app.locals;
-  if (countRegistrations(db, req.competition.id) > 0) {
+  const competition = req.competition;
+  if (countRegistrations(db, competition.id) > 0) {
     req.flash('error', 'Divisions are locked because clubs have already registered fighters.');
-    return res.redirect(`/admin/competitions/${req.competition.id}/setup`);
+    return res.redirect(`/admin/competitions/${competition.id}/setup`);
   }
-  const setup = readSetup(req.body);
-  const errors = validateSetup(setup);
+  const current = loadDivisionSetup(db, competition.id);
+  const setup = hasKyorugi(competition) ? readSetup(req.body) : null;
+  const poomsaeAges = hasPoomsae(competition) ? readPoomsaeAges(req.body) : null;
+  const errors = [...(setup ? validateSetup(setup) : []), ...(poomsaeAges ? validatePoomsaeAgeGroups(poomsaeAges) : [])];
   if (errors.length > 0) {
-    return res.status(400).render('admin/setup', {
-      title: 'Division setup',
-      competition: req.competition,
-      ageRows: setup.ageGroups.map((g) => ({ ...g, min_age: g.minRaw, max_age: g.maxRaw })),
-      beltRows: setup.beltGroups,
+    return setupPage(res, competition, {
+      status: 400,
+      ageRows: setup ? setup.ageGroups.map((g) => ({ ...g, min_age: g.minRaw, max_age: g.maxRaw })) : setupRowsForForm(current),
+      poomsaeRows: poomsaeAges ? poomsaeAges.map((g) => ({ ...g, min_age: g.minRaw, max_age: g.maxRaw })) : current.poomsaeAgeGroups,
+      beltRows: current.beltGroups,
       errors,
-      locked: false,
     });
   }
-  saveDivisionSetup(db, req.competition.id, setup);
-  req.logActivity('competition.divisions', `Changed the division setup for ${req.competition.name}`, req.competition.id);
+  db.transaction(() => {
+    if (setup) saveDivisionSetup(db, competition.id, setup);
+    if (poomsaeAges) savePoomsaeAgeGroups(db, competition.id, poomsaeAges);
+  })();
+  req.logActivity('competition.divisions', `Changed the division setup for ${competition.name}`, competition.id);
   req.flash('success', 'Divisions saved.');
-  return res.redirect(`/admin/competitions/${req.competition.id}/setup`);
+  return res.redirect(`/admin/competitions/${competition.id}/setup`);
 });
 
 function pickFilters(source) {

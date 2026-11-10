@@ -634,7 +634,7 @@ test('schedule migration clears old draws and keeps competitions', () => {
 
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM bouts').get().n, 0);
   assert.equal(db.prepare('SELECT bout_courts FROM competitions WHERE id = ?').get(compId).bout_courts, 2);
-  assert.equal(db.pragma('user_version', { simple: true }), 12);
+  assert.equal(db.pragma('user_version', { simple: true }), 13);
 });
 
 test('admin creates a club, a coach applies, and only approval unlocks athlete registration', async () => {
@@ -799,7 +799,7 @@ test('migrating old club accounts keeps logins and fighters and approves each co
   const clubColumns = db.pragma('table_info(clubs)').map((c) => c.name);
   assert.ok(!clubColumns.includes('coach_name'));
   assert.equal(db.pragma('foreign_key_check').length, 0);
-  assert.equal(db.pragma('user_version', { simple: true }), 12);
+  assert.equal(db.pragma('user_version', { simple: true }), 13);
 });
 
 test('a fighter alone in a division has no bout number', async () => {
@@ -973,7 +973,7 @@ test('migration turns a day count into consecutive dates', () => {
   const { id } = db.prepare('SELECT id FROM competitions').get();
   assert.deepEqual(getEventDates(db, id), ['2030-01-30', '2030-01-31', '2030-02-01']);
   assert.ok(!db.pragma('table_info(competitions)').some((c) => c.name === 'bout_days'));
-  assert.equal(db.pragma('user_version', { simple: true }), 12);
+  assert.equal(db.pragma('user_version', { simple: true }), 13);
 });
 
 const tokenIn = (message) => message.text.match(/reset-password\/([0-9a-f]{64})/)[1];
@@ -1218,7 +1218,7 @@ test('the results migration removes declared weights and keeps registrations', (
   db.pragma('user_version = 4');
   migrate(db);
   assert.ok(!db.pragma('table_info(registrations)').some((c) => c.name === 'declared_weight_kg'));
-  assert.equal(db.pragma('user_version', { simple: true }), 12);
+  assert.equal(db.pragma('user_version', { simple: true }), 13);
 });
 
 test('athletes need the right document before they can enter', async () => {
@@ -1835,7 +1835,7 @@ test('rebuilding the users table for officials keeps every linked row', async ()
   db.close();
 
   db = openDb(file);
-  assert.equal(db.pragma('user_version', { simple: true }), 12);
+  assert.equal(db.pragma('user_version', { simple: true }), 13);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM club_applications').get().n, 1);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM password_resets').get().n, 1);
   assert.equal(db.prepare('SELECT author_id FROM news_posts').get().author_id, coachId);
@@ -2204,7 +2204,7 @@ test('poomsae: coaches enter individuals, pairs and teams, the admin approves, a
   assert.match((await club.get(page)).text, /Dan Reyes: Upload/);
   await enter({ event: 'pair', member: [String(ana), String(ben)] });
   const [pair] = entries().filter((e) => e.event === 'pair');
-  const junior = db.prepare("SELECT id FROM age_groups WHERE competition_id = ? AND name = 'Junior'").get(compId).id;
+  const junior = db.prepare("SELECT id FROM poomsae_age_groups WHERE competition_id = ? AND name = 'Junior (U18)'").get(compId).id;
   const black = db.prepare("SELECT id FROM belt_groups WHERE competition_id = ? AND min_rank = 3").get(compId).id;
   assert.deepEqual([pair.gender, pair.age_group_id, pair.belt_group_id], ['X', junior, black], 'mixed, oldest age, highest belt');
 
@@ -2225,7 +2225,7 @@ test('poomsae: coaches enter individuals, pairs and teams, the admin approves, a
   // The admin reviews: a rejection needs a reason, then everything pending is approved.
   const admin = await login(app, 'admin@test.test');
   const review = `/admin/competitions/${compId}/poomsae`;
-  assert.match((await admin.get(review)).text, /Individual · Female · Junior · Black Belt/);
+  assert.match((await admin.get(review)).text, /Individual · Female · Junior \(U18\) · Black Belt/);
   await post(admin, `${review}/review`, { single: `rejected:${pair.id}` }, review);
   assert.equal(entries().find((e) => e.id === pair.id).status, 'pending');
   await post(admin, `${review}/review`, { bulk: 'approve-pending' }, review);
@@ -2268,4 +2268,60 @@ test('poomsae: coaches enter individuals, pairs and teams, the admin approves, a
   assert.equal((await club.get(`/club/competitions/${forms}`)).headers.location, `/club/competitions/${forms}/poomsae`);
   assert.match((await request(app).get(`/competitions/${forms}`)).text, /Poomsae divisions/);
   assert.doesNotMatch((await request(app).get(`/competitions/${forms}`)).text, /Kyorugi divisions/);
+});
+
+test('poomsae has its own age groups, edited in division setup, and older entries move to them', async () => {
+  const { app, db } = await setup();
+  const admin = await login(app, 'admin@test.test');
+  const both = openCompetition(db, { name: 'Both', events: 'both' });
+  const forms = openCompetition(db, { name: 'Forms', events: 'poomsae' });
+  const path = (id) => `/admin/competitions/${id}/setup`;
+  const groups = (id) => db.prepare('SELECT name, min_age, max_age FROM poomsae_age_groups WHERE competition_id = ? ORDER BY min_age').all(id);
+
+  // New competitions start with the default brackets, Under 30 as senior.
+  assert.deepEqual(groups(both).find((g) => g.name === 'Senior (U30)'), { name: 'Senior (U30)', min_age: 18, max_age: 30 });
+  assert.match((await admin.get(path(both))).text, /Poomsae age groups[\s\S]*Kyorugi age groups and weight classes/);
+  const formsPage = (await admin.get(path(forms))).text;
+  assert.match(formsPage, /Poomsae age groups/);
+  assert.doesNotMatch(formsPage, /weight classes/, 'a poomsae-only competition has no weights to set');
+
+  // Overlaps are refused; a good list replaces the old one. Kyorugi stays untouched.
+  const kyorugiBefore = loadDivisionSetup(db, forms).weightClasses.length;
+  const bad = await post(admin, path(forms), { poomsae_name: ['U18', 'U30'], poomsae_min: ['12', '17'], poomsae_max: ['17', '30'] }, path(forms));
+  assert.equal(bad.status, 400);
+  assert.match(bad.text, /Poomsae age groups U18 and U30 overlap/);
+  await post(admin, path(forms), { poomsae_name: ['U18', 'U30', 'Over 30'], poomsae_min: ['12', '18', '31'], poomsae_max: ['17', '30', '99'] }, path(forms));
+  assert.deepEqual(groups(forms).map((g) => g.name), ['U18', 'U30', 'Over 30']);
+  assert.equal(loadDivisionSetup(db, forms).weightClasses.length, kyorugiBefore);
+  assert.match((await request(app).get(`/competitions/${forms}`)).text, /Over 30<\/strong><\/td><td class="nowrap">31–99/);
+});
+
+test('migrating to version 13 moves poomsae entries onto poomsae age groups', () => {
+  const db = new Database(':memory:');
+  db.pragma('foreign_keys = ON');
+  initialise(db);
+  const club = createClub(db, { name: 'Club', city: 'City' });
+  const comp = openCompetition(db, { events: 'poomsae' });
+  const fighter = db.prepare("INSERT INTO fighters (club_id, first_name, last_name, gender, date_of_birth, belt_rank) VALUES (?, 'A', 'B', 'F', '2000-01-01', 3)").run(club).lastInsertRowid;
+  const kyorugiAge = db.prepare('SELECT id FROM age_groups WHERE competition_id = ? ORDER BY min_age DESC').get(comp).id;
+  const belt = db.prepare('SELECT id FROM belt_groups WHERE competition_id = ? AND min_rank = 3').get(comp).id;
+  // Rebuild the version 12 shape: entries referencing age_groups, no poomsae groups.
+  db.pragma('foreign_keys = OFF');
+  db.exec(`DELETE FROM poomsae_age_groups; DROP TABLE poomsae_entries;
+    CREATE TABLE poomsae_entries (id INTEGER PRIMARY KEY, competition_id INTEGER NOT NULL REFERENCES competitions(id) ON DELETE CASCADE,
+      club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE, event TEXT NOT NULL, gender TEXT NOT NULL,
+      age_group_id INTEGER NOT NULL REFERENCES age_groups(id), belt_group_id INTEGER NOT NULL REFERENCES belt_groups(id),
+      status TEXT NOT NULL DEFAULT 'pending', review_note TEXT NOT NULL DEFAULT '', reviewed_at TEXT, score REAL, scored_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')));`);
+  db.pragma('foreign_keys = ON');
+  const entry = db.prepare("INSERT INTO poomsae_entries (competition_id, club_id, event, gender, age_group_id, belt_group_id, status) VALUES (?, ?, 'individual', 'F', ?, ?, 'approved')").run(comp, club, kyorugiAge, belt).lastInsertRowid;
+  db.prepare('INSERT INTO poomsae_members (entry_id, fighter_id, age_at_event) VALUES (?, ?, 35)').run(entry, fighter);
+  db.pragma('user_version = 12');
+
+  migrate(db);
+  assert.equal(db.pragma('user_version', { simple: true }), 13);
+  const moved = db.prepare('SELECT a.name, e.status FROM poomsae_entries e JOIN poomsae_age_groups a ON a.id = e.age_group_id WHERE e.id = ?').get(entry);
+  assert.deepEqual(moved, { name: 'U40', status: 'approved' });
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM poomsae_members').get().n, 1);
+  assert.deepEqual(db.pragma('foreign_key_check'), []);
 });

@@ -445,7 +445,7 @@ router.get('/competitions/:id(\\d+)/poomsae', (req, res) => {
     .map((f) => ({
       ...f,
       age: competitionAge(f.date_of_birth, competition.event_date, competition.age_basis),
-      fits: placeEntry({ event: 'individual', members: [f], competition, ...setup }),
+      fits: placeEntry({ event: 'individual', members: [f], competition, ageGroups: setup.poomsaeAgeGroups, beltGroups: setup.beltGroups }),
     }));
   const entries = listPoomsaeEntries(db, competition.id, { clubId: req.user.club_id });
   // Places need every club's scores, but only this club's entries are shown.

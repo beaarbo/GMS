@@ -14,9 +14,30 @@
 
 <form method="post" action="/admin/competitions/<%= competition.id %>/setup">
   <input type="hidden" name="_csrf" value="<%= csrf %>">
+  <% if (hasPoomsae(competition)) { %>
+    <fieldset class="card" <%= locked ? 'disabled' : '' %>>
+      <h2>Poomsae age groups</h2>
+      <p class="sub">Poomsae divides by age, then belt, with no weight. Each group covers ages from its minimum to its maximum, for example Senior (U30) is 18 to 30. A pair or team goes by its oldest athlete. Clear a row's fields to remove it.</p>
+      <div class="table-wrap">
+        <table class="setup-table">
+          <thead><tr><th>Name</th><th>Min age</th><th>Max age</th></tr></thead>
+          <tbody>
+            <% [...poomsaeRows, {}, {}].forEach((row, i) => { %>
+              <tr>
+                <td><input name="poomsae_name" value="<%= row.name || '' %>" aria-label="Poomsae age group <%= i + 1 %> name"></td>
+                <td><input name="poomsae_min" type="number" min="0" value="<%= row.min_age ?? '' %>" aria-label="Poomsae age group <%= i + 1 %> minimum age"></td>
+                <td><input name="poomsae_max" type="number" min="0" value="<%= row.max_age ?? '' %>" aria-label="Poomsae age group <%= i + 1 %> maximum age"></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </fieldset>
+  <% } %>
+
+  <% if (hasKyorugi(competition)) { %>
   <fieldset class="card" <%= locked ? 'disabled' : '' %>>
-    <h2>Age groups and weight classes</h2>
-    <% if (hasPoomsae(competition)) { %><p class="sub">Poomsae uses the same age and belt groups. Weight limits only apply to kyorugi<%= hasKyorugi(competition) ? '' : ', so leave them as they are' %>.</p><% } %>
+    <h2><%= hasPoomsae(competition) ? 'Kyorugi age groups and weight classes' : 'Age groups and weight classes' %></h2>
     <p class="sub">List limits in increasing order. <strong>-45</strong> means up to and including 45 kg, and <strong>+78</strong> is the open class above 78 kg. Clear a row's fields to remove it.</p>
     <div class="table-wrap">
       <table class="setup-table">
@@ -35,6 +56,7 @@
       </table>
     </div>
   </fieldset>
+  <% } %>
 
   <section class="card">
     <h2>Belt groups</h2>

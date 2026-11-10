@@ -16,6 +16,38 @@ const POOMSAE_GENDERS = { M: 'Male', F: 'Female', X: 'Mixed' };
 
 const MAX_SCORE = 10;
 
+// Poomsae has its own age groups, by age and then belt, with no weight. The
+// adult brackets follow World Taekwondo poomsae: Under 30, Under 40 and so on.
+// Admins can edit them per competition in Division setup.
+const DEFAULT_POOMSAE_AGE_GROUPS = [
+  { name: 'Kids (U12)', min_age: 6, max_age: 11 },
+  { name: 'Cadet (U15)', min_age: 12, max_age: 14 },
+  { name: 'Junior (U18)', min_age: 15, max_age: 17 },
+  { name: 'Senior (U30)', min_age: 18, max_age: 30 },
+  { name: 'U40', min_age: 31, max_age: 40 },
+  { name: 'U50', min_age: 41, max_age: 50 },
+  { name: 'U60', min_age: 51, max_age: 60 },
+  { name: 'U65', min_age: 61, max_age: 65 },
+  { name: 'Over 65', min_age: 66, max_age: 99 },
+];
+
+// Every group needs a name and a valid range, and no age may fit two groups.
+function validatePoomsaeAgeGroups(groups) {
+  const errors = [];
+  if (groups.length === 0) errors.push('Add at least one poomsae age group.');
+  groups.forEach((g) => {
+    if (!g.name) errors.push('Every poomsae age group needs a name.');
+    if (!Number.isInteger(g.min_age) || !Number.isInteger(g.max_age) || g.min_age < 0 || g.min_age > g.max_age) {
+      errors.push(`Poomsae ${g.name || 'age group'}: enter a valid age range.`);
+    }
+  });
+  const sorted = [...groups].sort((a, b) => a.min_age - b.min_age);
+  for (let i = 1; i < sorted.length; i += 1) {
+    if (sorted[i].min_age <= sorted[i - 1].max_age) errors.push(`Poomsae age groups ${sorted[i - 1].name} and ${sorted[i].name} overlap.`);
+  }
+  return errors;
+}
+
 const hasKyorugi = (competition) => competition.events !== 'poomsae';
 const hasPoomsae = (competition) => competition.events === 'poomsae' || competition.events === 'both';
 
@@ -86,6 +118,8 @@ module.exports = {
   POOMSAE_EVENTS,
   POOMSAE_GENDERS,
   MAX_SCORE,
+  DEFAULT_POOMSAE_AGE_GROUPS,
+  validatePoomsaeAgeGroups,
   hasKyorugi,
   hasPoomsae,
   placeEntry,

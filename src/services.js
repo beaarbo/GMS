@@ -12,7 +12,7 @@ const {
   formatDay,
 } = require('./divisions');
 const { buildBracket, roundsFromSlots, seededSlots, slotsAreValid, assignCourts, scheduleCourt, formatTime } = require('./bracket');
-const { placeEntry, POOMSAE_EVENTS, poomsaeDivisionTitle, rankEntries } = require('./poomsae');
+const { placeEntry, POOMSAE_EVENTS, DEFAULT_POOMSAE_AGE_GROUPS, poomsaeDivisionTitle, rankEntries } = require('./poomsae');
 const { logActivity } = require('./activity');
 const { documentLabel, documentTypeFor } = require('./documents');
 
@@ -71,6 +71,7 @@ function loadDivisionSetup(db, competitionId) {
     weightClasses: db
       .prepare('SELECT * FROM weight_classes WHERE competition_id = ? ORDER BY max_kg IS NULL, max_kg')
       .all(competitionId),
+    poomsaeAgeGroups: db.prepare('SELECT * FROM poomsae_age_groups WHERE competition_id = ? ORDER BY min_age').all(competitionId),
   };
 }
 
@@ -112,6 +113,17 @@ function saveDivisionSetup(db, competitionId, { ageGroups, beltGroups }) {
   })();
 }
 
+// Replaces a competition's poomsae age groups. Validate first. Locked, like the
+// kyorugi setup, once entries exist.
+function savePoomsaeAgeGroups(db, competitionId, groups) {
+  db.transaction(() => {
+    if (countRegistrations(db, competitionId) > 0) throw new Error('Division setup is locked once registrations exist.');
+    db.prepare('DELETE FROM poomsae_age_groups WHERE competition_id = ?').run(competitionId);
+    const insert = db.prepare('INSERT INTO poomsae_age_groups (competition_id, name, min_age, max_age) VALUES (?, ?, ?, ?)');
+    groups.forEach((g) => insert.run(competitionId, g.name, g.min_age, g.max_age));
+  })();
+}
+
 function getEventDates(db, competitionId) {
   return db
     .prepare('SELECT event_date FROM competition_dates WHERE competition_id = ? ORDER BY event_date')
@@ -139,6 +151,7 @@ function createCompetition(db, { event_dates: eventDates, ...fields }) {
       .run({ description: '', age_basis: 'year', status: 'draft', registration_deadline_time: '23:59', max_per_club_division: null, events: 'kyorugi', ...fields }).lastInsertRowid;
     saveEventDates(db, id, eventDates || [fields.event_date]);
     saveDivisionSetup(db, id, { ageGroups: DEFAULT_AGE_GROUPS, beltGroups: DEFAULT_BELT_GROUPS });
+    savePoomsaeAgeGroups(db, id, DEFAULT_POOMSAE_AGE_GROUPS);
     return Number(id);
   })();
 }
@@ -354,7 +367,7 @@ const POOMSAE_SELECT = `
   SELECT e.*, c.name AS club_name, a.name AS age_group, a.min_age, b.name AS belt_group, b.min_rank
   FROM poomsae_entries e
   JOIN clubs c ON c.id = e.club_id
-  JOIN age_groups a ON a.id = e.age_group_id
+  JOIN poomsae_age_groups a ON a.id = e.age_group_id
   JOIN belt_groups b ON b.id = e.belt_group_id`;
 
 const EVENT_ORDER = "CASE e.event WHEN 'individual' THEN 0 WHEN 'pair' THEN 1 ELSE 2 END";
@@ -387,7 +400,8 @@ function getPoomsaeEntry(db, competitionId, entryId) {
 // Enters one athlete (individual), two (pair) or three (team) from a club.
 // Each athlete can be in one entry per event. Returns { ok, error?, placement }.
 function enterPoomsae(db, competition, clubId, event, fighters) {
-  const placement = placeEntry({ event, members: fighters, competition, ...loadDivisionSetup(db, competition.id) });
+  const { poomsaeAgeGroups, beltGroups } = loadDivisionSetup(db, competition.id);
+  const placement = placeEntry({ event, members: fighters, competition, ageGroups: poomsaeAgeGroups, beltGroups });
   if (!placement.ok) return placement;
   const label = POOMSAE_EVENTS[event].label.toLowerCase();
 
@@ -1275,6 +1289,7 @@ module.exports = {
   loadDivisionSetup,
   countRegistrations,
   saveDivisionSetup,
+  savePoomsaeAgeGroups,
   getEventDates,
   saveEventDates,
   createCompetition,
