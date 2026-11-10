@@ -13,7 +13,7 @@ const {
 } = require('./divisions');
 const { buildBracket, roundsFromSlots, seededSlots, slotsAreValid, assignCourts, scheduleCourt, formatTime, layoutBracket } = require('./bracket');
 const {
-  placeEntry, POOMSAE_EVENTS, DEFAULT_POOMSAE_AGE_GROUPS, poomsaeDivisionTitle, rankEntries, divisionMode, bracketEntrants, poomsaeMedalists, schedulePoomsae,
+  placeEntry, POOMSAE_EVENTS, POOMSAE_GENDERS, DEFAULT_POOMSAE_AGE_GROUPS, poomsaeDivisionTitle, rankEntries, divisionMode, bracketEntrants, poomsaeMedalists, schedulePoomsae,
 } = require('./poomsae');
 const { logActivity } = require('./activity');
 const { documentLabel, documentTypeFor } = require('./documents');
@@ -721,6 +721,12 @@ function generatePoomsaeOrder(db, competition, key, rng = secureRandom) {
 // in running order (day, court, start). clubId keeps only divisions where that
 // club has an entry; published keeps only the stages published so far (lists,
 // brackets). Pages carry what the PDF and web page both draw.
+// Titled like the kyorugi bout list: "POOMSAE INDIVIDUAL BLACK BELT, Junior (U18), Female".
+function boutListTitle(d) {
+  const e = d.entries[0];
+  return `POOMSAE ${POOMSAE_EVENTS[e.event].label.toUpperCase()} ${e.belt_group.toUpperCase()}, ${e.age_group}, ${POOMSAE_GENDERS[e.gender]}`;
+}
+
 function poomsaeBoutList(db, competition, { clubId = null, published = false } = {}) {
   const show = published
     ? { list: Boolean(competition.poomsae_published_at), bracket: Boolean(competition.poomsae_brackets_published_at) }
@@ -735,7 +741,7 @@ function poomsaeBoutList(db, competition, { clubId = null, published = false } =
     .forEach((d) => {
       if (d.order.length > 0) {
         pages.push({
-          kind: 'list', key: d.key, title: `POOMSAE ${d.title.toUpperCase()}`, day: d.listDay, court: d.listCourt, start: d.order[0].perform_time || '',
+          kind: 'list', key: d.key, title: boutListTitle(d), day: d.listDay, court: d.listCourt, start: d.order[0].perform_time || '',
           meta: [`Day: ${dayLabel(d.listDay)}`, `Poomsae court: ${d.listCourt || '-'}`, `Entries: ${d.order.length}`, `Starts: ${d.order[0].perform_time || '-'}`],
           performers: d.order.map((e) => ({ id: e.id, name: e.names, club: e.club_name, clubId: e.club_id, time: e.perform_time })),
           dayLabel: dayLabel(d.listDay),
@@ -745,7 +751,7 @@ function poomsaeBoutList(db, competition, { clubId = null, published = false } =
         const matches = d.bouts.filter((b) => !b.isBye).length;
         const times = d.bouts.map((b) => b.time).filter(Boolean).sort();
         pages.push({
-          kind: 'bracket', key: d.key, title: `POOMSAE ${d.title.toUpperCase()}${d.mode === 'cut' ? ' - FINAL ROUND' : ''}`, day: d.day, court: d.court, start: times[0] || '',
+          kind: 'bracket', key: d.key, title: `${boutListTitle(d)}${d.mode === 'cut' ? ' - FINAL ROUND' : ''}`, day: d.day, court: d.court, start: times[0] || '',
           meta: [`Day: ${dayLabel(d.day)}`, `Poomsae court: ${d.court || '-'}`, `Entries: ${d.bouts.filter((b) => b.round === 1).reduce((n, b) => n + (b.blue ? 1 : 0) + (b.red ? 1 : 0), 0)}`, `Bouts: ${matches}`],
           bouts: d.bouts, matches, layout: d.layout, dayLabel: dayLabel(d.day),
         });

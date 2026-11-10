@@ -1,0 +1,22 @@
+<%# One published poomsae page (a performance order or a bracket), as on the kyorugi bout list. Expects page and highlightClubId. %>
+<section class="card">
+  <div class="division-head">
+    <h2><%= page.title %></h2>
+    <p class="stats">
+      <% page.meta.forEach((line) => { const [label, value] = line.split(': '); %><span><%= label %>: <strong><%= value %></strong></span><% }) %>
+    </p>
+  </div>
+  <% if (page.kind === 'list') { %>
+    <p class="sub">Performance order, drawn at random.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th class="num">#</th><th>Athletes</th><th>Club</th><th>Time</th></tr></thead>
+        <tbody>
+          <% page.performers.forEach((p, i) => { %><tr<%- highlightClubId && p.clubId === highlightClubId ? ' class="own-row"' : '' %>><td class="num"><%= i + 1 %></td><td><strong><%= p.name %></strong></td><td><%= p.club %></td><td class="nowrap"><%= p.time || '–' %></td></tr><% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } else { %>
+    <%- include('bracket', { division: page, highlightClubId }) %>
+  <% } %>
+</section>

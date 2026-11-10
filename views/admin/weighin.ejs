@@ -64,7 +64,7 @@
     <% const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); %>
     <% const keep = () => Object.entries(filters).filter(([, v]) => v).map(([k, v]) => `<input type="hidden" name="${k}" value="${esc(v)}">`).join(''); %>
     <div class="table-wrap">
-      <table class="weighin-table">
+      <table>
         <thead><tr><th>Athlete</th><th>Division</th><th>Weight class</th><th>Result</th><th></th></tr></thead>
         <tbody>
           <% rows.forEach((r) => { const action = `/admin/competitions/${competition.id}/weigh-in/${r.id}`; const deciding = pending && pending.registrationId === r.id; %>

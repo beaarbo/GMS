@@ -13,17 +13,6 @@
 <%- include('partials/medals') %>
 
 <% divisions.forEach((division) => { %>
-  <section class="card">
-    <div class="division-head">
-      <h2><%= division.title %></h2>
-      <p class="stats">
-        <span>Day: <strong><%= division.dayLabel %></strong></span>
-        <span>Court: <strong><%= division.court || '–' %></strong></span>
-        <span>Participants: <strong><%= division.participants %></strong></span>
-        <span>Matches: <strong><%= division.matches %></strong></span>
-      </p>
-    </div>
-    <%- include('partials/bracket', { division, highlightClubId }) %>
-  </section>
+  <%- include('partials/kyorugi_division', { division, highlightClubId }) %>
 <% }) %>
 <%- include('partials/bottom') %>

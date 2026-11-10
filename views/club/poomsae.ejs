@@ -124,21 +124,6 @@
   </div>
 <% } %>
 <% pages.forEach((page) => { %>
-  <section class="card">
-    <h2><%= page.title %></h2>
-    <p class="sub"><% if (page.court) { %><strong>Day <%= page.dayLabel %>, Poomsae court <%= page.court %></strong>, from <%= page.start %><% } else { %>Not on a court<% } %> · <%= page.kind === 'list' ? 'performance order, drawn at random' : 'single elimination' %></p>
-    <% if (page.kind === 'list') { %>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>#</th><th>Athletes</th><th>Club</th><th>Time</th></tr></thead>
-          <tbody>
-            <% page.performers.forEach((p, i) => { %><tr<%- p.clubId === user.club_id ? ' class="own-row"' : '' %>><td class="num"><%= i + 1 %></td><td><strong><%= p.name %></strong></td><td><%= p.club %></td><td class="nowrap"><%= p.time || '' %></td></tr><% }) %>
-          </tbody>
-        </table>
-      </div>
-    <% } else { %>
-      <%- include('../partials/bracket', { division: page, highlightClubId: user.club_id }) %>
-    <% } %>
-  </section>
+  <%- include('../partials/poomsae_page', { page, highlightClubId: user.club_id }) %>
 <% }) %>
 <%- include('../partials/bottom') %>

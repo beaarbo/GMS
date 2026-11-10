@@ -73,6 +73,8 @@ h1, h2, h3 { color: var(--ink); line-height: 1.25; margin: 0 0 var(--space-2); l
 h1 { font-size: var(--text-xl); font-weight: 700; }
 h2 { font-size: var(--text-lg); font-weight: 650; }
 h3 { font-size: var(--text-base); font-weight: 650; }
+/* A subheading inside a card, such as a poomsae division's order and bracket, gets room from what is above it. */
+.card > h3:not(:first-child) { margin-top: var(--space-5); }
 p { margin: 0 0 var(--space-4); }
 
 :focus-visible { outline: none; box-shadow: var(--focus); border-radius: var(--radius-sm); }
@@ -404,8 +406,6 @@ label.check { display: flex; align-items: center; gap: var(--space-2); font-weig
 .setup-table input, .setup-table select { min-width: 70px; }
 .setup-table .limits { min-width: 240px; }
 .bulk-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); }
-.rules dt { font-weight: 600; margin-top: var(--space-3); }
-.rules dd { margin: 2px 0 0; color: var(--muted); }
 .card-stats { margin-top: var(--space-2); }
 
 /* Club icons: always round. Competition logos: rounded squares. Both show

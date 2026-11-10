@@ -20,12 +20,19 @@
       </form>
     <% } %>
     <% if (hasPages) { %><a class="btn secondary" href="/admin/competitions/<%= competition.id %>/poomsae.pdf">Download PDF</a><% } %>
+    <%# Each stage as on the kyorugi bout list: a badge once published, with a button to hide it again. %>
     <% if (isAdmin) { %>
-      <% [['lists', 'performance order', hasLists, competition.poomsae_published_at], ['brackets', 'brackets', hasBrackets, competition.poomsae_brackets_published_at]].forEach(([stage, label, ready, published]) => { %>
-        <% if (ready || published) { %>
-          <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/<%= published ? 'unpublish' : 'publish' %>">
+      <% [['lists', 'performance order', 'Order', hasLists, competition.poomsae_published_at], ['brackets', 'brackets', 'Brackets', hasBrackets, competition.poomsae_brackets_published_at]].forEach(([stage, label, badge, ready, published]) => { %>
+        <% if (published) { %>
+          <span class="badge approved"><%= badge %> published</span>
+          <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/unpublish">
             <input type="hidden" name="_csrf" value="<%= csrf %>">
-            <button class="btn <%= published ? 'secondary' : 'approve' %>" name="stage" value="<%= stage %>" type="submit"><%= published ? `Hide ${label}` : `Publish ${label}` %></button>
+            <button class="btn secondary" name="stage" value="<%= stage %>" type="submit">Hide <%= label %></button>
+          </form>
+        <% } else if (ready) { %>
+          <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/publish" data-confirm="Publish the <%= label %>? Everyone can see it, and coaches with entries will be emailed.">
+            <input type="hidden" name="_csrf" value="<%= csrf %>">
+            <button class="btn approve" name="stage" value="<%= stage %>" type="submit">Publish <%= label %></button>
           </form>
         <% } %>
       <% }) %>
@@ -70,37 +77,17 @@
   <% const showScores = d.mode !== 'bracket'; %>
   <% const names = new Map(d.entries.map((e) => [e.id, e.names])); %>
   <section class="card" id="division-<%= d.key %>">
-    <h2><%= d.title %></h2>
-    <p class="sub">
-      <%= d.approved %> approved<% if (d.pending) { %> · <%= d.pending %> pending<% } %> ·
-      <% if (d.mode === 'score') { %>ranked by score
-      <% } else if (d.mode === 'cut') { %>score round: the top <%= d.cut %> go into the bracket
-      <% } else { %>single elimination<% } %>
-      <% if (d.court) { %> · <strong><%= (days.find(([n]) => n === d.day) || [, `Day ${d.day}`])[1] %>, Poomsae court <%= d.court %></strong><% } %>
-    </p>
-    <% if (isAdmin) { %>
-      <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/division" class="division-edit-row">
-        <input type="hidden" name="_csrf" value="<%= csrf %>">
-        <input type="hidden" name="division" value="<%= d.key %>">
-        <label>Format
-          <select name="format" <%= d.locked ? 'disabled' : '' %>>
-            <option value="">Competition's: <%= POOMSAE_FORMATS[competition.poomsae_format] %></option>
-            <% Object.entries(POOMSAE_FORMATS).forEach(([value, label]) => { %><option value="<%= value %>" <%= d.ownFormat && d.format === value ? 'selected' : '' %>><%= label %></option><% }) %>
-          </select>
-        </label>
-        <label>Top into the bracket
-          <input name="cut" type="number" min="2" max="<%= MAX_CUT %>" value="<%= d.ownCut ?? '' %>" placeholder="<%= competition.poomsae_cut %>" <%= d.locked ? 'disabled' : '' %>>
-        </label>
-        <label>Day
-          <select name="day">
-            <option value="">Any day</option>
-            <% days.forEach(([value, label]) => { %><option value="<%= value %>" <%= d.pinnedDay === value ? 'selected' : '' %>><%= label %></option><% }) %>
-          </select>
-        </label>
-        <button class="btn secondary small" type="submit">Save division</button>
-        <% if (d.locked) { %><span class="hint">The format is fixed now that this division has a performance list, scores or a bracket.</span><% } %>
-      </form>
-    <% } %>
+    <%# "1 (Fri 8 Jan)", as on the kyorugi bout list. %>
+    <% const dayName = (day) => { const found = days.find(([n]) => n === day); return found ? found[2] : day || '–'; }; %>
+    <div class="division-head">
+      <h2><%= d.title %></h2>
+      <p class="stats">
+        <span>Format: <strong><%= d.mode === 'score' ? 'Ranked by score' : d.mode === 'cut' ? `Score round, top ${d.cut}` : 'Single elimination' %></strong></span>
+        <span>Approved: <strong><%= d.approved %></strong></span>
+        <% if (d.pending) { %><span>Pending: <strong><%= d.pending %></strong></span><% } %>
+        <% if (d.listCourt || d.court) { %><span>Day: <strong><%= dayName(d.listDay || d.day) %></strong></span><span>Poomsae court: <strong><%= d.listCourt || d.court %></strong></span><% } %>
+      </p>
+    </div>
     <% const medalLine = ['gold', 'silver', 'bronze'].filter((m) => d.medalists[m].length > 0); %>
     <% if (medalLine.length > 0) { %>
       <p class="stats"><% medalLine.forEach((m) => { %><span><strong><%= m[0].toUpperCase() + m.slice(1) %>:</strong> <%= d.medalists[m].map((id) => names.get(id)).join(', ') %></span><% }) %></p>
@@ -132,7 +119,7 @@
                 <td>
                   <% if (e.score !== null) { %><span class="hint">Scored</span>
                   <% } else if (d.bouts) { %><span class="hint">In a bracket</span>
-                  <% } else if (e.perform_order !== null) { %><span class="hint">In the performance list</span>
+                  <% } else if (e.perform_order !== null) { %><span class="hint">In the list</span>
                   <% } else { %>
                     <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/review" class="inline-form">
                       <input type="hidden" name="_csrf" value="<%= csrf %>">
@@ -152,7 +139,7 @@
     <% if (closed && (d.mode === 'score' || d.mode === 'cut')) { %>
       <h3><%= d.mode === 'cut' ? 'Score round order' : 'Performance order' %></h3>
       <% if (d.order.length > 0) { %>
-        <p class="sub"><% if (d.listCourt) { %><strong><%= (days.find(([n]) => n === d.listDay) || [, `Day ${d.listDay}`])[1] %>, Poomsae court <%= d.listCourt %></strong> · <% } %>drawn at random</p>
+        <p class="sub">Drawn at random.</p>
         <div class="table-wrap">
           <table>
             <thead><tr><th>#</th><th>Athletes</th><th>Club</th><th>Time</th></tr></thead>
@@ -245,6 +232,33 @@
       <% } else { %>
         <p class="empty">The organiser draws this bracket.</p>
       <% } %>
+    <% } %>
+
+    <% if (isAdmin) { %>
+      <details class="division-edit">
+        <summary>Change this division</summary>
+        <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/division" class="division-edit-row">
+          <input type="hidden" name="_csrf" value="<%= csrf %>">
+          <input type="hidden" name="division" value="<%= d.key %>">
+          <label>Format
+            <select name="format" <%= d.locked ? 'disabled' : '' %>>
+              <option value="">Competition's: <%= POOMSAE_FORMATS[competition.poomsae_format] %></option>
+              <% Object.entries(POOMSAE_FORMATS).forEach(([value, label]) => { %><option value="<%= value %>" <%= d.ownFormat && d.format === value ? 'selected' : '' %>><%= label %></option><% }) %>
+            </select>
+          </label>
+          <label>Top into the bracket
+            <input name="cut" type="number" min="2" max="<%= MAX_CUT %>" value="<%= d.ownCut ?? '' %>" placeholder="<%= competition.poomsae_cut %>" <%= d.locked ? 'disabled' : '' %>>
+          </label>
+          <label>Day
+            <select name="day">
+              <option value="">Any day</option>
+              <% days.forEach(([value, label]) => { %><option value="<%= value %>" <%= d.pinnedDay === value ? 'selected' : '' %>><%= label %></option><% }) %>
+            </select>
+          </label>
+          <button class="btn secondary small" type="submit">Save division</button>
+        </form>
+        <% if (d.locked) { %><p class="hint">The format is fixed now that this division has a performance list, scores or a bracket. Its day can still change.</p><% } %>
+      </details>
     <% } %>
   </section>
 <% }) %>

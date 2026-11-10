@@ -388,7 +388,8 @@ router.get('/competitions/:id(\\d+)/poomsae', (req, res) => {
     hasPages: divisions.some((d) => d.order.length > 0 || d.bouts),
     hasLists: divisions.some((d) => d.order.length > 0),
     hasBrackets: divisions.some((d) => d.bouts),
-    days: getEventDates(db, req.competition.id).map((date, i) => [i + 1, `Day ${i + 1} · ${formatDay(date)}`]),
+    // [number, label for the day list, short label like the kyorugi bout list's "1 (Fri 8 Jan)"]
+    days: getEventDates(db, req.competition.id).map((date, i) => [i + 1, `Day ${i + 1} · ${formatDay(date)}`, `${i + 1} (${formatDay(date)})`]),
   });
 });
 
