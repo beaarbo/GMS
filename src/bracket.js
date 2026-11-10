@@ -361,6 +361,7 @@ module.exports = {
   layoutBracket,
   splitByClub,
   computeMedals,
+  divisionMedalists,
   clubAthleteSummary,
   LEFT_X,
 };

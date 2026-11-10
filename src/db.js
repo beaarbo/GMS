@@ -64,6 +64,9 @@ CREATE TABLE IF NOT EXISTS competitions (
   max_per_club_division INTEGER,
   -- Which events clubs can enter. Fixed once entries exist.
   events TEXT NOT NULL DEFAULT 'kyorugi' CHECK (events IN ('kyorugi', 'poomsae', 'both')),
+  -- How poomsae divisions are decided, and how many go from a score round into the bracket.
+  poomsae_format TEXT NOT NULL DEFAULT 'score' CHECK (poomsae_format IN ('score', 'elimination', 'cut')),
+  poomsae_cut INTEGER NOT NULL DEFAULT 16,
   bouts_published_at TEXT,
   reminder_sent_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -280,6 +283,25 @@ CREATE TABLE IF NOT EXISTS poomsae_members (
   PRIMARY KEY (entry_id, fighter_id)
 );
 CREATE INDEX IF NOT EXISTS idx_poomsae_members_fighter ON poomsae_members(fighter_id);
+
+-- Single-elimination poomsae brackets, one per division (division_key is
+-- event-gender-age-belt ids). Winners fill the next bout's slot, as in kyorugi.
+CREATE TABLE IF NOT EXISTS poomsae_bouts (
+  id INTEGER PRIMARY KEY,
+  competition_id INTEGER NOT NULL REFERENCES competitions(id) ON DELETE CASCADE,
+  division_key TEXT NOT NULL,
+  round INTEGER NOT NULL,
+  total_rounds INTEGER NOT NULL,
+  position INTEGER NOT NULL,
+  bout_number INTEGER,
+  blue_entry_id INTEGER REFERENCES poomsae_entries(id),
+  red_entry_id INTEGER REFERENCES poomsae_entries(id),
+  is_bye INTEGER NOT NULL DEFAULT 0,
+  blue_seed INTEGER,
+  red_seed INTEGER,
+  winner_entry_id INTEGER REFERENCES poomsae_entries(id)
+);
+CREATE INDEX IF NOT EXISTS idx_poomsae_bouts_division ON poomsae_bouts(competition_id, division_key);
 
 CREATE TABLE IF NOT EXISTS sessions (
   sid TEXT PRIMARY KEY,
@@ -551,6 +573,16 @@ function migratePoomsaeAges(db) {
   }
 }
 
+// Version 14: poomsae can be single elimination, or a score round then a
+// bracket. Existing competitions keep ranking by score.
+function migratePoomsaeFormat(db) {
+  db.transaction(() => {
+    addColumnIfMissing(db, 'competitions', 'poomsae_format', "TEXT NOT NULL DEFAULT 'score' CHECK (poomsae_format IN ('score', 'elimination', 'cut'))");
+    addColumnIfMissing(db, 'competitions', 'poomsae_cut', 'INTEGER NOT NULL DEFAULT 16');
+    db.pragma('user_version = 14');
+  })();
+}
+
 function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 1) migrateBelts(db);
   if (db.pragma('user_version', { simple: true }) < 2) migrateSchedule(db);
@@ -565,6 +597,7 @@ function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 11) migrateClubLimit(db);
   if (db.pragma('user_version', { simple: true }) < 12) migrateEvents(db);
   if (db.pragma('user_version', { simple: true }) < 13) migratePoomsaeAges(db);
+  if (db.pragma('user_version', { simple: true }) < 14) migratePoomsaeFormat(db);
 }
 
 // Safe on old databases: only tables that don't exist yet are created.

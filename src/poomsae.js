@@ -2,6 +2,7 @@
 // gender + age group + belt group; there are no weight classes.
 
 const { competitionAge, findAgeGroup, findBeltGroup, beltName } = require('./divisions');
+const { divisionMedalists } = require('./bracket');
 
 const EVENT_TYPES = { kyorugi: 'Kyorugi', poomsae: 'Poomsae', both: 'Kyorugi and poomsae' };
 
@@ -46,6 +47,87 @@ function validatePoomsaeAgeGroups(groups) {
     if (sorted[i].min_age <= sorted[i - 1].max_age) errors.push(`Poomsae age groups ${sorted[i - 1].name} and ${sorted[i].name} overlap.`);
   }
   return errors;
+}
+
+// How poomsae divisions are decided. 'cut': a score round first when a
+// division has more entries than poomsae_cut, then the top ones go into a
+// bracket; smaller divisions go straight to the bracket.
+const POOMSAE_FORMATS = {
+  score: 'Ranked by score',
+  elimination: 'Single elimination',
+  cut: 'Score round, then single elimination',
+};
+const MAX_CUT = 64;
+
+// What a division runs, from the format and its number of approved entries.
+// 'score': ranked only. 'bracket': straight to the bracket. 'cut': a score round, then the bracket.
+function divisionMode(competition, approvedCount) {
+  if (competition.poomsae_format === 'elimination') return 'bracket';
+  if (competition.poomsae_format === 'cut') return approvedCount > competition.poomsae_cut ? 'cut' : 'bracket';
+  return 'score';
+}
+
+// Who goes into a division's bracket. `ranked` are its approved entries from
+// rankEntries. A cut needs every entry scored and no tie across the cut line.
+// Returns { ok, error?, entrants, seeded }: seeded entrants keep their rank as seed.
+function bracketEntrants(competition, ranked) {
+  const mode = divisionMode(competition, ranked.length);
+  if (mode === 'score') return { ok: false, error: 'This competition ranks poomsae by score only.' };
+  if (ranked.length === 0) return { ok: false, error: 'There are no approved entries in this division.' };
+  if (mode === 'bracket') return { ok: true, entrants: ranked, seeded: false };
+  const cut = competition.poomsae_cut;
+  const unscored = ranked.filter((e) => e.score === null).length;
+  if (unscored > 0) return { ok: false, error: `Score every entry first: ${unscored} still need a score.` };
+  if (ranked[cut - 1].score === ranked[cut].score) {
+    return { ok: false, error: `Entries tied on ${formatScore(ranked[cut].score)} at the cut line for the top ${cut}. Break the tie by correcting a score.` };
+  }
+  return { ok: true, entrants: ranked.slice(0, cut), seeded: true };
+}
+
+// Medal winners' entry ids. Ranked divisions give places 1, 2 and 3 (ties
+// share). Bracket divisions follow kyorugi: final for gold and silver, and both
+// losing semifinalists get bronze; an entry alone in a bracket gets none.
+function poomsaeMedalists(mode, ranked, bouts) {
+  if (mode === 'score') {
+    const at = (place) => ranked.filter((e) => e.place === place).map((e) => e.id);
+    return { gold: at(1), silver: at(2), bronze: at(3) };
+  }
+  if (!bouts) return { gold: [], silver: [], bronze: [] };
+  const m = divisionMedalists({ bouts });
+  const ids = (list) => list.filter(Boolean).map((s) => s.registrationId);
+  return { gold: ids([m.gold]), silver: ids([m.silver]), bronze: ids(m.bronze) };
+}
+
+// Club medal table across divisions, ranked gold, then silver, then bronze.
+function poomsaeMedalTable(divisions) {
+  const clubs = new Map();
+  divisions.forEach((d) => {
+    const byId = new Map(d.entries.map((e) => [e.id, e]));
+    ['gold', 'silver', 'bronze'].forEach((medal) => d.medalists[medal].forEach((id) => {
+      const entry = byId.get(id);
+      if (!clubs.has(entry.club_id)) clubs.set(entry.club_id, { clubId: entry.club_id, club: entry.club_name, gold: 0, silver: 0, bronze: 0 });
+      clubs.get(entry.club_id)[medal] += 1;
+    }));
+  });
+  return [...clubs.values()].sort((a, b) => b.gold - a.gold || b.silver - a.silver || b.bronze - a.bronze || a.club.localeCompare(b.club));
+}
+
+// How an entry stands, in a few words, for its coach.
+function entryResult(entry, division) {
+  if (entry.status !== 'approved') return '';
+  const medal = ['gold', 'silver', 'bronze'].find((m) => division.medalists[m].includes(entry.id));
+  if (medal) return `${medal[0].toUpperCase()}${medal.slice(1)}`;
+  const scoreText = entry.score === null ? '' : `${placeText(entry.place)} · ${formatScore(entry.score)}`;
+  if (division.mode === 'score') return scoreText;
+  if (division.bouts) {
+    const inBracket = division.bouts.some((b) => [b.blue, b.red].some((s) => s && s.registrationId === entry.id));
+    if (!inBracket) return `Not in the top ${division.cut}${scoreText ? ` (${scoreText})` : ''}`;
+    const lost = division.bouts.find((b) => b.winner && b.winner.registrationId !== entry.id && [b.blue, b.red].some((s) => s && s.registrationId === entry.id));
+    if (lost) return `Out in Bout ${lost.number}`;
+    const lone = division.bouts.length === 1 && division.bouts[0].isBye;
+    return lone ? 'No opponent' : 'In the bracket';
+  }
+  return division.mode === 'cut' ? (scoreText ? `Score round: ${scoreText}` : 'Score round') : 'Waiting for the draw';
 }
 
 const hasKyorugi = (competition) => competition.events !== 'poomsae';
@@ -120,6 +202,13 @@ module.exports = {
   MAX_SCORE,
   DEFAULT_POOMSAE_AGE_GROUPS,
   validatePoomsaeAgeGroups,
+  POOMSAE_FORMATS,
+  MAX_CUT,
+  divisionMode,
+  bracketEntrants,
+  poomsaeMedalists,
+  poomsaeMedalTable,
+  entryResult,
   hasKyorugi,
   hasPoomsae,
   placeEntry,

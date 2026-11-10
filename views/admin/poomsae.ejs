@@ -4,20 +4,28 @@
 <div class="page-head">
   <div>
     <h1>Poomsae</h1>
-    <p class="sub"><%= competition.name %> · <%= pending %> pending · <%= approved %> approved · <%= scored %> of <%= approved %> scored</p>
+    <p class="sub"><%= competition.name %> · <%= POOMSAE_FORMATS[competition.poomsae_format] %><%= competition.poomsae_format === 'cut' ? ` (top ${competition.poomsae_cut})` : '' %> · <%= pending %> pending · <%= approved %> approved</p>
   </div>
-  <% if (isAdmin && pending > 0) { %>
-    <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/review" data-confirm="Approve all <%= pending %> pending entries?">
-      <input type="hidden" name="_csrf" value="<%= csrf %>">
-      <button class="btn approve" name="bulk" value="approve-pending" type="submit">Approve all pending</button>
-    </form>
-  <% } %>
+  <div class="actions">
+    <% if (isAdmin && pending > 0) { %>
+      <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/review" data-confirm="Approve all <%= pending %> pending entries?">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <button class="btn approve" name="bulk" value="approve-pending" type="submit">Approve all pending</button>
+      </form>
+    <% } %>
+    <% if (isAdmin && closed && drawable > 0) { %>
+      <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/draw">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <button class="btn" name="division" value="all" type="submit">Draw <%= drawable %> ready bracket<%= drawable === 1 ? '' : 's' %></button>
+      </form>
+    <% } %>
+  </div>
 </div>
 
-<% if (!canScore) { %>
-  <div class="notice info">Scores can be entered once registration closes. Until then, review the entries here.</div>
-<% } else { %>
-  <p class="sub">Enter each entry's final score, the judges' average, such as 7.85. Places update as you go; equal scores share a place. Clear a score to undo it.</p>
+<% if (!closed) { %>
+  <div class="notice info">Scores and brackets open once registration closes. Until then, review the entries here.</div>
+<% } else if (competition.poomsae_format !== 'elimination') { %>
+  <p class="sub">Enter each final score, the judges' average, such as 7.85. Equal scores share a place. Clear a score to undo it.</p>
 <% } %>
 
 <% if (divisions.length === 0) { %>
@@ -25,37 +33,56 @@
 <% } %>
 
 <% divisions.forEach((d) => { %>
-  <section class="card">
+  <% const scoring = closed && (d.mode === 'score' || (d.mode === 'cut' && !d.bouts)); %>
+  <% const showScores = d.mode !== 'bracket'; %>
+  <% const names = new Map(d.entries.map((e) => [e.id, e.names])); %>
+  <section class="card" id="division-<%= d.key %>">
     <h2><%= d.title %></h2>
-    <p class="sub"><%= d.approved %> approved<% if (canScore) { %> · <%= d.scored %> scored<% } %></p>
+    <p class="sub">
+      <%= d.approved %> approved<% if (d.pending) { %> · <%= d.pending %> pending<% } %> ·
+      <% if (d.mode === 'score') { %>ranked by score
+      <% } else if (d.mode === 'cut') { %>score round: the top <%= d.cut %> go into the bracket
+      <% } else { %>single elimination<% } %>
+    </p>
+    <% const medalLine = ['gold', 'silver', 'bronze'].filter((m) => d.medalists[m].length > 0); %>
+    <% if (medalLine.length > 0) { %>
+      <p class="stats"><% medalLine.forEach((m) => { %><span><strong><%= m[0].toUpperCase() + m.slice(1) %>:</strong> <%= d.medalists[m].map((id) => names.get(id)).join(', ') %></span><% }) %></p>
+    <% } %>
+
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Place</th><th>Athletes</th><th>Club</th><th>Score</th><% if (isAdmin) { %><th>Review</th><% } %></tr></thead>
+        <thead><tr><% if (showScores) { %><th>Place</th><% } %><th>Athletes</th><th>Club</th><% if (showScores) { %><th>Score</th><% } %><% if (isAdmin) { %><th>Review</th><% } %></tr></thead>
         <tbody>
           <% d.entries.forEach((e) => { %>
             <tr id="entry-<%= e.id %>">
-              <td class="nowrap"><% if (e.place) { %><strong><%= placeText(e.place) %></strong><% } else if (e.status === 'pending') { %><span class="badge pending">Pending</span><% } %></td>
-              <td><strong><%= e.names %></strong><% if (e.event !== 'individual') { %><div class="hint"><%= e.athletes.map((a) => `${beltName(a.belt_rank)}, ${a.age_at_event}`).join(' · ') %></div><% } else { %><div class="hint"><%= beltName(e.athletes[0].belt_rank) %>, age <%= e.athletes[0].age_at_event %></div><% } %></td>
+              <% if (showScores) { %>
+                <td class="nowrap"><% if (e.place) { %><strong><%= placeText(e.place) %></strong><% if (d.mode === 'cut') { %><div class="hint"><%= e.place <= d.cut ? 'Qualified' : 'Out' %></div><% } %><% } else if (e.status === 'pending') { %><span class="badge pending">Pending</span><% } %></td>
+              <% } %>
+              <td><strong><%= e.names %></strong><div class="hint"><%= e.athletes.map((a) => `${beltName(a.belt_rank)}, ${a.age_at_event}`).join(' · ') %></div><% if (!showScores && e.status === 'pending') { %><span class="badge pending">Pending</span><% } %></td>
               <td><%= e.club_name %></td>
-              <td class="nowrap">
-                <% if (canScore && e.status === 'approved') { %>
-                  <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/<%= e.id %>/score" class="inline-form">
-                    <input type="hidden" name="_csrf" value="<%= csrf %>">
-                    <input class="score-input" name="score" inputmode="decimal" autocomplete="off" value="<%= e.score === null ? '' : formatScore(e.score) %>" aria-label="Score of <%= e.names %>">
-                    <button class="btn secondary small" type="submit">Save</button>
-                  </form>
-                <% } else if (e.score !== null) { %><%= formatScore(e.score) %><% } %>
-              </td>
+              <% if (showScores) { %>
+                <td class="nowrap">
+                  <% if (scoring && e.status === 'approved') { %>
+                    <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/<%= e.id %>/score" class="inline-form">
+                      <input type="hidden" name="_csrf" value="<%= csrf %>">
+                      <input class="score-input" name="score" inputmode="decimal" autocomplete="off" value="<%= e.score === null ? '' : formatScore(e.score) %>" aria-label="Score of <%= e.names %>">
+                      <button class="btn secondary small" type="submit">Save</button>
+                    </form>
+                  <% } else if (e.score !== null) { %><%= formatScore(e.score) %><% } %>
+                </td>
+              <% } %>
               <% if (isAdmin) { %>
                 <td>
-                  <% if (e.score === null) { %>
+                  <% if (e.score !== null) { %><span class="hint">Scored</span>
+                  <% } else if (d.bouts) { %><span class="hint">In a bracket</span>
+                  <% } else { %>
                     <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/review" class="inline-form">
                       <input type="hidden" name="_csrf" value="<%= csrf %>">
                       <% if (e.status === 'pending') { %><button class="btn approve small" name="single" value="approved:<%= e.id %>" type="submit">Approve</button><% } %>
                       <input class="note-input" name="note_<%= e.id %>" maxlength="300" placeholder="Reason to reject" aria-label="Reason to reject <%= e.names %>">
                       <button class="btn danger small" name="single" value="rejected:<%= e.id %>" type="submit">Reject</button>
                     </form>
-                  <% } else { %><span class="hint">Scored</span><% } %>
+                  <% } %>
                 </td>
               <% } %>
             </tr>
@@ -63,8 +90,90 @@
         </tbody>
       </table>
     </div>
+
+    <% if (d.mode !== 'score' && closed) { %>
+      <h3>Bracket</h3>
+      <% if (d.bouts) { %>
+        <%- include('../partials/bracket', { division: d, highlightClubId: null }) %>
+        <% const played = d.bouts.filter((b) => !b.isBye); %>
+        <% if (played.length > 0) { %>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Bout</th><th>Blue</th><th>Red</th><th></th></tr></thead>
+              <tbody>
+                <% played.forEach((b) => { %>
+                  <tr class="<%= b.winner ? 'result-row-done' : '' %>">
+                    <td class="num"><strong><%= b.number %></strong></td>
+                    <% [['blue', b.blue, b.bluePlaceholder], ['red', b.red, b.redPlaceholder]].forEach(([color, side, placeholder]) => { %>
+                      <td>
+                        <% if (!side) { %><span class="hint"><%= placeholder %></span>
+                        <% } else if (b.winner) { %><% if (b.winner.registrationId === side.registrationId) { %><span class="badge approved">Winner</span> <strong><%= side.name %></strong><% } else { %><%= side.name %><% } %> <span class="hint"><%= side.club %></span>
+                        <% } else if (b.blue && b.red) { %>
+                          <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/bouts/<%= b.id %>">
+                            <input type="hidden" name="_csrf" value="<%= csrf %>">
+                            <button class="btn secondary small winner-choice" name="winner" value="<%= color %>" type="submit" aria-label="<%= side.name %> wins bout <%= b.number %>"><%= side.name %> <span class="hint"><%= side.club %></span></button>
+                          </form>
+                        <% } else { %><%= side.name %> <span class="hint"><%= side.club %></span><% } %>
+                      </td>
+                    <% }) %>
+                    <td>
+                      <% if (b.winner) { %>
+                        <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/bouts/<%= b.id %>">
+                          <input type="hidden" name="_csrf" value="<%= csrf %>">
+                          <button class="btn danger small" name="action" value="clear" type="submit">Undo</button>
+                        </form>
+                      <% } %>
+                    </td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        <% } %>
+        <% if (isAdmin && !d.bouts.some((b) => b.winner)) { %>
+          <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/delete-bracket" data-confirm="Delete this bracket so it can be drawn again?">
+            <input type="hidden" name="_csrf" value="<%= csrf %>">
+            <button class="btn danger small" name="division" value="<%= d.key %>" type="submit">Delete bracket</button>
+          </form>
+        <% } %>
+      <% } else if (d.pending > 0) { %>
+        <p class="empty">Approve or reject the pending entries, then draw the bracket.</p>
+      <% } else if (d.drawProblem) { %>
+        <p class="empty"><%= d.drawProblem %></p>
+      <% } else if (isAdmin) { %>
+        <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/draw">
+          <input type="hidden" name="_csrf" value="<%= csrf %>">
+          <p class="sub"><%= d.mode === 'cut' ? `The top ${d.cut} are seeded by their rank: 1st meets the lowest seed.` : 'Drawn at random, keeping entries from the same club apart where possible.' %></p>
+          <button class="btn" name="division" value="<%= d.key %>" type="submit">Draw bracket</button>
+        </form>
+      <% } else { %>
+        <p class="empty">The organiser draws this bracket.</p>
+      <% } %>
+    <% } %>
   </section>
 <% }) %>
+
+<% if (medals.length > 0) { %>
+  <section class="card">
+    <h2>Poomsae medal standings</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Club</th><th class="medal-count">Gold</th><th class="medal-count">Silver</th><th class="medal-count">Bronze</th></tr></thead>
+        <tbody>
+          <% medals.forEach((row) => { %>
+            <tr>
+              <td><span class="club-name"><%- include('../partials/club_icon', { clubId: row.clubId, name: row.club, size: 'sm' }) %><strong><%= row.club %></strong></span></td>
+              <td class="medal-count"><%= row.gold %></td>
+              <td class="medal-count"><%= row.silver %></td>
+              <td class="medal-count"><%= row.bronze %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+    <p class="hint">Ranked divisions give 1st, 2nd and 3rd place, shared on equal scores. In a bracket, both losing semifinalists get bronze, and an entry with no opponent gets no medal.</p>
+  </section>
+<% } %>
 
 <% if (isAdmin && rejected.length > 0) { %>
   <section class="card">

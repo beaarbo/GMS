@@ -49,3 +49,39 @@ test('scores are 0 to 10 with up to three decimals, and blank clears', () => {
   assert.equal(formatScore(7.855), '7.855');
   assert.deepEqual([1, 2, 3, 4, 11, 12, 13, 21, 22].map(placeText), ['1st', '2nd', '3rd', '4th', '11th', '12th', '13th', '21st', '22nd']);
 });
+
+const { divisionMode, bracketEntrants, poomsaeMedalists, entryResult } = require('../src/poomsae');
+
+test('a cut competition scores large divisions first and sends small ones straight to the bracket', () => {
+  const cut = { poomsae_format: 'cut', poomsae_cut: 16 };
+  assert.equal(divisionMode(cut, 30), 'cut');
+  assert.equal(divisionMode(cut, 16), 'bracket');
+  assert.equal(divisionMode({ poomsae_format: 'elimination', poomsae_cut: 16 }, 30), 'bracket');
+  assert.equal(divisionMode({ poomsae_format: 'score', poomsae_cut: 16 }, 30), 'score');
+});
+
+test('the top entries go into the bracket once everyone is scored and nobody ties at the cut line', () => {
+  const competition = { poomsae_format: 'cut', poomsae_cut: 2 };
+  const ranked = (scores) => rankEntries(scores.map((score, i) => ({ id: i + 1, score })));
+  assert.match(bracketEntrants(competition, ranked([8, null, 7])).error, /1 still need a score/);
+  assert.match(bracketEntrants(competition, ranked([8.5, 7, 7])).error, /tied on 7.00 at the cut line for the top 2/);
+  const draw = bracketEntrants(competition, ranked([7.2, 8.5, 7]));
+  assert.deepEqual([draw.ok, draw.seeded, draw.entrants.map((e) => e.id)], [true, true, [2, 1]]);
+  assert.equal(bracketEntrants({ poomsae_format: 'elimination', poomsae_cut: 16 }, ranked([null, null])).seeded, false);
+});
+
+test('ranked divisions give medals by place, and brackets by the final and semifinals', () => {
+  const ranked = rankEntries([{ id: 1, score: 8 }, { id: 2, score: 8 }, { id: 3, score: 7 }, { id: 4, score: 6 }]);
+  assert.deepEqual(poomsaeMedalists('score', ranked, null), { gold: [1, 2], silver: [], bronze: [3] });
+  const side = (id) => ({ registrationId: id });
+  const bouts = [
+    { round: 1, totalRounds: 2, position: 0, isBye: false, blue: side(1), red: side(4), winner: side(1) },
+    { round: 1, totalRounds: 2, position: 1, isBye: false, blue: side(2), red: side(3), winner: side(3) },
+    { round: 2, totalRounds: 2, position: 0, isBye: false, blue: side(1), red: side(3), winner: side(3), number: 3 },
+  ];
+  const medals = poomsaeMedalists('bracket', [], bouts);
+  assert.deepEqual(medals, { gold: [3], silver: [1], bronze: [4, 2] });
+  const division = { mode: 'cut', cut: 2, bouts, medalists: medals };
+  assert.equal(entryResult({ id: 3, status: 'approved', score: 8, place: 1 }, division), 'Gold');
+  assert.equal(entryResult({ id: 9, status: 'approved', score: 5, place: 9 }, division), 'Not in the top 2 (9th · 5.00)');
+});

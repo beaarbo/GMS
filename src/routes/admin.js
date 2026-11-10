@@ -53,7 +53,7 @@ const {
   listWithdrawn,
   mergeDivision,
   unmergeRegistration,
-  hasPoomsaeScores,
+  hasPoomsaeResults,
   REGISTRATION_SELECT,
   DIVISION_ORDER,
 } = require('../services');
@@ -65,7 +65,7 @@ const { writeBoutListPdf } = require('../boutlistPdf');
 const { clean, toArray, requireRole, notFound, wrap, passwordError } = require('./helpers');
 const { resultsPath } = require('./competitionDay');
 const { createBackup, pruneBackups, listBackups } = require('../backups');
-const { EVENT_TYPES, hasKyorugi, hasPoomsae, validatePoomsaeAgeGroups } = require('../poomsae');
+const { EVENT_TYPES, POOMSAE_FORMATS, MAX_CUT, hasKyorugi, hasPoomsae, validatePoomsaeAgeGroups } = require('../poomsae');
 
 const router = express.Router();
 router.use(requireRole('admin'));
@@ -89,12 +89,17 @@ function readCompetition(body, lockedFirstDay = null) {
     description: typeof body.description === 'string' ? body.description.replace(/\r\n?/g, '\n').trim().slice(0, 5000) : '',
     age_basis: body.age_basis === 'date' ? 'date' : 'year',
     events: EVENT_TYPES[body.events] ? body.events : 'kyorugi',
+    poomsae_format: POOMSAE_FORMATS[body.poomsae_format] ? body.poomsae_format : 'score',
+    poomsae_cut: clean(body.poomsae_cut, 3) === '' ? 16 : Number(clean(body.poomsae_cut, 3)),
     // Blank means no limit.
     max_per_club_division: clean(body.max_per_club_division, 3) === '' ? null : Number(clean(body.max_per_club_division, 3)),
   };
   const errors = [];
   if (values.max_per_club_division !== null && (!Number.isInteger(values.max_per_club_division) || values.max_per_club_division < 1 || values.max_per_club_division > 50)) {
     errors.push('Enter a club limit per division between 1 and 50, or leave it blank for no limit.');
+  }
+  if (!Number.isInteger(values.poomsae_cut) || values.poomsae_cut < 2 || values.poomsae_cut > MAX_CUT) {
+    errors.push(`Enter how many go from the poomsae score round into the bracket, from 2 to ${MAX_CUT}.`);
   }
   if (!values.name) errors.push('Enter a competition name.');
   if (!values.venue) errors.push('Enter a venue.');
@@ -284,16 +289,23 @@ router.get('/competitions/:id(\\d+)/edit', (req, res) => {
     errors: [],
     action: `/admin/competitions/${req.competition.id}`,
     locked: countRegistrations(req.app.locals.db, req.competition.id) > 0,
+    formatLocked: hasPoomsaeResults(req.app.locals.db, req.competition.id),
   });
 });
 
 router.post('/competitions/:id(\\d+)', (req, res) => {
   const { db } = req.app.locals;
   const locked = countRegistrations(db, req.competition.id) > 0;
+  // The poomsae format decides how scores and brackets are read, so it stays once either exists.
+  const formatLocked = hasPoomsaeResults(db, req.competition.id);
   const { values, errors } = readCompetition(
     // Age placement depends on the first day and age rule, so they can't change after
     // entries exist, and neither can the events clubs entered.
-    { ...req.body, ...(locked ? { age_basis: req.competition.age_basis, events: req.competition.events } : {}) },
+    {
+      ...req.body,
+      ...(locked ? { age_basis: req.competition.age_basis, events: req.competition.events } : {}),
+      ...(formatLocked ? { poomsae_format: req.competition.poomsae_format, poomsae_cut: String(req.competition.poomsae_cut) } : {}),
+    },
     locked ? req.competition.event_date : null
   );
   if (errors.length > 0) {
@@ -303,6 +315,7 @@ router.post('/competitions/:id(\\d+)', (req, res) => {
       errors,
       action: `/admin/competitions/${req.competition.id}`,
       locked,
+      formatLocked,
     });
   }
   const { event_dates: eventDates, ...fields } = values;
@@ -316,7 +329,8 @@ router.post('/competitions/:id(\\d+)', (req, res) => {
     db.prepare(
       `UPDATE competitions SET name = @name, registration_deadline = @registration_deadline,
          registration_deadline_time = @registration_deadline_time, venue = @venue, description = @description, age_basis = @age_basis,
-         max_per_club_division = @max_per_club_division, events = @events WHERE id = @id`
+         max_per_club_division = @max_per_club_division, events = @events,
+         poomsae_format = @poomsae_format, poomsae_cut = @poomsae_cut WHERE id = @id`
     ).run({ ...fields, id: req.competition.id });
     saveEventDates(db, req.competition.id, eventDates);
     // Keeps the draw, but moves bouts onto the new list of days.
@@ -326,6 +340,9 @@ router.post('/competitions/:id(\\d+)', (req, res) => {
   if (values.name !== req.competition.name) changes.push(`name to ${values.name}`);
   if (values.venue !== req.competition.venue) changes.push(`venue to ${values.venue}`);
   if (values.events !== req.competition.events) changes.push(`events to ${EVENT_TYPES[values.events].toLowerCase()}`);
+  if (values.poomsae_format !== req.competition.poomsae_format || values.poomsae_cut !== req.competition.poomsae_cut) {
+    changes.push(`poomsae format to ${POOMSAE_FORMATS[values.poomsae_format].toLowerCase()}${values.poomsae_format === 'cut' ? ` (top ${values.poomsae_cut})` : ''}`);
+  }
   const oldDates = getEventDatesBefore.join(', ');
   if (eventDates.join(', ') !== oldDates) changes.push(`dates from ${oldDates} to ${eventDates.join(', ')}`);
   if (deadlineMoved) {
@@ -352,8 +369,8 @@ router.post('/competitions/:id(\\d+)/status', (req, res) => {
     req.flash('error', 'Delete the bout list before reopening registration.');
     return res.redirect('/admin/competitions');
   }
-  if (status !== 'closed' && hasPoomsaeScores(db, req.competition.id)) {
-    req.flash('error', 'Clear the poomsae scores before reopening registration.');
+  if (status !== 'closed' && hasPoomsaeResults(db, req.competition.id)) {
+    req.flash('error', 'Clear the poomsae scores and brackets before reopening registration.');
     return res.redirect('/admin/competitions');
   }
   if (status === 'open' && (!hasCompetitionLogo(db, req.competition.id) || !req.competition.description.trim())) {

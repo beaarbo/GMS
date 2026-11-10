@@ -1,6 +1,6 @@
 // Competition-day work shared by admins and officials: the weigh-in, recording
-// results and poomsae scores. Everything else about a competition stays
-// admin-only, including poomsae approvals.
+// results, and poomsae scores and bracket winners. Everything else about a
+// competition stays admin-only, including poomsae approvals and draws.
 const express = require('express');
 const { formatEventDates, formatDay, GENDERS } = require('../divisions');
 const {
@@ -16,10 +16,14 @@ const {
   listPoomsaeEntries,
   getPoomsaeEntry,
   poomsaeDivisions,
+  loadPoomsaeBrackets,
+  drawPoomsaeBracket,
+  deletePoomsaeBracket,
+  recordPoomsaeBout,
   reviewPoomsae,
   recordPoomsaeScore,
 } = require('../services');
-const { hasPoomsae, parseScore, formatScore, poomsaeDivisionTitle } = require('../poomsae');
+const { hasPoomsae, parseScore, formatScore, poomsaeDivisionTitle, poomsaeMedalTable } = require('../poomsae');
 const { notifyPoomsaeDecisions } = require('../notifications');
 const { computeMedals } = require('../bracket');
 const { clean, requireRole, notFound } = require('./helpers');
@@ -263,24 +267,90 @@ router.get('/competitions/:id(\\d+)/mat/:day(\\d+)/:court(\\d+)', (req, res) => 
 });
 
 // Poomsae: admins approve entries here while registration runs. Once it closes,
-// admins and officials record each approved entry's score, and places follow.
-const poomsaePath = (competition, entryId = null) => `/admin/competitions/${competition.id}/poomsae${entryId ? `#entry-${entryId}` : ''}`;
+// admins and officials record scores and bracket winners; admins draw brackets.
+const poomsaePath = (competition, entryId = null, divisionKey = null) =>
+  `/admin/competitions/${competition.id}/poomsae${entryId ? `#entry-${entryId}` : divisionKey ? `#division-${divisionKey}` : ''}`;
+
+function poomsaeOverview(db, competition) {
+  const entries = listPoomsaeEntries(db, competition.id);
+  return { entries, divisions: poomsaeDivisions(entries, competition, loadPoomsaeBrackets(db, competition.id, entries)) };
+}
 
 router.get('/competitions/:id(\\d+)/poomsae', (req, res) => {
   const { db } = req.app.locals;
   if (!hasPoomsae(req.competition)) return notFound(res);
-  const entries = listPoomsaeEntries(db, req.competition.id);
-  const divisions = poomsaeDivisions(entries);
+  const { entries, divisions } = poomsaeOverview(db, req.competition);
   return res.render('admin/poomsae', {
     title: 'Poomsae',
     competition: req.competition,
     divisions,
+    medals: poomsaeMedalTable(divisions),
     rejected: entries.filter((e) => e.status === 'rejected'),
     pending: entries.filter((e) => e.status === 'pending').length,
     approved: entries.filter((e) => e.status === 'approved').length,
-    scored: divisions.reduce((n, d) => n + d.scored, 0),
-    canScore: req.competition.status === 'closed',
+    closed: req.competition.status === 'closed',
+    drawable: divisions.filter((d) => d.mode !== 'score' && !d.bouts && !d.drawProblem && d.pending === 0).length,
   });
+});
+
+// Draws one division's bracket, or every division that's ready ("all").
+router.post('/competitions/:id(\\d+)/poomsae/draw', requireRole('admin'), (req, res) => {
+  const { db } = req.app.locals;
+  const competition = req.competition;
+  if (competition.status !== 'closed') {
+    req.flash('error', 'Close registration before drawing poomsae brackets.');
+    return res.redirect(poomsaePath(competition));
+  }
+  const key = clean(req.body.division, 60);
+  const { divisions } = poomsaeOverview(db, competition);
+  const targets = key === 'all'
+    ? divisions.filter((d) => d.mode !== 'score' && !d.bouts && !d.drawProblem && d.pending === 0).map((d) => d.key)
+    : [key];
+  let drawn = 0;
+  targets.forEach((target) => {
+    const result = drawPoomsaeBracket(db, competition, target);
+    if (result.ok) {
+      drawn += 1;
+      req.logActivity('poomsae.bracket_drawn', `Drew the poomsae bracket for ${result.title} (${result.entrants} entries): ${competition.name}`, competition.id);
+    } else req.flash('error', result.error);
+  });
+  if (drawn > 0) req.flash('success', `${drawn} bracket${drawn === 1 ? '' : 's'} drawn.`);
+  return res.redirect(poomsaePath(competition, null, key === 'all' ? null : key));
+});
+
+router.post('/competitions/:id(\\d+)/poomsae/delete-bracket', requireRole('admin'), (req, res) => {
+  const { db } = req.app.locals;
+  const key = clean(req.body.division, 60);
+  const division = poomsaeOverview(db, req.competition).divisions.find((d) => d.key === key);
+  const result = deletePoomsaeBracket(db, req.competition.id, key);
+  if (!result.ok) req.flash('error', result.error);
+  else {
+    req.logActivity('poomsae.bracket_deleted', `Deleted the poomsae bracket for ${division ? division.title : key}: ${req.competition.name}`, req.competition.id);
+    req.flash('success', 'Bracket deleted. You can draw it again.');
+  }
+  return res.redirect(poomsaePath(req.competition, null, key));
+});
+
+// A bracket winner, or "clear" to undo one. Admins and officials.
+router.post('/competitions/:id(\\d+)/poomsae/bouts/:boutId(\\d+)', (req, res) => {
+  const { db } = req.app.locals;
+  const competition = req.competition;
+  const bout = db.prepare('SELECT * FROM poomsae_bouts WHERE id = ? AND competition_id = ?').get(req.params.boutId, competition.id);
+  if (!bout) return notFound(res);
+  if (competition.status !== 'closed') return notFound(res);
+  const clearing = req.body.action === 'clear';
+  const { divisions } = poomsaeOverview(db, competition);
+  const division = divisions.find((d) => d.key === bout.division_key);
+  const before = division.bouts.find((b) => b.id === bout.id);
+  const result = recordPoomsaeBout(db, competition.id, bout.id, clearing ? null : req.body.winner);
+  if (!result.ok) req.flash('error', result.error);
+  else if (clearing) {
+    req.logActivity('poomsae.bout_cleared', `Undid poomsae Bout ${bout.bout_number} in ${division.title}, ${before.blue.name} vs ${before.red.name}. The winner had been ${before.winner.name}`, competition.id);
+  } else {
+    const winner = req.body.winner === 'blue' ? before.blue : before.red;
+    req.logActivity('poomsae.bout_won', `${winner.name} won poomsae Bout ${bout.bout_number} in ${division.title}, ${before.blue.name} vs ${before.red.name}`, competition.id);
+  }
+  return res.redirect(poomsaePath(competition, null, bout.division_key));
 });
 
 router.post('/competitions/:id(\\d+)/poomsae/review', requireRole('admin'), (req, res) => {

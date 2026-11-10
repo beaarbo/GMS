@@ -18,9 +18,10 @@ const {
   enterPoomsae,
   withdrawPoomsae,
   poomsaeDivisions,
+  loadPoomsaeBrackets,
   REGISTRATION_SELECT,
 } = require('../services');
-const { POOMSAE_EVENTS, hasKyorugi, hasPoomsae, placeEntry } = require('../poomsae');
+const { POOMSAE_EVENTS, hasKyorugi, hasPoomsae, placeEntry, entryResult } = require('../poomsae');
 const { documentLabel, documentTypeFor, detectFileType, detectIconType, sendDocument } = require('../documents');
 const { layoutBracket, computeMedals, clubAthleteSummary } = require('../bracket');
 const { writeBoutListPdf } = require('../boutlistPdf');
@@ -448,8 +449,13 @@ router.get('/competitions/:id(\\d+)/poomsae', (req, res) => {
       fits: placeEntry({ event: 'individual', members: [f], competition, ageGroups: setup.poomsaeAgeGroups, beltGroups: setup.beltGroups }),
     }));
   const entries = listPoomsaeEntries(db, competition.id, { clubId: req.user.club_id });
-  // Places need every club's scores, but only this club's entries are shown.
-  const places = new Map(poomsaeDivisions(listPoomsaeEntries(db, competition.id)).flatMap((d) => d.entries).map((e) => [e.id, e.place]));
+  // Places need every club's scores, but only this club's entries are listed. Like
+  // a published kyorugi bout list, brackets show who the club's entries face.
+  const everyone = listPoomsaeEntries(db, competition.id);
+  const divisions = poomsaeDivisions(everyone, competition, loadPoomsaeBrackets(db, competition.id, everyone));
+  const divisionOf = new Map(divisions.flatMap((d) => d.entries.map((e) => [e.id, d])));
+  const ranked = new Map(divisions.flatMap((d) => d.entries).map((e) => [e.id, e]));
+  const mine = new Set(entries.map((e) => e.id));
   const inEvent = (event) => new Set(entries.filter((e) => e.event === event && e.status !== 'rejected').flatMap((e) => e.athletes.map((a) => a.id)));
   return res.render('club/poomsae', {
     title: `${competition.name}: poomsae`,
@@ -459,7 +465,11 @@ router.get('/competitions/:id(\\d+)/poomsae', (req, res) => {
       const taken = inEvent(event);
       return [event, athletes.filter((a) => a.has_document && a.fits.ok && !taken.has(a.id))];
     })),
-    entries: entries.map((e) => ({ ...e, place: places.get(e.id) ?? null })),
+    entries: entries.map((e) => {
+      const division = divisionOf.get(e.id);
+      return { ...e, result: division ? entryResult(ranked.get(e.id), division) : '' };
+    }),
+    brackets: divisions.filter((d) => d.bouts && d.entries.some((e) => mine.has(e.id))),
     open: isRegistrationOpen(competition),
   });
 });

@@ -20,8 +20,21 @@
       <select id="events" name="events" <%= locked ? 'disabled' : '' %>>
         <% Object.entries(EVENT_TYPES).forEach(([value, label]) => { %><option value="<%= value %>" <%= (competition.events || 'kyorugi') === value ? 'selected' : '' %>><%= label %></option><% }) %>
       </select>
-      <p class="hint">Poomsae has individual, pair and team events, ranked by score. Fixed once clubs have entered.</p>
+      <p class="hint">Poomsae has individual, pair and team events. Fixed once clubs have entered.</p>
     </div>
+    <div class="form-row">
+      <div class="field">
+        <label for="poomsae_format">Poomsae format</label>
+        <select id="poomsae_format" name="poomsae_format" <%= locals.formatLocked ? 'disabled' : '' %>>
+          <% Object.entries(POOMSAE_FORMATS).forEach(([value, label]) => { %><option value="<%= value %>" <%= (competition.poomsae_format || 'score') === value ? 'selected' : '' %>><%= label %></option><% }) %>
+        </select>
+      </div>
+      <div class="field">
+        <label for="poomsae_cut">Top entries into the bracket</label>
+        <input id="poomsae_cut" name="poomsae_cut" type="number" min="2" max="<%= MAX_CUT %>" step="1" inputmode="numeric" value="<%= competition.poomsae_cut ?? 16 %>" <%= locals.formatLocked ? 'disabled' : '' %>>
+      </div>
+    </div>
+    <p class="hint">Only for poomsae. <strong>Ranked by score</strong>: the highest scores win the medals. <strong>Single elimination</strong>: entries face each other in a bracket, drawn at random with clubs kept apart. <strong>Score round, then single elimination</strong>: a division with more entries than the number above is scored first, and the top ones go into a bracket seeded by their rank; smaller divisions go straight to the bracket. <%= locals.formatLocked ? 'Fixed now that poomsae has scores or brackets.' : '' %></p>
     <fieldset class="date-list">
       <legend>Event dates</legend>
       <p class="hint">Enter each competition day. They don't need to be in a row, so two weekends works. To add more than these boxes allow, save and more appear. Ages use the first day.</p>

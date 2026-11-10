@@ -97,7 +97,7 @@
                 <span class="badge <%= e.status %>"><%= statusLabel(e.status) %></span>
                 <% if (e.review_note) { %><div class="hint"><%= e.review_note %></div><% } %>
               </td>
-              <td class="nowrap"><% if (e.score !== null) { %><strong><%= placeText(e.place) %></strong> · <%= formatScore(e.score) %><% } %></td>
+              <td><%= e.result %></td>
               <td>
                 <% if (e.status !== 'approved') { %>
                   <form method="post" action="/club/competitions/<%= competition.id %>/poomsae/<%= e.id %>/withdraw" data-confirm="Withdraw this entry?">
@@ -113,4 +113,12 @@
     </div>
   <% } %>
 </section>
+
+<% brackets.forEach((division) => { %>
+  <section class="card">
+    <h2><%= division.title %></h2>
+    <p class="sub">Single elimination bracket. Your club's entries are highlighted.</p>
+    <%- include('../partials/bracket', { division, highlightClubId: user.club_id }) %>
+  </section>
+<% }) %>
 <%- include('../partials/bottom') %>
