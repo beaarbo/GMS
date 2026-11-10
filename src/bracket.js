@@ -231,7 +231,7 @@ function layoutBracket(bouts, { slotHeight, top = 0 }) {
     labels.push({ x, y, number: bout.number, time: bout.time });
     if (bout.winner) {
       const endX = round === totalRounds ? END_X : columnX(round + 1);
-      winners.push({ name: bout.winner.name, clubId: bout.winner.clubId, x, endX, y });
+      winners.push({ name: bout.walkover ? `W.O. ${bout.winner.name}` : bout.winner.name, clubId: bout.winner.clubId, x, endX, y });
     }
     return { y, fromX: x };
   };
@@ -276,14 +276,15 @@ function loserOf(bout) {
 }
 
 // Gold and silver come from the final. Each losing semifinalist gets bronze, as
-// taekwondo awards two. A fighter alone in a division has no bout, so no medal.
+// taekwondo awards two. A fighter alone in a division has no bout, so no medal,
+// and one who lost by walkover (out at the weigh-in) gets none either.
 function divisionMedalists(division) {
   if (isLone(division)) return { gold: null, silver: null, bronze: [], unopposed: true };
   const final = division.bouts.find((b) => b.round === b.totalRounds);
-  const semis = division.bouts.filter((b) => b.round === b.totalRounds - 1 && !b.isBye);
+  const semis = division.bouts.filter((b) => b.round === b.totalRounds - 1 && !b.isBye && !b.walkover);
   return {
     gold: final.winner,
-    silver: loserOf(final),
+    silver: final.walkover ? null : loserOf(final),
     bronze: semis.map(loserOf).filter(Boolean),
     unopposed: false,
   };

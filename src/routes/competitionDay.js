@@ -13,6 +13,7 @@ const {
   recordWeighIn,
   getEventDates,
   listBouts,
+  applyWalkovers,
   listPoomsaeEntries,
   getPoomsaeEntry,
   poomsaeDivisions,
@@ -87,7 +88,8 @@ router.get('/competitions/:id(\\d+)/weigh-in', (req, res) => {
     // Classes with approved athletes in them, in division order. A label like
     // "-45 kg" repeats across age groups, so each names its age group and gender.
     weightClasses: [...new Map(all.map((r) => [r.weight_class_id, `${r.age_group} · ${GENDERS[r.gender]} · ${r.weight_class}`])).entries()],
-    locked: hasBoutList(db, req.competition.id),
+    // After the draw, nobody changes class and anyone out gives their opponent a walkover.
+    drawn: hasBoutList(db, req.competition.id),
     pending,
   });
 });
@@ -133,12 +135,22 @@ router.post('/competitions/:id(\\d+)/weigh-in/:regId(\\d+)', (req, res) => {
       req.session.weighDecision = {
         competitionId: req.competition.id, registrationId, fitsId: result.fits.id, fits: result.fits.label, entered: result.entered, lighter: result.lighter,
       };
-      req.flash(
-        'error',
-        result.lighter
-          ? `${name} is under ${result.entered}: their weight is in ${result.fits.label}. Keep them in ${result.entered}, or move them.`
-          : `${name} is over ${result.entered}: their weight is in ${result.fits.label}. Move them or disqualify them.`
-      );
+      if (hasBoutList(db, req.competition.id)) {
+        // After the draw nobody changes class, so the choice is to keep or disqualify.
+        req.flash(
+          'error',
+          result.lighter
+            ? `${name} is under ${result.entered}: their weight is in ${result.fits.label}. Keep them in ${result.entered}, or disqualify them to give their opponent a walkover.`
+            : `${name} is over ${result.entered}: their weight is in ${result.fits.label}. Disqualify them to give their opponent a walkover, or weigh them again.`
+        );
+      } else {
+        req.flash(
+          'error',
+          result.lighter
+            ? `${name} is under ${result.entered}: their weight is in ${result.fits.label}. Keep them in ${result.entered}, or move them.`
+            : `${name} is over ${result.entered}: their weight is in ${result.fits.label}. Move them or disqualify them.`
+        );
+      }
       break;
     case 'kept':
       log(`${who} weighed in under ${result.weightClass} and stays in it`);
@@ -153,16 +165,18 @@ router.post('/competitions/:id(\\d+)/weigh-in/:regId(\\d+)', (req, res) => {
       req.flash('success', `${name} moved to ${result.to}.`);
       break;
     case 'no_show':
-      log(`Marked ${who} as a no-show at weigh-in`);
-      req.flash('success', `${name} marked as a no-show. They won't be drawn.`);
-      break;
     case 'disqualify':
-      log(`Disqualified ${who} at weigh-in`);
-      req.flash('success', `${name} disqualified. They won't be drawn.`);
+      log(`${result.outcome === 'no_show' ? 'Marked' : 'Disqualified'} ${who}${result.outcome === 'no_show' ? ' as a no-show' : ''} at weigh-in`);
+      result.walkovers.forEach((id) => logWalkover(req, db, id));
+      req.flash('success', `${name} ${result.outcome === 'no_show' ? 'marked as a no-show' : 'disqualified'}. ${
+        !result.drawn ? "They won't be drawn."
+          : result.walkovers.length > 0 ? 'Their opponent gets a walkover.'
+            : 'Their opponent gets a walkover once they are known.'
+      }`);
       break;
     default:
       log(`Undid the weigh-in for ${who}${result.backTo ? `, back to ${result.backTo}` : ''}`);
-      req.flash('success', `Weigh-in undone for ${name}${result.backTo ? `. They're back in ${result.backTo}` : ''}.`);
+      req.flash('success', `Weigh-in undone for ${name}${result.backTo ? `. They're back in ${result.backTo}` : ''}${result.walkoversUndone ? `. Their opponent's walkover was taken back` : ''}.`);
   }
   return res.redirect(back);
 });
@@ -226,10 +240,14 @@ router.post('/competitions/:id(\\d+)/results/:boutId(\\d+)', (req, res) => {
   const { db } = req.app.locals;
   const boutId = Number(req.params.boutId);
   const clearing = req.body.action === 'clear';
-  const before = db.prepare('SELECT 1 FROM bouts WHERE id = ? AND competition_id = ?').get(boutId, req.competition.id) ? boutText(db, boutId) : null;
-  const result = clearing
-    ? clearResult(db, req.competition.id, boutId)
-    : recordResult(db, req.competition.id, boutId, req.body.winner);
+  const bout = db.prepare('SELECT walkover FROM bouts WHERE id = ? AND competition_id = ?').get(boutId, req.competition.id);
+  const before = bout ? boutText(db, boutId) : null;
+  // A walkover follows the weigh-in, so it changes only by undoing that weigh-in.
+  const result = bout && bout.walkover
+    ? { ok: false, error: `${before.place} was a walkover after the weigh-in. Undo that athlete's weigh-in to change it.` }
+    : clearing
+      ? clearResult(db, req.competition.id, boutId)
+      : recordResult(db, req.competition.id, boutId, req.body.winner);
   if (!result.ok) req.flash('error', result.error);
   else if (clearing) {
     req.logActivity('result.cleared', `Undid the result of ${before.place}, ${before.fighters}. The winner had been ${before.winner}`, req.competition.id);
@@ -237,12 +255,19 @@ router.post('/competitions/:id(\\d+)/results/:boutId(\\d+)', (req, res) => {
     const after = boutText(db, boutId);
     const changedFrom = before.winner && before.winner !== after.winner ? `, changed from ${before.winner}` : '';
     req.logActivity('result.recorded', `${after.winner} won ${after.place}, ${after.fighters}${changedFrom}`, req.competition.id);
+    // The winner may now meet someone who failed the weigh-in.
+    applyWalkovers(db, req.competition.id).forEach((id) => logWalkover(req, db, id));
   }
   const fromMat = req.body.back === 'mat' && /^\d+$/.test(req.body.day || '') && /^\d+$/.test(req.body.court || '');
   return res.redirect(fromMat ? matPath(req.competition, req.body.day, req.body.court) : resultsPath(req.competition, req.body.day, req.body.court));
 });
 
 const matPath = (competition, day, court) => `/admin/competitions/${competition.id}/mat/${day}/${court}`;
+
+function logWalkover(req, db, boutId) {
+  const text = boutText(db, boutId);
+  req.logActivity('result.walkover', `${text.winner} won ${text.place} by walkover, ${text.fighters}`, req.competition.id);
+}
 
 // Results by mat: one court on one day, for an official's tablet. The bout on now
 // with a big button per athlete, what's next, and the last result with undo.

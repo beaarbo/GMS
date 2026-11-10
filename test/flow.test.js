@@ -22,7 +22,9 @@ const {
   saveCompetitionLogo,
   createCoachAccount,
   createOfficialAccount,
+  loadBoutList,
 } = require('../src/services');
+const { computeMedals } = require('../src/bracket');
 const { divisionOptions, findWeightClass } = require('../src/divisions');
 const { sendDeadlineReminders } = require('../src/notifications');
 
@@ -540,9 +542,22 @@ test('the weigh-in checks weight classes, moves athletes and leaves no-shows out
   assert.ok(!drawn.includes(reg('Charlie').id), 'no-shows are not drawn');
   assert.ok(drawn.includes(reg('Delta').id) && drawn.includes(reg('Bravo').id));
 
-  // With a bout list, weigh-ins are locked.
+  // After the draw the weigh-in goes on, but nobody changes class, and a moved athlete stays moved.
+  await weigh('Delta', { action: 'move', weight_class_id: String(heavier.id) });
+  assert.notEqual(reg('Delta').weight_class_id, heavier.id);
+  await weigh('Bravo', { action: 'reset' });
+  assert.equal(reg('Bravo').weight_class_id, heavier.id);
+  // A no-show gives their opponent a walkover; undoing it takes the walkover back.
   await weigh('Delta', { action: 'no_show' });
+  assert.equal(reg('Delta').weigh_status, 'no_show');
+  const lost = () => db.prepare('SELECT * FROM bouts WHERE ? IN (blue_registration_id, red_registration_id) AND is_bye = 0 ORDER BY round').get(reg('Delta').id);
+  if (lost()) {
+    assert.equal(lost().walkover, 1);
+    assert.notEqual(lost().winner_registration_id, reg('Delta').id);
+  }
+  await weigh('Delta', { action: 'reset' });
   assert.equal(reg('Delta').weigh_status, null);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM bouts WHERE walkover = 1').get().n, 0);
 
   // Undo puts a moved athlete back in the class their coach entered.
   await post(admin, `${bouts}/delete`, {}, bouts);
@@ -553,7 +568,7 @@ test('the weigh-in checks weight classes, moves athletes and leaves no-shows out
   );
 
   const log = db.prepare("SELECT summary FROM activity_log WHERE action = 'weighin.recorded' ORDER BY id").all().map((r) => r.summary);
-  assert.equal(log.length, 5);
+  assert.equal(log.length, 7);
   assert.ok(log.every((summary) => !/47\.5|51\.2|30/.test(summary)), 'weights stay out of the activity log');
 });
 
@@ -634,7 +649,7 @@ test('schedule migration clears old draws and keeps competitions', () => {
 
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM bouts').get().n, 0);
   assert.equal(db.prepare('SELECT bout_courts FROM competitions WHERE id = ?').get(compId).bout_courts, 2);
-  assert.equal(db.pragma('user_version', { simple: true }), 17);
+  assert.equal(db.pragma('user_version', { simple: true }), 18);
 });
 
 test('admin creates a club, a coach applies, and only approval unlocks athlete registration', async () => {
@@ -799,7 +814,7 @@ test('migrating old club accounts keeps logins and fighters and approves each co
   const clubColumns = db.pragma('table_info(clubs)').map((c) => c.name);
   assert.ok(!clubColumns.includes('coach_name'));
   assert.equal(db.pragma('foreign_key_check').length, 0);
-  assert.equal(db.pragma('user_version', { simple: true }), 17);
+  assert.equal(db.pragma('user_version', { simple: true }), 18);
 });
 
 test('a fighter alone in a division has no bout number', async () => {
@@ -973,7 +988,7 @@ test('migration turns a day count into consecutive dates', () => {
   const { id } = db.prepare('SELECT id FROM competitions').get();
   assert.deepEqual(getEventDates(db, id), ['2030-01-30', '2030-01-31', '2030-02-01']);
   assert.ok(!db.pragma('table_info(competitions)').some((c) => c.name === 'bout_days'));
-  assert.equal(db.pragma('user_version', { simple: true }), 17);
+  assert.equal(db.pragma('user_version', { simple: true }), 18);
 });
 
 const tokenIn = (message) => message.text.match(/reset-password\/([0-9a-f]{64})/)[1];
@@ -1218,7 +1233,7 @@ test('the results migration removes declared weights and keeps registrations', (
   db.pragma('user_version = 4');
   migrate(db);
   assert.ok(!db.pragma('table_info(registrations)').some((c) => c.name === 'declared_weight_kg'));
-  assert.equal(db.pragma('user_version', { simple: true }), 17);
+  assert.equal(db.pragma('user_version', { simple: true }), 18);
 });
 
 test('athletes need the right document before they can enter', async () => {
@@ -1835,7 +1850,7 @@ test('rebuilding the users table for officials keeps every linked row', async ()
   db.close();
 
   db = openDb(file);
-  assert.equal(db.pragma('user_version', { simple: true }), 17);
+  assert.equal(db.pragma('user_version', { simple: true }), 18);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM club_applications').get().n, 1);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM password_resets').get().n, 1);
   assert.equal(db.prepare('SELECT author_id FROM news_posts').get().author_id, coachId);
@@ -2319,7 +2334,7 @@ test('migrating to version 13 moves poomsae entries onto poomsae age groups', ()
   db.pragma('user_version = 12');
 
   migrate(db);
-  assert.equal(db.pragma('user_version', { simple: true }), 17);
+  assert.equal(db.pragma('user_version', { simple: true }), 18);
   const moved = db.prepare('SELECT a.name, e.status FROM poomsae_entries e JOIN poomsae_age_groups a ON a.id = e.age_group_id WHERE e.id = ?').get(entry);
   assert.deepEqual(moved, { name: 'U40', status: 'approved' });
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM poomsae_members').get().n, 1);
@@ -2602,4 +2617,57 @@ test('published bout lists are public: kyorugi, and poomsae order and brackets a
   await post(admin, `${review}/unpublish`, { stage: 'brackets' }, review);
   assert.equal((await visitor.get(publicPage)).status, 404);
   assert.equal((await post(club, `${review}/publish`, { stage: 'lists' }, page)).status, 403, 'coaches cannot publish');
+});
+
+test('the bout list can be drawn before the weigh-in, and athletes out at the weigh-in give walkovers', async () => {
+  const { app, db } = await setup();
+  const { compId, admin } = await closedCompetitionWithFighters(db, app, [['T', 'Alpha'], ['D', 'Bravo'], ['T', 'Charlie']]);
+  const bouts = `/admin/competitions/${compId}/bouts`;
+  const weighIn = `/admin/competitions/${compId}/weigh-in`;
+  assert.match((await admin.get(bouts)).text, /You can draw now and run the weigh-in afterwards/);
+  await post(admin, `${bouts}/generate`, {}, bouts);
+  const all = () => db.prepare('SELECT * FROM bouts WHERE competition_id = ? ORDER BY round, position').all(compId);
+  const first = all().find((b) => b.round === 1 && !b.is_bye);
+  const final = () => all().find((b) => b.round === 2);
+  const [x, y] = [first.blue_registration_id, first.red_registration_id];
+  const z = [final().blue_registration_id, final().red_registration_id].find(Boolean);
+  const weigh = (id, fields) => post(admin, `${weighIn}/${id}`, fields, weighIn);
+  const result = (bout, fields) => post(admin, `/admin/competitions/${compId}/results/${bout.id}`, fields, `/admin/competitions/${compId}/results`);
+
+  // The weigh-in stays open after the draw, without moving anyone's class.
+  assert.match((await admin.get(weighIn)).text, /The bout list is drawn, so athletes stay in their weight class/);
+
+  // The athlete with a bye misses the weigh-in: their opponent isn't known yet, so nothing happens until then.
+  await weigh(z, { action: 'no_show' });
+  assert.equal(final().winner_registration_id, null);
+  await result(first, { winner: 'blue' });
+  assert.deepEqual([final().winner_registration_id, final().walkover], [x, 1], 'the walkover follows as soon as the opponent is known');
+  assert.ok(db.prepare("SELECT 1 FROM activity_log WHERE action = 'result.walkover'").get());
+
+  // A walkover changes only through the weigh-in.
+  await result(final(), { action: 'clear' });
+  assert.equal(final().winner_registration_id, x);
+  assert.match((await admin.get(bouts)).text, /<text class="winner [^"]*"[^>]*>W\.O\. /);
+
+  // No silver for losing the final by walkover; the semifinal loser keeps bronze.
+  const medals = computeMedals(loadBoutList(db, compId)).divisions[0];
+  assert.deepEqual([medals.gold.registrationId, medals.silver, medals.bronze.map((b) => b.registrationId)], [x, null, [y]]);
+
+  // Undoing the weigh-in takes the walkover back; disqualifying gives it again.
+  await weigh(z, { action: 'reset' });
+  assert.deepEqual([final().winner_registration_id, final().walkover], [null, 0]);
+  await weigh(z, { action: 'check', weight_kg: '60' });
+  assert.match((await admin.get(weighIn)).text, /Disqualify: walkover/);
+  assert.doesNotMatch((await admin.get(weighIn)).text, /value="move"/);
+  await weigh(z, { action: 'disqualify' });
+  assert.deepEqual([final().winner_registration_id, final().walkover], [x, 1]);
+
+  // An athlete whose walkover a later result built on can't be undone.
+  await weigh(z, { action: 'reset' });
+  await result(first, { action: 'clear' });
+  await weigh(y, { action: 'disqualify' });
+  assert.deepEqual([all().find((b) => b.id === first.id).winner_registration_id, all().find((b) => b.id === first.id).walkover], [x, 1]);
+  await result(final(), { winner: final().blue_registration_id === x ? 'blue' : 'red' });
+  await weigh(y, { action: 'reset' });
+  assert.equal(db.prepare('SELECT weigh_status FROM registrations WHERE id = ?').get(y).weigh_status, 'disqualified');
 });

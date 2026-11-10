@@ -46,9 +46,9 @@
         <% if (out > 0) { %><span><strong><%= out %></strong> left out after weigh-in</span><% } %>
       </p>
       <% if (weighIn.waiting > 0 && weighIn.waiting < weighIn.total) { %>
-        <div class="notice error"><%= weighIn.waiting %> approved athlete<%= weighIn.waiting === 1 ? ' hasn\'t' : 's haven\'t' %> been weighed in yet. They'll still be drawn. <a href="/admin/competitions/<%= competition.id %>/weigh-in?show=waiting">Finish the weigh-in</a>.</div>
+        <div class="notice error"><%= weighIn.waiting %> approved athlete<%= weighIn.waiting === 1 ? ' hasn\'t' : 's haven\'t' %> been weighed in yet. They'll still be drawn. You can weigh them in afterwards: anyone out gives their opponent a walkover. <a href="/admin/competitions/<%= competition.id %>/weigh-in?show=waiting">Finish the weigh-in</a>.</div>
       <% } else if (weighIn.waiting === weighIn.total && weighIn.total > 0) { %>
-        <div class="notice info">Nobody has been weighed in. <a href="/admin/competitions/<%= competition.id %>/weigh-in">Run the weigh-in</a> first if this competition has one.</div>
+        <div class="notice info">Nobody has been weighed in. You can draw now and run the weigh-in afterwards: anyone who misses or fails it gives their opponent a walkover. Or <a href="/admin/competitions/<%= competition.id %>/weigh-in">run the weigh-in</a> first, and they're left out of the draw.</div>
       <% } %>
       <% if (counts.pending > 0) { %>
         <div class="notice error"><%= counts.pending %> pending registration<%= counts.pending === 1 ? ' is' : 's are' %> not included. <a href="/admin/competitions/<%= competition.id %>/registrations?status=pending">Review them first</a>.</div>

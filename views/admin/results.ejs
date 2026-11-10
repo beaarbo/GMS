@@ -61,7 +61,7 @@
                     <% if (!fighter) { %>
                       <div class="hint"><%= placeholder %></div>
                     <% } else if (bout.winner) { %>
-                      <div><% if (bout.winner.registrationId === fighter.registrationId) { %><span class="badge approved">Winner</span> <strong><%= fighter.name %></strong><% } else { %><%= fighter.name %><% } %> <span class="hint"><%= fighter.club %></span></div>
+                      <div><% if (bout.winner.registrationId === fighter.registrationId) { %><span class="badge approved"><%= bout.walkover ? 'Walkover' : 'Winner' %></span> <strong><%= fighter.name %></strong><% } else { %><%= fighter.name %><% } %> <span class="hint"><%= fighter.club %></span></div>
                     <% } else if (bout.blue && bout.red) { %>
                       <p><button class="btn secondary small winner-choice" type="submit" name="winner" value="<%= color %>" aria-label="<%= fighter.name %> wins bout <%= bout.number %>"><%= fighter.name %> <span class="hint"><%= fighter.club %></span></button></p>
                     <% } else { %>
@@ -71,7 +71,9 @@
                 </form>
               </td>
               <td>
-                <% if (bout.winner) { %>
+                <% if (bout.walkover) { %>
+                  <span class="hint">After the weigh-in</span>
+                <% } else if (bout.winner) { %>
                   <form method="post" action="/admin/competitions/<%= competition.id %>/results/<%= bout.id %>">
                     <input type="hidden" name="_csrf" value="<%= csrf %>">
                     <input type="hidden" name="action" value="clear">

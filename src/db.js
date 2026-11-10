@@ -192,7 +192,9 @@ CREATE TABLE IF NOT EXISTS bouts (
   day INTEGER,
   court INTEGER,
   start_time TEXT,
-  winner_registration_id INTEGER REFERENCES registrations(id)
+  winner_registration_id INTEGER REFERENCES registrations(id),
+  -- Won without a fight, because the other athlete failed or missed the weigh-in.
+  walkover INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_bouts_competition ON bouts(competition_id);
 
@@ -652,6 +654,15 @@ function migratePoomsaeStages(db) {
   })();
 }
 
+// Version 18: the weigh-in can run after the draw, and an athlete who fails it
+// gives their opponent a walkover. No bout has been won that way yet.
+function migrateWalkovers(db) {
+  db.transaction(() => {
+    addColumnIfMissing(db, 'bouts', 'walkover', 'INTEGER NOT NULL DEFAULT 0');
+    db.pragma('user_version = 18');
+  })();
+}
+
 function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 1) migrateBelts(db);
   if (db.pragma('user_version', { simple: true }) < 2) migrateSchedule(db);
@@ -670,6 +681,7 @@ function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 15) migratePoomsaeSchedule(db);
   if (db.pragma('user_version', { simple: true }) < 16) migratePoomsaeOrder(db);
   if (db.pragma('user_version', { simple: true }) < 17) migratePoomsaeStages(db);
+  if (db.pragma('user_version', { simple: true }) < 18) migrateWalkovers(db);
 }
 
 // Safe on old databases: only tables that don't exist yet are created.

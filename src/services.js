@@ -1010,13 +1010,19 @@ function classesForRegistration(db, registration) {
 // move (weightClassId): moves to another class of the same age group and gender, passed.
 // no_show, disqualify: leave the athlete out of the draw.
 // reset: back to not weighed, and back to the entered class if they were moved.
+// The weigh-in can also run after the bout list is drawn. Then nobody changes
+// class, and a no-show or disqualified athlete gives their opponent a walkover
+// (returned as walkovers: bout ids). Undoing it takes the walkovers back.
 function recordWeighIn(db, competition, registrationId, { action, weightKg, weightClassId }) {
   if (competition.status !== 'closed') return { ok: false, error: 'Close registration before the weigh-in.' };
-  if (hasBoutList(db, competition.id)) return { ok: false, error: 'Delete the bout list before changing weigh-ins, so the draw stays correct.' };
   const registration = db
     .prepare("SELECT * FROM registrations WHERE id = ? AND competition_id = ? AND status = 'approved'")
     .get(registrationId, competition.id);
   if (!registration) return { ok: false, error: 'That athlete is not an approved entry in this competition.' };
+  const drawn = hasBoutList(db, competition.id);
+  if (drawn && action === 'move') {
+    return { ok: false, error: 'The bout list is drawn, so nobody can change weight class. Keep them in their class if they are lighter, or disqualify them to give their opponent a walkover.' };
+  }
 
   const classes = classesForRegistration(db, registration);
   const labelOf = (id) => (classes.find((c) => c.id === id) || {}).label;
@@ -1052,17 +1058,39 @@ function recordWeighIn(db, competition, registrationId, { action, weightKg, weig
     return { ok: true, outcome: 'moved', from: labelOf(registration.weight_class_id), to: target.label };
   }
   if (action === 'no_show' || action === 'disqualify') {
-    save.run({ ...base, status: action === 'no_show' ? 'no_show' : 'disqualified' });
-    return { ok: true, outcome: action };
+    return db.transaction(() => {
+      save.run({ ...base, status: action === 'no_show' ? 'no_show' : 'disqualified' });
+      return { ok: true, outcome: action, drawn, walkovers: drawn ? applyWalkovers(db, competition.id) : [] };
+    })();
   }
   if (action === 'reset') {
     // Undoing the weigh-in would put the old weight class back without the old age group.
     if (registration.merged_from) return { ok: false, error: 'This athlete was moved to another division. Undo that on the Divisions page first.' };
-    const enteredId = registration.entered_weight_class_id || registration.weight_class_id;
-    save.run({ ...base, status: null, at: null, classId: enteredId, enteredId: null });
-    return { ok: true, outcome: 'reset', backTo: registration.entered_weight_class_id ? labelOf(enteredId) : null };
+    if (drawn && registration.entered_weight_class_id) return { ok: false, error: 'The bout list is drawn, so they stay in the class they were moved to.' };
+    try {
+      return undoWeighIn();
+    } catch (error) {
+      if (error.refusal) return { ok: false, error: `${error.message} Their opponent's walkover is still in place.` };
+      throw error;
+    }
   }
   return { ok: false, error: 'Unknown weigh-in action.' };
+
+  function undoWeighIn() {
+    return db.transaction(() => {
+      // Their opponents' walkovers go, latest first. A later result built on one blocks the undo.
+      const lost = db
+        .prepare('SELECT id FROM bouts WHERE competition_id = ? AND walkover = 1 AND winner_registration_id != ? AND ? IN (blue_registration_id, red_registration_id) ORDER BY round DESC')
+        .all(competition.id, registration.id, registration.id);
+      for (const bout of lost) {
+        const cleared = clearResult(db, competition.id, bout.id);
+        if (!cleared.ok) throw Object.assign(new Error(cleared.error), { refusal: true });
+      }
+      const enteredId = registration.entered_weight_class_id || registration.weight_class_id;
+      save.run({ ...base, status: null, at: null, classId: enteredId, enteredId: null });
+      return { ok: true, outcome: 'reset', backTo: registration.entered_weight_class_id ? labelOf(enteredId) : null, walkoversUndone: lost.length };
+    })();
+  }
 }
 
 // Writes one division's rounds as bouts. `division` has its gender and group ids.
@@ -1372,6 +1400,7 @@ function loadBoutList(db, competitionId) {
       blue,
       red,
       winner: [blue, red].find((s) => s && s.registrationId === winnerId) || null,
+      walkover: row.walkover === 1,
     });
   });
 
@@ -1391,6 +1420,36 @@ function loadBoutList(db, competitionId) {
       matches: division.bouts.filter((b) => !b.isBye).length,
     };
   });
+}
+
+// Gives a walkover in every bout where one side was a no-show or disqualified at
+// the weigh-in and the other wasn't, and repeats as winners move on, so an
+// athlete whose opponent comes from an earlier bout gets theirs once that bout
+// is decided. A bout with both sides out waits for the organiser. Returns bout ids.
+function applyWalkovers(db, competitionId) {
+  const out = new Set(
+    db.prepare("SELECT id FROM registrations WHERE competition_id = ? AND weigh_status IN ('no_show', 'disqualified')").all(competitionId).map((r) => r.id)
+  );
+  const open = db.prepare(
+    `SELECT * FROM bouts WHERE competition_id = ? AND is_bye = 0 AND winner_registration_id IS NULL
+       AND blue_registration_id IS NOT NULL AND red_registration_id IS NOT NULL ORDER BY round, position`
+  );
+  const mark = db.prepare('UPDATE bouts SET walkover = 1 WHERE id = ?');
+  const given = [];
+  let more = out.size > 0;
+  while (more) {
+    more = false;
+    open.all(competitionId).forEach((bout) => {
+      const blueOut = out.has(bout.blue_registration_id);
+      if (blueOut === out.has(bout.red_registration_id)) return;
+      if (recordResult(db, competitionId, bout.id, blueOut ? 'red' : 'blue').ok) {
+        mark.run(bout.id);
+        given.push(bout.id);
+        more = true;
+      }
+    });
+  }
+  return given;
 }
 
 function hasResults(db, competitionId) {
@@ -1439,7 +1498,7 @@ function clearResult(db, competitionId, boutId) {
     if (next && next.winner_registration_id) {
       return { ok: false, error: `Clear the result of Bout ${next.bout_number} first, because it depends on this one.` };
     }
-    db.prepare('UPDATE bouts SET winner_registration_id = NULL WHERE id = ?').run(bout.id);
+    db.prepare('UPDATE bouts SET winner_registration_id = NULL, walkover = 0 WHERE id = ?').run(bout.id);
     if (next) db.prepare(`UPDATE bouts SET ${column} = NULL WHERE id = ?`).run(next.id);
     return { ok: true };
   })();
@@ -1451,6 +1510,8 @@ function clearAllResults(db, competitionId) {
     db.prepare('SELECT id FROM bouts WHERE competition_id = ? AND winner_registration_id IS NOT NULL ORDER BY round DESC')
       .all(competitionId)
       .forEach((bout) => clearResult(db, competitionId, bout.id));
+    // Walkovers come from the weigh-in, not from a result, so they stay.
+    applyWalkovers(db, competitionId);
   })();
 }
 
@@ -1702,6 +1763,7 @@ module.exports = {
   hasResults,
   recordResult,
   clearResult,
+  applyWalkovers,
   clearAllResults,
   createPasswordReset,
   findPasswordReset,

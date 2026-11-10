@@ -14,8 +14,8 @@
 
 <% if (competition.status !== 'closed') { %>
   <div class="notice info">Close registration before the weigh-in. Only approved athletes are weighed.</div>
-<% } else if (locked) { %>
-  <div class="notice info">The bout list has been generated, so weigh-ins are locked. Delete the bout list to change them, then generate it again.</div>
+<% } else if (drawn) { %>
+  <div class="notice info">The bout list is drawn, so athletes stay in their weight class. An athlete over their class, or under it and not kept in it, is disqualified, and a no-show or disqualified athlete gives their opponent a walkover.</div>
 <% } %>
 
 <section class="card">
@@ -59,7 +59,7 @@
   <% if (rows.length === 0) { %>
     <p class="empty"><%= counts.total === 0 ? 'No approved athletes yet.' : 'No athletes match these filters.' %></p>
   <% } else { %>
-    <% const canEdit = competition.status === 'closed' && !locked; %>
+    <% const canEdit = competition.status === 'closed'; %>
     <%# Keeps the official's filters across each step. Search text is escaped, as it's free text. %>
     <% const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); %>
     <% const keep = () => Object.entries(filters).filter(([, v]) => v).map(([k, v]) => `<input type="hidden" name="${k}" value="${esc(v)}">`).join(''); %>
@@ -86,9 +86,11 @@
                     <% if (pending.lighter) { %>
                       <form method="post" action="<%= action %>"><input type="hidden" name="_csrf" value="<%= csrf %>"><%- keep() %><button class="btn small" name="action" value="keep" type="submit">Keep in <%= pending.entered %></button></form>
                     <% } %>
-                    <form method="post" action="<%= action %>"><input type="hidden" name="_csrf" value="<%= csrf %>"><%- keep() %><input type="hidden" name="weight_class_id" value="<%= pending.fitsId %>"><button class="btn <%= pending.lighter ? 'secondary ' : '' %>small" name="action" value="move" type="submit">Move to <%= pending.fits %></button></form>
-                    <% if (!pending.lighter) { %>
-                      <form method="post" action="<%= action %>"><input type="hidden" name="_csrf" value="<%= csrf %>"><%- keep() %><button class="btn danger small" name="action" value="disqualify" type="submit">Disqualify</button></form>
+                    <% if (!drawn) { %>
+                      <form method="post" action="<%= action %>"><input type="hidden" name="_csrf" value="<%= csrf %>"><%- keep() %><input type="hidden" name="weight_class_id" value="<%= pending.fitsId %>"><button class="btn <%= pending.lighter ? 'secondary ' : '' %>small" name="action" value="move" type="submit">Move to <%= pending.fits %></button></form>
+                    <% } %>
+                    <% if (!pending.lighter || drawn) { %>
+                      <form method="post" action="<%= action %>"<%- drawn ? ' data-confirm="Disqualify them? Their opponent gets a walkover."' : '' %>><input type="hidden" name="_csrf" value="<%= csrf %>"><%- keep() %><button class="btn danger small" name="action" value="disqualify" type="submit"><%= drawn ? 'Disqualify: walkover' : 'Disqualify' %></button></form>
                     <% } %>
                     <form method="post" action="<%= action %>"><input type="hidden" name="_csrf" value="<%= csrf %>"><%- keep() %><button class="btn secondary small" name="action" value="cancel" type="submit">Weigh again</button></form>
                   </div>
@@ -99,7 +101,7 @@
                       <input class="weight-input" name="weight_kg" type="number" step="0.1" min="10" max="250" inputmode="decimal" placeholder="kg" aria-label="Weight of <%= r.first_name %> <%= r.last_name %> in kg" required>
                       <button class="btn small" name="action" value="check" type="submit">Check</button>
                     </form>
-                    <form method="post" action="<%= action %>"><input type="hidden" name="_csrf" value="<%= csrf %>"><%- keep() %><button class="btn secondary small" name="action" value="no_show" type="submit">No-show</button></form>
+                    <form method="post" action="<%= action %>"<%- drawn ? ' data-confirm="Mark them as a no-show? Their opponent gets a walkover."' : '' %>><input type="hidden" name="_csrf" value="<%= csrf %>"><%- keep() %><button class="btn secondary small" name="action" value="no_show" type="submit">No-show</button></form>
                   </div>
                 <% } else { %>
                   <form method="post" action="<%= action %>" data-confirm="Undo the weigh-in for <%= r.first_name %> <%= r.last_name %>?<%= r.entered_weight_class ? ` They go back to ${r.entered_weight_class}.` : '' %>">
@@ -114,6 +116,6 @@
       </table>
     </div>
   <% } %>
-  <p class="hint">Weights aren't saved, only the result. Athletes marked as no-show or disqualified are left out of the draw. Anyone not weighed is still drawn, so weigh everyone before generating the bout list.</p>
+  <p class="hint">Weights aren't saved, only the result. <% if (drawn) { %>Athletes marked as no-show or disqualified lose their bout by walkover; if they had a bye, their next opponent gets the walkover as soon as they are known.<% } else { %>Athletes marked as no-show or disqualified are left out of the draw. You can also draw the bout list first and weigh in afterwards: anyone out then gives their opponent a walkover.<% } %></p>
 </section>
 <%- include('../partials/bottom') %>
