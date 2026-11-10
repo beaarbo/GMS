@@ -114,6 +114,24 @@ function notifyRegistrationDecisions(ctx, competition, registrationIds, decision
   return Promise.all(sends);
 }
 
+// The same for poomsae: entries carry club_id, names, event and review_note.
+function notifyPoomsaeDecisions(ctx, competition, entries, decision) {
+  if (entries.length === 0 || decision === 'pending') return Promise.resolve();
+  const clubs = new Map();
+  entries.forEach((e) => clubs.set(e.club_id, [...(clubs.get(e.club_id) || []), e]));
+  return Promise.all(
+    [...clubs.entries()].map(([clubId, list]) => {
+      const lines = list.map((e) => `- ${e.names} (${e.event})${decision === 'rejected' ? `: ${e.review_note}` : ''}`);
+      return sendAll(
+        ctx,
+        clubCoachEmails(ctx.db, clubId),
+        `Poomsae entries ${decision}: ${competition.name}`,
+        `These poomsae entries for ${competition.name} were ${decision}:\n\n${lines.join('\n')}\n\nDetails: ${ctx.publicUrl}/club/competitions/${competition.id}/poomsae`
+      );
+    })
+  );
+}
+
 function notifyBoutListPublished(ctx, competition) {
   const { db } = ctx;
   const clubs = db
@@ -187,6 +205,7 @@ module.exports = {
   notifyApplicationRejected,
   notifyCoachRemoved,
   notifyRegistrationDecisions,
+  notifyPoomsaeDecisions,
   notifyBoutListPublished,
   sendDeadlineReminders,
 };

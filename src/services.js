@@ -12,6 +12,7 @@ const {
   formatDay,
 } = require('./divisions');
 const { buildBracket, roundsFromSlots, seededSlots, slotsAreValid, assignCourts, scheduleCourt, formatTime } = require('./bracket');
+const { placeEntry, POOMSAE_EVENTS, poomsaeDivisionTitle, rankEntries } = require('./poomsae');
 const { logActivity } = require('./activity');
 const { documentLabel, documentTypeFor } = require('./documents');
 
@@ -73,8 +74,11 @@ function loadDivisionSetup(db, competitionId) {
   };
 }
 
+// Kyorugi registrations and poomsae entries together: either locks the setup.
 function countRegistrations(db, competitionId) {
-  return db.prepare('SELECT COUNT(*) AS n FROM registrations WHERE competition_id = ?').get(competitionId).n;
+  return db
+    .prepare('SELECT (SELECT COUNT(*) FROM registrations WHERE competition_id = ?) + (SELECT COUNT(*) FROM poomsae_entries WHERE competition_id = ?) AS n')
+    .get(competitionId, competitionId).n;
 }
 
 // Replaces a competition's setup. Callers must validate first and must not call
@@ -129,10 +133,10 @@ function createCompetition(db, { event_dates: eventDates, ...fields }) {
   return db.transaction(() => {
     const id = db
       .prepare(
-        `INSERT INTO competitions (name, event_date, registration_deadline, registration_deadline_time, venue, description, age_basis, status, max_per_club_division)
-         VALUES (@name, @event_date, @registration_deadline, @registration_deadline_time, @venue, @description, @age_basis, @status, @max_per_club_division)`
+        `INSERT INTO competitions (name, event_date, registration_deadline, registration_deadline_time, venue, description, age_basis, status, max_per_club_division, events)
+         VALUES (@name, @event_date, @registration_deadline, @registration_deadline_time, @venue, @description, @age_basis, @status, @max_per_club_division, @events)`
       )
-      .run({ description: '', age_basis: 'year', status: 'draft', registration_deadline_time: '23:59', max_per_club_division: null, ...fields }).lastInsertRowid;
+      .run({ description: '', age_basis: 'year', status: 'draft', registration_deadline_time: '23:59', max_per_club_division: null, events: 'kyorugi', ...fields }).lastInsertRowid;
     saveEventDates(db, id, eventDates || [fields.event_date]);
     saveDivisionSetup(db, id, { ageGroups: DEFAULT_AGE_GROUPS, beltGroups: DEFAULT_BELT_GROUPS });
     return Number(id);
@@ -318,16 +322,153 @@ function getFighterDocument(db, fighterId) {
 }
 
 // An approved registration was checked against this document, so it stays as is.
+// Kyorugi registrations or poomsae entries in the given states.
+function hasEntryIn(db, fighterId, statuses) {
+  const list = statuses.map(() => '?').join(', ');
+  return Boolean(
+    db
+      .prepare(
+        `SELECT 1 FROM registrations WHERE fighter_id = ? AND status IN (${list})
+         UNION ALL
+         SELECT 1 FROM poomsae_members m JOIN poomsae_entries e ON e.id = m.entry_id WHERE m.fighter_id = ? AND e.status IN (${list})
+         LIMIT 1`
+      )
+      .get(fighterId, ...statuses, fighterId, ...statuses)
+  );
+}
+
 function hasApprovedRegistration(db, fighterId) {
-  return Boolean(db.prepare("SELECT 1 FROM registrations WHERE fighter_id = ? AND status = 'approved' LIMIT 1").get(fighterId));
+  return hasEntryIn(db, fighterId, ['approved']);
 }
 
 function hasActiveRegistration(db, fighterId) {
-  return Boolean(
-    db
-      .prepare("SELECT 1 FROM registrations WHERE fighter_id = ? AND status IN ('pending', 'approved') LIMIT 1")
-      .get(fighterId)
+  return hasEntryIn(db, fighterId, ['pending', 'approved']);
+}
+
+// Any kyorugi or poomsae entry ever, which keeps the athlete from being deleted.
+function hasEntryHistory(db, fighterId) {
+  return hasEntryIn(db, fighterId, ['pending', 'approved', 'rejected']);
+}
+
+const POOMSAE_SELECT = `
+  SELECT e.*, c.name AS club_name, a.name AS age_group, a.min_age, b.name AS belt_group, b.min_rank
+  FROM poomsae_entries e
+  JOIN clubs c ON c.id = e.club_id
+  JOIN age_groups a ON a.id = e.age_group_id
+  JOIN belt_groups b ON b.id = e.belt_group_id`;
+
+const EVENT_ORDER = "CASE e.event WHEN 'individual' THEN 0 WHEN 'pair' THEN 1 ELSE 2 END";
+
+// A competition's poomsae entries in division order, each with its athletes.
+// clubId limits it to one club's entries.
+function listPoomsaeEntries(db, competitionId, { clubId = null } = {}) {
+  const entries = db
+    .prepare(
+      `${POOMSAE_SELECT} WHERE e.competition_id = ? ${clubId ? 'AND e.club_id = ?' : ''}
+       ORDER BY ${EVENT_ORDER}, a.min_age, e.gender DESC, b.min_rank, e.id`
+    )
+    .all(...[competitionId, clubId].filter(Boolean));
+  const members = db.prepare(
+    `SELECT m.entry_id, m.age_at_event, f.id, f.first_name, f.last_name, f.gender, f.belt_rank,
+            (SELECT d.doc_type FROM fighter_documents d WHERE d.fighter_id = f.id) AS document_type
+     FROM poomsae_members m JOIN fighters f ON f.id = m.fighter_id
+     WHERE m.entry_id = ? ORDER BY f.last_name, f.first_name`
   );
+  return entries.map((entry) => {
+    const athletes = members.all(entry.id);
+    return { ...entry, athletes, names: athletes.map((a) => `${a.first_name} ${a.last_name}`).join(', ') };
+  });
+}
+
+function getPoomsaeEntry(db, competitionId, entryId) {
+  return listPoomsaeEntries(db, competitionId).find((e) => e.id === Number(entryId)) || null;
+}
+
+// Enters one athlete (individual), two (pair) or three (team) from a club.
+// Each athlete can be in one entry per event. Returns { ok, error?, placement }.
+function enterPoomsae(db, competition, clubId, event, fighters) {
+  const placement = placeEntry({ event, members: fighters, competition, ...loadDivisionSetup(db, competition.id) });
+  if (!placement.ok) return placement;
+  const label = POOMSAE_EVENTS[event].label.toLowerCase();
+
+  const missingDocument = fighters.find((f) => !db.prepare('SELECT 1 FROM fighter_documents WHERE fighter_id = ?').get(f.id));
+  if (missingDocument) {
+    return { ok: false, error: `Upload the ${documentLabel(documentTypeFor(missingDocument.belt_rank))} of ${missingDocument.first_name} ${missingDocument.last_name} first.` };
+  }
+  const inEvent = db.prepare(
+    `SELECT 1 FROM poomsae_members m JOIN poomsae_entries e ON e.id = m.entry_id
+     WHERE m.fighter_id = ? AND e.competition_id = ? AND e.event = ? AND e.status != 'rejected'`
+  );
+  const taken = fighters.find((f) => inEvent.get(f.id, competition.id, event));
+  if (taken) return { ok: false, error: `${taken.first_name} ${taken.last_name} is already in a ${label} entry.` };
+
+  const limit = competition.max_per_club_division;
+  if (limit) {
+    const { n } = db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM poomsae_entries
+         WHERE competition_id = ? AND club_id = ? AND status != 'rejected' AND event = ? AND gender = ? AND age_group_id = ? AND belt_group_id = ?`
+      )
+      .get(competition.id, clubId, event, placement.gender, placement.ageGroup.id, placement.beltGroup.id);
+    if (n >= limit) {
+      return { ok: false, error: `Your club already has ${n} ${label} entr${n === 1 ? 'y' : 'ies'} in this division, the most this competition allows per club.` };
+    }
+  }
+
+  const id = db.transaction(() => {
+    const entryId = db
+      .prepare('INSERT INTO poomsae_entries (competition_id, club_id, event, gender, age_group_id, belt_group_id) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(competition.id, clubId, event, placement.gender, placement.ageGroup.id, placement.beltGroup.id).lastInsertRowid;
+    const insertMember = db.prepare('INSERT INTO poomsae_members (entry_id, fighter_id, age_at_event) VALUES (?, ?, ?)');
+    fighters.forEach((f, i) => insertMember.run(entryId, f.id, placement.ages[i]));
+    return Number(entryId);
+  })();
+  return { ok: true, id, placement };
+}
+
+// A club takes back an entry that isn't approved yet.
+function withdrawPoomsae(db, competitionId, clubId, entryId) {
+  return db.prepare("DELETE FROM poomsae_entries WHERE id = ? AND competition_id = ? AND club_id = ? AND status != 'approved'").run(entryId, competitionId, clubId).changes > 0;
+}
+
+// Approve, reject or move back to pending. A scored entry stays as it is, so
+// placings never change behind the judges' backs. Returns { ok, error? }.
+function reviewPoomsae(db, competitionId, entryId, decision, note = '') {
+  const entry = db.prepare('SELECT * FROM poomsae_entries WHERE id = ? AND competition_id = ?').get(entryId, competitionId);
+  if (!entry) return { ok: false, error: 'That entry no longer exists.' };
+  if (entry.score !== null) return { ok: false, error: 'This entry has a score. Clear the score first.' };
+  if (decision === 'rejected' && !note) return { ok: false, error: 'Add a reason when rejecting, so the club knows what to fix.' };
+  if (entry.status === decision) return { ok: true, changed: false };
+  db.prepare("UPDATE poomsae_entries SET status = ?, review_note = ?, reviewed_at = datetime('now') WHERE id = ?")
+    .run(decision, decision === 'rejected' ? note : '', entry.id);
+  return { ok: true, changed: true };
+}
+
+// Records (or clears, with null) the score of an approved entry once registration has closed.
+function recordPoomsaeScore(db, competition, entryId, score) {
+  if (competition.status !== 'closed') return { ok: false, error: 'Scores can be recorded once registration closes.' };
+  const changed = db
+    .prepare("UPDATE poomsae_entries SET score = ?, scored_at = CASE WHEN ? IS NULL THEN NULL ELSE datetime('now') END WHERE id = ? AND competition_id = ? AND status = 'approved'")
+    .run(score, score, entryId, competition.id).changes;
+  return changed > 0 ? { ok: true } : { ok: false, error: 'Only approved entries can be scored.' };
+}
+
+function hasPoomsaeScores(db, competitionId) {
+  return Boolean(db.prepare('SELECT 1 FROM poomsae_entries WHERE competition_id = ? AND score IS NOT NULL LIMIT 1').get(competitionId));
+}
+
+// Entries grouped into divisions, each ranked by score. Rejected entries are left out.
+function poomsaeDivisions(entries) {
+  const divisions = new Map();
+  entries.filter((e) => e.status !== 'rejected').forEach((e) => {
+    const key = [e.event, e.gender, e.age_group_id, e.belt_group_id].join('-');
+    if (!divisions.has(key)) divisions.set(key, { key, title: poomsaeDivisionTitle(e), entries: [] });
+    divisions.get(key).entries.push(e);
+  });
+  return [...divisions.values()].map((d) => {
+    const approved = rankEntries(d.entries.filter((e) => e.status === 'approved'));
+    return { ...d, entries: [...approved, ...d.entries.filter((e) => e.status === 'pending')], scored: approved.filter((e) => e.score !== null).length, approved: approved.length };
+  });
 }
 
 const REGISTRATION_SELECT = `
@@ -1044,6 +1185,7 @@ function competitionFootprint(db, competitionId) {
   const count = (sql) => db.prepare(sql).get(competitionId).n;
   return {
     registrations: count('SELECT COUNT(*) AS n FROM registrations WHERE competition_id = ?'),
+    poomsae: count('SELECT COUNT(*) AS n FROM poomsae_entries WHERE competition_id = ?'),
     bouts: count('SELECT COUNT(*) AS n FROM bouts WHERE competition_id = ? AND is_bye = 0'),
     results: count('SELECT COUNT(*) AS n FROM bouts WHERE competition_id = ? AND winner_registration_id IS NOT NULL'),
     files: count('SELECT COUNT(*) AS n FROM competition_files WHERE competition_id = ?'),
@@ -1059,6 +1201,7 @@ function deleteCompetition(db, competitionId) {
     db.prepare('DELETE FROM bouts WHERE competition_id = ?').run(competitionId);
     db.prepare('DELETE FROM division_days WHERE competition_id = ?').run(competitionId);
     db.prepare('DELETE FROM registrations WHERE competition_id = ?').run(competitionId);
+    db.prepare('DELETE FROM poomsae_entries WHERE competition_id = ?').run(competitionId);
     db.prepare('DELETE FROM competitions WHERE id = ?').run(competitionId);
   })();
 }
@@ -1157,6 +1300,15 @@ module.exports = {
   deleteNews,
   hasApprovedRegistration,
   hasActiveRegistration,
+  hasEntryHistory,
+  listPoomsaeEntries,
+  getPoomsaeEntry,
+  enterPoomsae,
+  withdrawPoomsae,
+  reviewPoomsae,
+  recordPoomsaeScore,
+  hasPoomsaeScores,
+  poomsaeDivisions,
   hasBoutList,
   deleteBoutList,
   generateBoutList,

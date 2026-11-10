@@ -3,7 +3,7 @@
 <div class="card medium">
   <h1><%= title %></h1>
   <%- include('../partials/errors') %>
-  <% if (locked) { %><div class="notice info">Clubs have registered, so the first event day and age rule are locked. You can still add or remove later days.</div><% } %>
+  <% if (locked) { %><div class="notice info">Clubs have registered, so the events, first event day and age rule are locked. You can still add or remove later days.</div><% } %>
   <% const creating = action === '/admin/competitions'; %>
   <form method="post" action="<%= action %>"<%- creating ? ' enctype="multipart/form-data"' : '' %>>
     <input type="hidden" name="_csrf" value="<%= csrf %>">
@@ -14,6 +14,13 @@
     <div class="field">
       <label for="venue">Venue</label>
       <input id="venue" name="venue" value="<%= competition.venue || '' %>" required>
+    </div>
+    <div class="field">
+      <label for="events">Events</label>
+      <select id="events" name="events" <%= locked ? 'disabled' : '' %>>
+        <% Object.entries(EVENT_TYPES).forEach(([value, label]) => { %><option value="<%= value %>" <%= (competition.events || 'kyorugi') === value ? 'selected' : '' %>><%= label %></option><% }) %>
+      </select>
+      <p class="hint">Poomsae has individual, pair and team events, ranked by score. Fixed once clubs have entered.</p>
     </div>
     <fieldset class="date-list">
       <legend>Event dates</legend>

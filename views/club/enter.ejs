@@ -7,13 +7,14 @@
     <% if (competition.max_per_club_division) { %><p class="sub">Your club can enter at most <strong><%= competition.max_per_club_division %></strong> athlete<%= competition.max_per_club_division === 1 ? '' : 's' %> in each division.</p><% } %>
   </div>
   <div class="actions">
+    <% if (hasPoomsae(competition)) { %><a class="btn" href="/club/competitions/<%= competition.id %>/poomsae">Poomsae entries</a><% } %>
     <% if (competition.bouts_published_at) { %><a class="btn" href="/club/competitions/<%= competition.id %>/bouts">View bout list</a><% } %>
     <a class="btn secondary" href="/competitions/<%= competition.id %>">View division rules</a>
   </div>
 </div>
 
 <section class="card">
-  <h2>Register athletes</h2>
+  <h2>Register athletes<%= hasPoomsae(competition) ? ' for kyorugi' : '' %></h2>
   <% if (!open) { %>
     <p class="empty">Registration for this competition closed. The deadline was <%= deadlineText(competition) %>.</p>
   <% } else if (available.length === 0) { %>

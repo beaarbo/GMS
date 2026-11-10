@@ -52,6 +52,7 @@ const {
   listWithdrawn,
   mergeDivision,
   unmergeRegistration,
+  hasPoomsaeScores,
   REGISTRATION_SELECT,
   DIVISION_ORDER,
 } = require('../services');
@@ -63,6 +64,7 @@ const { writeBoutListPdf } = require('../boutlistPdf');
 const { clean, toArray, requireRole, notFound, wrap, passwordError } = require('./helpers');
 const { resultsPath } = require('./competitionDay');
 const { createBackup, pruneBackups, listBackups } = require('../backups');
+const { EVENT_TYPES } = require('../poomsae');
 
 const router = express.Router();
 router.use(requireRole('admin'));
@@ -85,6 +87,7 @@ function readCompetition(body, lockedFirstDay = null) {
     venue: clean(body.venue),
     description: typeof body.description === 'string' ? body.description.replace(/\r\n?/g, '\n').trim().slice(0, 5000) : '',
     age_basis: body.age_basis === 'date' ? 'date' : 'year',
+    events: EVENT_TYPES[body.events] ? body.events : 'kyorugi',
     // Blank means no limit.
     max_per_club_division: clean(body.max_per_club_division, 3) === '' ? null : Number(clean(body.max_per_club_division, 3)),
   };
@@ -124,6 +127,9 @@ function competitionsWithCounts(db) {
          SUM(r.status = 'approved') AS approved,
          SUM(r.status = 'rejected') AS rejected,
          (SELECT COUNT(*) FROM bouts b WHERE b.competition_id = comp.id) AS bout_count,
+         (SELECT COUNT(*) FROM poomsae_entries p WHERE p.competition_id = comp.id AND p.status = 'pending') AS poomsae_pending,
+         (SELECT COUNT(*) FROM poomsae_entries p WHERE p.competition_id = comp.id AND p.status = 'approved') AS poomsae_approved,
+         (SELECT COUNT(*) FROM poomsae_entries p WHERE p.competition_id = comp.id) AS poomsae_count,
          (SELECT MAX(d.event_date) FROM competition_dates d WHERE d.competition_id = comp.id) AS last_day
        FROM competitions comp LEFT JOIN registrations r ON r.competition_id = comp.id
        GROUP BY comp.id ORDER BY comp.status = 'closed', comp.event_date`
@@ -145,6 +151,9 @@ function attentionItems(db, competitions, { emailConfigured, backupsDir }) {
   competitions.forEach((c) => {
     if (c.pending > 0) {
       items.push({ level: 'info', text: `${c.pending} registration${c.pending === 1 ? '' : 's'} waiting for review in ${c.name}.`, href: `/admin/competitions/${c.id}/registrations?status=pending`, link: 'Review' });
+    }
+    if (c.poomsae_pending > 0) {
+      items.push({ level: 'info', text: `${c.poomsae_pending} poomsae entr${c.poomsae_pending === 1 ? 'y' : 'ies'} waiting for review in ${c.name}.`, href: `/admin/competitions/${c.id}/poomsae`, link: 'Review' });
     }
     if (c.status === 'closed' && upcomingOrRunning(c) && c.approved > 0 && c.bout_count === 0) {
       items.push({ level: 'info', text: `${c.name} is closed: run the weigh-in, then draw the bout list.`, href: `/admin/competitions/${c.id}/bouts`, link: 'Bout list' });
@@ -281,8 +290,9 @@ router.post('/competitions/:id(\\d+)', (req, res) => {
   const { db } = req.app.locals;
   const locked = countRegistrations(db, req.competition.id) > 0;
   const { values, errors } = readCompetition(
-    // Age placement depends on the first day and age rule, so they can't change after entries exist.
-    { ...req.body, ...(locked ? { age_basis: req.competition.age_basis } : {}) },
+    // Age placement depends on the first day and age rule, so they can't change after
+    // entries exist, and neither can the events clubs entered.
+    { ...req.body, ...(locked ? { age_basis: req.competition.age_basis, events: req.competition.events } : {}) },
     locked ? req.competition.event_date : null
   );
   if (errors.length > 0) {
@@ -305,7 +315,7 @@ router.post('/competitions/:id(\\d+)', (req, res) => {
     db.prepare(
       `UPDATE competitions SET name = @name, registration_deadline = @registration_deadline,
          registration_deadline_time = @registration_deadline_time, venue = @venue, description = @description, age_basis = @age_basis,
-         max_per_club_division = @max_per_club_division WHERE id = @id`
+         max_per_club_division = @max_per_club_division, events = @events WHERE id = @id`
     ).run({ ...fields, id: req.competition.id });
     saveEventDates(db, req.competition.id, eventDates);
     // Keeps the draw, but moves bouts onto the new list of days.
@@ -314,6 +324,7 @@ router.post('/competitions/:id(\\d+)', (req, res) => {
   const changes = [];
   if (values.name !== req.competition.name) changes.push(`name to ${values.name}`);
   if (values.venue !== req.competition.venue) changes.push(`venue to ${values.venue}`);
+  if (values.events !== req.competition.events) changes.push(`events to ${EVENT_TYPES[values.events].toLowerCase()}`);
   const oldDates = getEventDatesBefore.join(', ');
   if (eventDates.join(', ') !== oldDates) changes.push(`dates from ${oldDates} to ${eventDates.join(', ')}`);
   if (deadlineMoved) {
@@ -338,6 +349,10 @@ router.post('/competitions/:id(\\d+)/status', (req, res) => {
   }
   if (status !== 'closed' && hasBoutList(db, req.competition.id)) {
     req.flash('error', 'Delete the bout list before reopening registration.');
+    return res.redirect('/admin/competitions');
+  }
+  if (status !== 'closed' && hasPoomsaeScores(db, req.competition.id)) {
+    req.flash('error', 'Clear the poomsae scores before reopening registration.');
     return res.redirect('/admin/competitions');
   }
   if (status === 'open' && (!hasCompetitionLogo(db, req.competition.id) || !req.competition.description.trim())) {

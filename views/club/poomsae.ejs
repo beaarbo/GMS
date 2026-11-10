@@ -1,0 +1,116 @@
+<%- include('../partials/top') %>
+<p class="breadcrumb"><a href="/club">Club dashboard</a></p>
+<div class="page-head">
+  <div>
+    <h1><%= competition.name %>: poomsae</h1>
+    <p class="sub"><%= eventDatesText(competition) %> · <%= competition.venue %> · Registration deadline: <%= deadlineText(competition) %> · <%= open ? timeLeft(competition) : 'Closed' %></p>
+    <% if (competition.max_per_club_division) { %><p class="sub">Your club can enter at most <strong><%= competition.max_per_club_division %></strong> entr<%= competition.max_per_club_division === 1 ? 'y' : 'ies' %> in each division.</p><% } %>
+  </div>
+  <div class="actions">
+    <% if (hasKyorugi(competition)) { %><a class="btn secondary" href="/club/competitions/<%= competition.id %>">Kyorugi entries</a><% } %>
+    <a class="btn secondary" href="/competitions/<%= competition.id %>">View division rules</a>
+  </div>
+</div>
+
+<% const label = (a) => `${a.last_name}, ${a.first_name} (${GENDERS[a.gender]}, ${a.age}, ${beltName(a.belt_rank)})`; %>
+<% if (!open) { %>
+  <section class="card"><p class="empty">Registration for this competition closed. The deadline was <%= deadlineText(competition) %>.</p></section>
+<% } else { %>
+  <section class="card">
+    <h2>Individual</h2>
+    <% if (athletes.length === 0) { %>
+      <p class="empty">You haven't added any athletes yet. <a href="/club/fighters/new">Add an athlete</a>.</p>
+    <% } else { %>
+      <p class="sub">Tick each athlete. The system places them by gender, age and belt, and the host then approves the entry.</p>
+      <form method="post" action="/club/competitions/<%= competition.id %>/poomsae/enter">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <input type="hidden" name="event" value="individual">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Enter</th><th>Athlete</th><th>Gender</th><th>Age at event</th><th>Belt</th><th></th></tr></thead>
+            <tbody>
+              <% const freeIds = new Set(free.individual.map((a) => a.id)); %>
+              <% athletes.forEach((a) => { %>
+                <tr>
+                  <td><input type="checkbox" name="fighter_ids" value="<%= a.id %>" aria-label="Enter <%= a.first_name %> <%= a.last_name %>" <%= freeIds.has(a.id) ? '' : 'disabled' %>></td>
+                  <td><strong><%= a.last_name %>, <%= a.first_name %></strong></td>
+                  <td><%= GENDERS[a.gender] %></td>
+                  <td class="num"><%= a.age %></td>
+                  <td><%= beltName(a.belt_rank) %></td>
+                  <td>
+                    <% if (!a.fits.ok) { %><span class="hint"><%= a.fits.error %></span>
+                    <% } else if (!a.has_document) { %><a class="btn small" href="/club/fighters/<%= a.id %>/document">Upload <%= documentLabel(documentTypeFor(a.belt_rank)) %> first</a>
+                    <% } else if (!freeIds.has(a.id)) { %><span class="hint">Entered</span><% } %>
+                  </td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+        <button class="btn" type="submit">Submit for approval</button>
+      </form>
+    <% } %>
+  </section>
+
+  <% ['pair', 'team'].forEach((event) => { const size = POOMSAE_EVENTS[event].size; %>
+    <section class="card">
+      <h2><%= POOMSAE_EVENTS[event].label %></h2>
+      <p class="sub"><%= size %> athletes from your club. Boys and girls together compete as mixed. The division follows the oldest athlete and the highest belt.</p>
+      <% if (free[event].length < size) { %>
+        <p class="empty">You need <%= size %> athletes with their documents uploaded who aren't already in a <%= event %>.</p>
+      <% } else { %>
+        <form method="post" action="/club/competitions/<%= competition.id %>/poomsae/enter">
+          <input type="hidden" name="_csrf" value="<%= csrf %>">
+          <input type="hidden" name="event" value="<%= event %>">
+          <div class="form-row">
+            <% for (let i = 0; i < size; i += 1) { %>
+              <div class="field">
+                <label for="<%= event %>-<%= i %>">Athlete <%= i + 1 %></label>
+                <select id="<%= event %>-<%= i %>" name="member" required>
+                  <option value="">Select</option>
+                  <% free[event].forEach((a) => { %><option value="<%= a.id %>"><%= label(a) %></option><% }) %>
+                </select>
+              </div>
+            <% } %>
+          </div>
+          <button class="btn" type="submit">Submit <%= event %> for approval</button>
+        </form>
+      <% } %>
+    </section>
+  <% }) %>
+<% } %>
+
+<section class="card">
+  <h2>Your poomsae entries</h2>
+  <% if (entries.length === 0) { %>
+    <p class="empty">You haven't entered any athletes in poomsae yet.</p>
+  <% } else { %>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Athletes</th><th>Division</th><th>Status</th><th>Result</th><th></th></tr></thead>
+        <tbody>
+          <% entries.forEach((e) => { %>
+            <tr>
+              <td><strong><%= e.names %></strong></td>
+              <td><%= poomsaeDivisionTitle(e) %></td>
+              <td>
+                <span class="badge <%= e.status %>"><%= statusLabel(e.status) %></span>
+                <% if (e.review_note) { %><div class="hint"><%= e.review_note %></div><% } %>
+              </td>
+              <td class="nowrap"><% if (e.score !== null) { %><strong><%= placeText(e.place) %></strong> · <%= formatScore(e.score) %><% } %></td>
+              <td>
+                <% if (e.status !== 'approved') { %>
+                  <form method="post" action="/club/competitions/<%= competition.id %>/poomsae/<%= e.id %>/withdraw" data-confirm="Withdraw this entry?">
+                    <input type="hidden" name="_csrf" value="<%= csrf %>">
+                    <button class="btn danger small" type="submit">Withdraw</button>
+                  </form>
+                <% } %>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</section>
+<%- include('../partials/bottom') %>

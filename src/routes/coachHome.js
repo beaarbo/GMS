@@ -26,11 +26,16 @@ router.get('/', (req, res) => {
 
   const entries = new Map();
   if (clubId) {
-    db.prepare('SELECT competition_id, status, COUNT(*) AS n FROM registrations WHERE club_id = ? GROUP BY competition_id, status')
-      .all(clubId)
+    // Kyorugi registrations and poomsae entries count together.
+    db.prepare(
+      `SELECT competition_id, status, COUNT(*) AS n FROM registrations WHERE club_id = ? GROUP BY competition_id, status
+       UNION ALL
+       SELECT competition_id, status, COUNT(*) AS n FROM poomsae_entries WHERE club_id = ? GROUP BY competition_id, status`
+    )
+      .all(clubId, clubId)
       .forEach((row) => {
         const counts = entries.get(row.competition_id) || { pending: 0, approved: 0, rejected: 0 };
-        counts[row.status] = row.n;
+        counts[row.status] += row.n;
         entries.set(row.competition_id, counts);
       });
   }

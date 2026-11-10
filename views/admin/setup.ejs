@@ -16,6 +16,7 @@
   <input type="hidden" name="_csrf" value="<%= csrf %>">
   <fieldset class="card" <%= locked ? 'disabled' : '' %>>
     <h2>Age groups and weight classes</h2>
+    <% if (hasPoomsae(competition)) { %><p class="sub">Poomsae uses the same age and belt groups. Weight limits only apply to kyorugi<%= hasKyorugi(competition) ? '' : ', so leave them as they are' %>.</p><% } %>
     <p class="sub">List limits in increasing order. <strong>-45</strong> means up to and including 45 kg, and <strong>+78</strong> is the open class above 78 kg. Clear a row's fields to remove it.</p>
     <div class="table-wrap">
       <table class="setup-table">

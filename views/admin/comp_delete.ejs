@@ -10,6 +10,7 @@
   <p>This permanently deletes the competition and everything in it:</p>
   <ul class="delete-list">
     <li><strong><%= footprint.registrations %></strong> registration<%= footprint.registrations === 1 ? '' : 's' %>, with weigh-in results</li>
+    <% if (footprint.poomsae > 0) { %><li><strong><%= footprint.poomsae %></strong> poomsae entr<%= footprint.poomsae === 1 ? 'y' : 'ies' %>, with their scores</li><% } %>
     <li><strong><%= footprint.bouts %></strong> bout<%= footprint.bouts === 1 ? '' : 's' %> and <strong><%= footprint.results %></strong> recorded result<%= footprint.results === 1 ? '' : 's' %>, and the medal standings</li>
     <li>Its divisions, dates, logo and <strong><%= footprint.files %></strong> attached file<%= footprint.files === 1 ? '' : 's' %></li>
   </ul>

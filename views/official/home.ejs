@@ -19,17 +19,20 @@
         <h3 class="card-title"><%= c.name %></h3>
         <p class="sub"><%= eventDatesText(c) %> · <%= c.venue %></p>
         <p class="stats card-stats">
-          <span>Weighed <strong><%= c.weighIn.total - c.weighIn.waiting %>/<%= c.weighIn.total %></strong></span>
+          <% if (hasKyorugi(c)) { %><span>Weighed <strong><%= c.weighIn.total - c.weighIn.waiting %>/<%= c.weighIn.total %></strong></span><% } %>
           <% if (c.hasBouts) { %><span>Results <strong><%= c.bouts.done %>/<%= c.bouts.total %></strong></span><% } %>
         </p>
         <div class="actions">
-          <a class="btn<%= c.hasBouts ? ' secondary' : '' %>" href="/admin/competitions/<%= c.id %>/weigh-in">Weigh-in</a>
-          <% if (c.hasBouts) { %>
-            <a class="btn" href="/admin/competitions/<%= c.id %>/results">Record results</a>
-            <a class="btn secondary" href="/screens/<%= c.id %>">Court screens</a>
-          <% } else { %>
-            <span class="hint">Results open once the organiser draws the bout list.</span>
+          <% if (hasKyorugi(c)) { %>
+            <a class="btn<%= c.hasBouts ? ' secondary' : '' %>" href="/admin/competitions/<%= c.id %>/weigh-in">Weigh-in</a>
+            <% if (c.hasBouts) { %>
+              <a class="btn" href="/admin/competitions/<%= c.id %>/results">Record results</a>
+              <a class="btn secondary" href="/screens/<%= c.id %>">Court screens</a>
+            <% } else { %>
+              <span class="hint">Results open once the organiser draws the bout list.</span>
+            <% } %>
           <% } %>
+          <% if (hasPoomsae(c)) { %><a class="btn" href="/admin/competitions/<%= c.id %>/poomsae">Poomsae scores</a><% } %>
         </div>
       </article>
     <% }) %>

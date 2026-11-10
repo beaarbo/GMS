@@ -61,6 +61,8 @@ CREATE TABLE IF NOT EXISTS competitions (
   bout_rest_minutes INTEGER NOT NULL DEFAULT 0,
   -- Most entries one club may have in a single division. NULL: no limit.
   max_per_club_division INTEGER,
+  -- Which events clubs can enter. Fixed once entries exist.
+  events TEXT NOT NULL DEFAULT 'kyorugi' CHECK (events IN ('kyorugi', 'poomsae', 'both')),
   bouts_published_at TEXT,
   reminder_sent_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -240,6 +242,34 @@ CREATE TABLE IF NOT EXISTS division_days (
   day INTEGER NOT NULL,
   PRIMARY KEY (competition_id, gender, age_group_id, belt_group_id, weight_class_id)
 );
+
+-- Poomsae entries: one athlete (individual), two (pair) or three (team) from
+-- one club. Divisions are event + gender (X: mixed) + age group + belt group,
+-- stored at entry time like registrations. score is the final judged score.
+CREATE TABLE IF NOT EXISTS poomsae_entries (
+  id INTEGER PRIMARY KEY,
+  competition_id INTEGER NOT NULL REFERENCES competitions(id) ON DELETE CASCADE,
+  club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+  event TEXT NOT NULL CHECK (event IN ('individual', 'pair', 'team')),
+  gender TEXT NOT NULL CHECK (gender IN ('M', 'F', 'X')),
+  age_group_id INTEGER NOT NULL REFERENCES age_groups(id),
+  belt_group_id INTEGER NOT NULL REFERENCES belt_groups(id),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  review_note TEXT NOT NULL DEFAULT '',
+  reviewed_at TEXT,
+  score REAL,
+  scored_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_poomsae_entries_competition ON poomsae_entries(competition_id);
+
+CREATE TABLE IF NOT EXISTS poomsae_members (
+  entry_id INTEGER NOT NULL REFERENCES poomsae_entries(id) ON DELETE CASCADE,
+  fighter_id INTEGER NOT NULL REFERENCES fighters(id) ON DELETE RESTRICT,
+  age_at_event INTEGER NOT NULL,
+  PRIMARY KEY (entry_id, fighter_id)
+);
+CREATE INDEX IF NOT EXISTS idx_poomsae_members_fighter ON poomsae_members(fighter_id);
 
 CREATE TABLE IF NOT EXISTS sessions (
   sid TEXT PRIMARY KEY,
@@ -446,6 +476,15 @@ function migrateClubLimit(db) {
   })();
 }
 
+// Version 12: competitions can hold poomsae. Existing ones are kyorugi only, as
+// before. The poomsae tables are new, so the schema above creates them.
+function migrateEvents(db) {
+  db.transaction(() => {
+    addColumnIfMissing(db, 'competitions', 'events', "TEXT NOT NULL DEFAULT 'kyorugi' CHECK (events IN ('kyorugi', 'poomsae', 'both'))");
+    db.pragma('user_version = 12');
+  })();
+}
+
 function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 1) migrateBelts(db);
   if (db.pragma('user_version', { simple: true }) < 2) migrateSchedule(db);
@@ -458,6 +497,7 @@ function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 9) migrateWithdrawals(db);
   if (db.pragma('user_version', { simple: true }) < 10) migrateMerges(db);
   if (db.pragma('user_version', { simple: true }) < 11) migrateClubLimit(db);
+  if (db.pragma('user_version', { simple: true }) < 12) migrateEvents(db);
 }
 
 // Safe on old databases: only tables that don't exist yet are created.

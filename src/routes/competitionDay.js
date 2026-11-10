@@ -1,5 +1,6 @@
-// Competition-day work shared by admins and officials: the weigh-in and
-// recording results. Everything else about a competition stays admin-only.
+// Competition-day work shared by admins and officials: the weigh-in, recording
+// results and poomsae scores. Everything else about a competition stays
+// admin-only, including poomsae approvals.
 const express = require('express');
 const { formatEventDates, formatDay, GENDERS } = require('../divisions');
 const {
@@ -12,7 +13,14 @@ const {
   recordWeighIn,
   getEventDates,
   listBouts,
+  listPoomsaeEntries,
+  getPoomsaeEntry,
+  poomsaeDivisions,
+  reviewPoomsae,
+  recordPoomsaeScore,
 } = require('../services');
+const { hasPoomsae, parseScore, formatScore, poomsaeDivisionTitle } = require('../poomsae');
+const { notifyPoomsaeDecisions } = require('../notifications');
 const { computeMedals } = require('../bracket');
 const { clean, requireRole, notFound } = require('./helpers');
 
@@ -20,7 +28,7 @@ const router = express.Router();
 const staff = requireRole(['admin', 'official']);
 
 // Officials only reach competitions that are past registration.
-router.use('/competitions/:id(\\d+)/:page(weigh-in|results|mat)', staff, (req, res, next) => {
+router.use('/competitions/:id(\\d+)/:page(weigh-in|results|mat|poomsae)', staff, (req, res, next) => {
   const competition = req.app.locals.db.prepare('SELECT * FROM competitions WHERE id = ?').get(req.params.id);
   if (!competition || (req.user.role === 'official' && competition.status !== 'closed')) return notFound(res);
   req.competition = competition;
@@ -252,6 +260,78 @@ router.get('/competitions/:id(\\d+)/mat/:day(\\d+)/:court(\\d+)', (req, res) => 
     done: bouts.length - waiting.length,
     total: bouts.length,
   });
+});
+
+// Poomsae: admins approve entries here while registration runs. Once it closes,
+// admins and officials record each approved entry's score, and places follow.
+const poomsaePath = (competition, entryId = null) => `/admin/competitions/${competition.id}/poomsae${entryId ? `#entry-${entryId}` : ''}`;
+
+router.get('/competitions/:id(\\d+)/poomsae', (req, res) => {
+  const { db } = req.app.locals;
+  if (!hasPoomsae(req.competition)) return notFound(res);
+  const entries = listPoomsaeEntries(db, req.competition.id);
+  const divisions = poomsaeDivisions(entries);
+  return res.render('admin/poomsae', {
+    title: 'Poomsae',
+    competition: req.competition,
+    divisions,
+    rejected: entries.filter((e) => e.status === 'rejected'),
+    pending: entries.filter((e) => e.status === 'pending').length,
+    approved: entries.filter((e) => e.status === 'approved').length,
+    scored: divisions.reduce((n, d) => n + d.scored, 0),
+    canScore: req.competition.status === 'closed',
+  });
+});
+
+router.post('/competitions/:id(\\d+)/poomsae/review', requireRole('admin'), (req, res) => {
+  const { db, notify } = req.app.locals;
+  const competition = req.competition;
+  const all = listPoomsaeEntries(db, competition.id);
+  // One row's button ("approved:12"), or approving every pending entry at once.
+  const single = clean(req.body.single, 40).match(/^(approved|rejected|pending):(\d+)$/);
+  const decision = single ? single[1] : req.body.bulk === 'approve-pending' ? 'approved' : null;
+  if (!decision) return res.redirect(poomsaePath(competition));
+  const targets = single ? all.filter((e) => e.id === Number(single[2])) : all.filter((e) => e.status === 'pending');
+
+  const changed = [];
+  targets.forEach((entry) => {
+    const result = reviewPoomsae(db, competition.id, entry.id, decision, clean(req.body[`note_${entry.id}`], 300));
+    if (!result.ok) req.flash('error', `${entry.names}: ${result.error}`);
+    else if (result.changed) {
+      const note = clean(req.body[`note_${entry.id}`], 300);
+      changed.push({ ...entry, review_note: decision === 'rejected' ? note : '' });
+      const verb = { approved: 'Approved', rejected: 'Rejected', pending: 'Moved back to pending' }[decision];
+      req.logActivity(
+        `poomsae.${decision}`,
+        `${verb} the poomsae ${entry.event} entry of ${entry.names} (${entry.club_name}) for ${competition.name}${decision === 'rejected' ? `. Reason: ${note}` : ''}`,
+        competition.id
+      );
+    }
+  });
+  notifyPoomsaeDecisions(notify, competition, changed, decision);
+  if (changed.length > 0) {
+    const verb = { approved: 'approved', rejected: 'rejected', pending: 'moved back to pending' }[decision];
+    req.flash('success', `${changed.length} poomsae entr${changed.length === 1 ? 'y' : 'ies'} ${verb}.`);
+  }
+  return res.redirect(poomsaePath(competition, single ? single[2] : null));
+});
+
+router.post('/competitions/:id(\\d+)/poomsae/:entryId(\\d+)/score', (req, res) => {
+  const { db } = req.app.locals;
+  const entry = getPoomsaeEntry(db, req.competition.id, req.params.entryId);
+  if (!entry) return notFound(res);
+  const parsed = parseScore(req.body.score);
+  const result = parsed.ok ? recordPoomsaeScore(db, req.competition, entry.id, parsed.score) : parsed;
+  if (!result.ok) {
+    req.flash('error', `${entry.names}: ${result.error}`);
+  } else if (parsed.score !== entry.score) {
+    const was = entry.score === null ? '' : `, changed from ${formatScore(entry.score)}`;
+    const summary = parsed.score === null
+      ? `Cleared the poomsae score of ${entry.names} (${entry.club_name}), which was ${formatScore(entry.score)}`
+      : `Poomsae score ${formatScore(parsed.score)} for ${entry.names} (${entry.club_name}) in ${poomsaeDivisionTitle(entry)}${was}`;
+    req.logActivity(parsed.score === null ? 'poomsae.score_cleared' : 'poomsae.scored', summary, req.competition.id);
+  }
+  return res.redirect(poomsaePath(req.competition, entry.id));
 });
 
 module.exports = { router, resultsPath };

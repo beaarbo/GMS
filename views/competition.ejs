@@ -5,7 +5,7 @@
     <%- include('partials/comp_logo', { competition, size: 'lg' }) %>
     <div>
       <h1><%= competition.name %></h1>
-      <p class="sub"><%= eventDatesText(competition) %> · <%= competition.venue %></p>
+      <p class="sub"><%= EVENT_TYPES[competition.events] %> · <%= eventDatesText(competition) %> · <%= competition.venue %></p>
       <p class="sub">Registration deadline: <%= deadlineText(competition) %> · <%= open ? timeLeft(competition) : 'Closed' %></p>
     </div>
   </div>
@@ -46,6 +46,27 @@
   </section>
 <% } %>
 
+<% if (hasPoomsae(competition)) { %>
+  <section class="card">
+    <h2>Poomsae divisions</h2>
+    <p class="sub">Individual, pair (2 athletes) and team (3 athletes) events, each grouped by gender, age group and belt group. Pairs and teams of boys and girls together compete as mixed, and are placed by their oldest athlete and highest belt.
+      Entries are ranked by their judged score.
+      <% if (!hasKyorugi(competition)) { %><%= competition.age_basis === 'year' ? 'Age is the competition year minus the birth year.' : 'Age is taken on the first day of the event.' %><% } %>
+      <% if (competition.max_per_club_division) { %>Each club can enter at most <strong><%= competition.max_per_club_division %></strong> entr<%= competition.max_per_club_division === 1 ? 'y' : 'ies' %> per division.<% } %></p>
+    <% if (!hasKyorugi(competition)) { %>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Age group</th><th>Ages</th></tr></thead>
+          <tbody>
+            <% setup.ageGroups.forEach((g) => { %><tr><td><strong><%= g.name %></strong></td><td class="nowrap"><%= g.min_age %>–<%= g.max_age %></td></tr><% }) %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
+  </section>
+<% } %>
+
+<% if (hasKyorugi(competition)) { %>
 <section class="card">
   <h2>Kyorugi divisions</h2>
   <p class="sub">Fighters are grouped by gender, age, belt and weight.
@@ -67,6 +88,7 @@
     </table>
   </div>
 </section>
+<% } %>
 
 <section class="card">
   <h2>Belt groups</h2>

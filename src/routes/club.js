@@ -13,8 +13,14 @@ const {
   hasApprovedRegistration,
   saveClubIcon,
   deleteClubIcon,
+  hasEntryHistory,
+  listPoomsaeEntries,
+  enterPoomsae,
+  withdrawPoomsae,
+  poomsaeDivisions,
   REGISTRATION_SELECT,
 } = require('../services');
+const { POOMSAE_EVENTS, hasKyorugi, hasPoomsae, placeEntry } = require('../poomsae');
 const { documentLabel, documentTypeFor, detectFileType, detectIconType, sendDocument } = require('../documents');
 const { layoutBracket, computeMedals, clubAthleteSummary } = require('../bracket');
 const { writeBoutListPdf } = require('../boutlistPdf');
@@ -310,7 +316,7 @@ router.post('/fighters/:id(\\d+)/delete', (req, res) => {
   const { db } = req.app.locals;
   const fighter = ownFighter(req, req.params.id);
   if (!fighter) return notFound(res);
-  if (db.prepare('SELECT 1 FROM registrations WHERE fighter_id = ? LIMIT 1').get(fighter.id)) {
+  if (hasEntryHistory(db, fighter.id)) {
     req.flash('error', 'This athlete has registration history and cannot be removed.');
   } else {
     db.prepare('DELETE FROM fighters WHERE id = ?').run(fighter.id);
@@ -329,6 +335,7 @@ router.get('/competitions/:id(\\d+)', (req, res) => {
   const { db } = req.app.locals;
   const competition = competitionForClub(req);
   if (!competition) return notFound(res);
+  if (!hasKyorugi(competition)) return res.redirect(`/club/competitions/${competition.id}/poomsae`);
 
   const registrations = db
     .prepare(`${REGISTRATION_SELECT} WHERE r.competition_id = ? AND r.club_id = ? ORDER BY f.last_name, f.first_name`)
@@ -415,6 +422,95 @@ router.post('/competitions/:id(\\d+)/withdraw/:regId(\\d+)', (req, res) => {
     req.flash('error', 'That registration cannot be withdrawn. Approved athletes must be released by the organiser.');
   }
   return res.redirect(`/club/competitions/${req.params.id}`);
+});
+
+const poomsaePath = (competition) => `/club/competitions/${competition.id}/poomsae`;
+
+function poomsaeCompetition(req) {
+  const competition = competitionForClub(req);
+  return competition && hasPoomsae(competition) ? competition : null;
+}
+
+router.get('/competitions/:id(\\d+)/poomsae', (req, res) => {
+  const { db } = req.app.locals;
+  const competition = poomsaeCompetition(req);
+  if (!competition) return notFound(res);
+  const setup = loadDivisionSetup(db, competition.id);
+  const athletes = db
+    .prepare(
+      `SELECT f.*, EXISTS (SELECT 1 FROM fighter_documents d WHERE d.fighter_id = f.id) AS has_document
+       FROM fighters f WHERE f.club_id = ? ORDER BY f.last_name, f.first_name`
+    )
+    .all(req.user.club_id)
+    .map((f) => ({
+      ...f,
+      age: competitionAge(f.date_of_birth, competition.event_date, competition.age_basis),
+      fits: placeEntry({ event: 'individual', members: [f], competition, ...setup }),
+    }));
+  const entries = listPoomsaeEntries(db, competition.id, { clubId: req.user.club_id });
+  // Places need every club's scores, but only this club's entries are shown.
+  const places = new Map(poomsaeDivisions(listPoomsaeEntries(db, competition.id)).flatMap((d) => d.entries).map((e) => [e.id, e.place]));
+  const inEvent = (event) => new Set(entries.filter((e) => e.event === event && e.status !== 'rejected').flatMap((e) => e.athletes.map((a) => a.id)));
+  return res.render('club/poomsae', {
+    title: `${competition.name}: poomsae`,
+    competition,
+    athletes,
+    free: Object.fromEntries(Object.keys(POOMSAE_EVENTS).map((event) => {
+      const taken = inEvent(event);
+      return [event, athletes.filter((a) => a.has_document && a.fits.ok && !taken.has(a.id))];
+    })),
+    entries: entries.map((e) => ({ ...e, place: places.get(e.id) ?? null })),
+    open: isRegistrationOpen(competition),
+  });
+});
+
+router.post('/competitions/:id(\\d+)/poomsae/enter', (req, res) => {
+  const { db } = req.app.locals;
+  const competition = poomsaeCompetition(req);
+  if (!competition) return notFound(res);
+  if (!isRegistrationOpen(competition)) {
+    req.flash('error', 'Registration for this competition is closed.');
+    return res.redirect(poomsaePath(competition));
+  }
+  const event = POOMSAE_EVENTS[req.body.event] ? req.body.event : null;
+  if (!event) return notFound(res);
+  // Individuals are ticked in a list, each its own entry. A pair or team is one entry.
+  const groups = event === 'individual'
+    ? toArray(req.body.fighter_ids).map((id) => [id])
+    : [toArray(req.body.member).filter(Boolean)];
+  if (groups.length === 0 || groups[0].length === 0) {
+    req.flash('error', event === 'individual' ? 'Select at least one athlete.' : `Choose the athletes for the ${event}.`);
+    return res.redirect(poomsaePath(competition));
+  }
+  let entered = 0;
+  groups.forEach((ids) => {
+    const fighters = ids.map((id) => ownFighter(req, id));
+    if (fighters.some((f) => !f)) return;
+    const result = enterPoomsae(db, competition, req.user.club_id, event, fighters);
+    const names = fighters.map((f) => `${f.first_name} ${f.last_name}`).join(', ');
+    if (result.ok) {
+      entered += 1;
+      req.logActivity('poomsae.entered', `Entered ${names} (${req.user.club_name}) in poomsae ${event}: ${competition.name}`, competition.id);
+    } else {
+      req.flash('error', `${names || POOMSAE_EVENTS[event].label}: ${result.error}`);
+    }
+  });
+  if (entered > 0) req.flash('success', `${entered} ${event} entr${entered === 1 ? 'y' : 'ies'} submitted for approval.`);
+  return res.redirect(poomsaePath(competition));
+});
+
+router.post('/competitions/:id(\\d+)/poomsae/:entryId(\\d+)/withdraw', (req, res) => {
+  const { db } = req.app.locals;
+  const competition = poomsaeCompetition(req);
+  if (!competition) return notFound(res);
+  const entry = listPoomsaeEntries(db, competition.id, { clubId: req.user.club_id }).find((e) => e.id === Number(req.params.entryId));
+  if (entry && withdrawPoomsae(db, competition.id, req.user.club_id, entry.id)) {
+    req.logActivity('poomsae.withdrawn', `Withdrew the poomsae ${entry.event} entry of ${entry.names} (${req.user.club_name}) from ${competition.name}`, competition.id);
+    req.flash('success', 'Entry withdrawn.');
+  } else {
+    req.flash('error', 'That entry cannot be withdrawn. Approved entries must be released by the organiser.');
+  }
+  return res.redirect(poomsaePath(competition));
 });
 
 function publishedCompetition(req) {
