@@ -79,10 +79,17 @@ p { margin: 0 0 var(--space-4); }
 
 /* Header */
 
+/* The top bar stays in view while the page scrolls. Jumps to a row or division
+   (#reg-12, #division-…) stop below it rather than underneath; public/app.js sets
+   --topbar-height to its real height, which grows when the menu wraps. */
+html { scroll-padding-top: calc(var(--topbar-height, 72px) + var(--space-3)); }
 .topbar {
   background: var(--surface);
   border-bottom: 1px solid var(--line);
-  position: relative;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.06);
 }
 .corner-stripe { height: 4px; background: linear-gradient(90deg, var(--hong) 50%, var(--chung) 50%); }
 
@@ -501,6 +508,8 @@ body.screen { background: #0b1220; color: #f8fafc; font-size: 1.25rem; min-heigh
 /* Small screens */
 
 @media (max-width: 640px) {
+  /* The menu wraps onto more lines on phones, so leave more room above jump targets. */
+  html { scroll-padding-top: calc(var(--topbar-height, 136px) + var(--space-3)); }
   .card { padding: var(--space-4); }
   .table-wrap { margin: 0 calc(var(--space-4) * -1); padding: 0 var(--space-4); }
   .page-head { align-items: flex-start; }

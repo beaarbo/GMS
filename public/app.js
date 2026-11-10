@@ -1,5 +1,16 @@
 // Progressive enhancement only: every feature also works through plain forms.
 
+// The sticky top bar's real height, so jumps to a row (#reg-12) stop below it.
+// The bar grows when its menu wraps, so this follows resizes. CSS has a fallback.
+(function trackTopbarHeight() {
+  const bar = document.querySelector('.topbar');
+  if (!bar) return;
+  const update = () => document.documentElement.style.setProperty('--topbar-height', `${bar.offsetHeight}px`);
+  update();
+  if (window.ResizeObserver) new ResizeObserver(update).observe(bar);
+  else window.addEventListener('resize', update);
+}());
+
 // Court screens: listen for changes and swap in the new content without a
 // reload. Without JavaScript the page reloads itself instead. A slow check every
 // minute covers any change signal that was missed while reconnecting.
