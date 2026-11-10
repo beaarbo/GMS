@@ -24,7 +24,9 @@
       };
       const link = (href, label) => `<a href="${href}"${current(href) ? ' aria-current="page"' : ''}>${label}</a>`;
     %>
-    <nav class="nav" aria-label="Main">
+    <%# On phones, public/app.js folds the menu behind this button. Without JavaScript the menu stays open. %>
+    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="main-nav" hidden>Menu</button>
+    <nav class="nav" id="main-nav" aria-label="Main">
       <%# Each role's own pages first, then the pages everyone shares, then admin tools. %>
       <% if (user && user.role === 'admin') { %>
         <%- link('/admin', 'Dashboard') %>

@@ -126,6 +126,10 @@ While a bout list exists, approvals can't change and registration can't reopen. 
 - **Reinstate** a withdrawn athlete from the list above the brackets. Their division is redrawn to include them.
 - **Redraw this division** makes a new random draw for that division only.
 
+## Phones
+
+On small screens the menu folds behind a **Menu** button, so the pinned top bar stays short. Without JavaScript the full menu shows instead.
+
 ## Deleting things
 
 - **Competitions:** an empty draft has a **Delete** button on the admin **Competitions** page. A competition with entries can be deleted once registration is closed: **Delete** opens a page listing what will go (registrations, bouts, results, files), and you type its name to confirm. A backup is made first, so it can be restored. Athletes stay with their clubs.
@@ -138,6 +142,8 @@ While a bout list exists, approvals can't change and registration can't reopen. 
 **Weigh-in**, on a closed competition, checks each approved athlete against the weight class their coach chose. Athletes over their class are moved up or disqualified, athletes under it can stay or move down, and no-shows are marked. Only the result is kept, not the weight. No-shows and disqualified athletes are left out of the draw.
 
 **Officials** are accounts an admin adds on the **Accounts** page, with a starting password the official can change. They see **Competition day**, where they can run the weigh-in, record results and open court screens for closed competitions. They can't approve entries, draw bout lists, change settings or manage accounts.
+
+**Results by mat** is a tablet page for one court on one day, opened with **Record results** on the court screens list or **Open mat view** on a filtered results page. It shows the bout on now with a large **Blue wins** and **Red wins** button, the next bouts, and the last result with **Undo**. It updates live when results come in from elsewhere, and uses the same rules as the results page. Admins and officials can use it.
 
 **Court screens** show one court on one day, for a TV or tablet at the mat: the bout on now with the blue and red athletes, the next three bouts and the latest results. They update live: the moment a result is recorded or a bracket or schedule changes, open screens swap in the new content, and a "Live" marker shows the connection is up. Without JavaScript they reload every 15 seconds instead. Admins and officials can open them once a bout list exists, and coaches once it's published. They need a login, because they show athletes' names.
 

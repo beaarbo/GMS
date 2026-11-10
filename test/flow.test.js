@@ -2136,3 +2136,50 @@ test('a competition can limit how many athletes one club enters in a division', 
   assert.equal(db.prepare('SELECT max_per_club_division AS n FROM competitions WHERE id = ?').get(compId).n, null);
   assert.doesNotMatch((await request(app).get(`/competitions/${compId}`)).text, /athletes per division/);
 });
+
+test('officials record results from a mat page for one court', async () => {
+  const { db, app } = await setup();
+  const { compId, admin, club } = await closedCompetitionWithFighters(db, app, [['T', 'Alpha'], ['T', 'Bravo'], ['D', 'Charlie'], ['D', 'Delta']]);
+  const bouts = `/admin/competitions/${compId}/bouts`;
+  await post(admin, `${bouts}/generate`, { courts: '1', start: '09:00', minutes: '10', rest: '0' }, bouts);
+  const mat = `/admin/competitions/${compId}/mat/1/1`;
+  const first = db.prepare('SELECT * FROM bouts WHERE bout_number = 1').get();
+
+  const page = (await admin.get(mat)).text;
+  assert.match(page, /<h2>Bout 1 /);
+  assert.match(page, /Blue wins[\s\S]*Red wins/);
+  assert.match(page, new RegExp(`data-live-events="/screens/${compId}/1/1/events"`), 'it updates live like the court screen');
+  assert.doesNotMatch(page, /class="nav"/, 'no site menu on the tablet page');
+  assert.match(page, /0 of 3 bouts done/);
+
+  // Recording from the mat comes back to the mat, with the next bout on.
+  const recorded = await post(admin, `/admin/competitions/${compId}/results/${first.id}`, { winner: 'blue', back: 'mat', day: '1', court: '1' }, mat);
+  assert.equal(recorded.headers.location, mat);
+  const after = (await admin.get(mat)).text;
+  assert.match(after, /<h2>Bout 2 /);
+  assert.match(after, /won bout 1[\s\S]*Undo this result/);
+  // Undo from the mat works the same way.
+  const undone = await post(admin, `/admin/competitions/${compId}/results/${first.id}`, { action: 'clear', back: 'mat', day: '1', court: '1' }, mat);
+  assert.equal(undone.headers.location, mat);
+  assert.equal(db.prepare('SELECT winner_registration_id FROM bouts WHERE id = ?').get(first.id).winner_registration_id, null);
+  // Without the mat field, recording still returns to the results page.
+  const plain = await post(admin, `/admin/competitions/${compId}/results/${first.id}`, { winner: 'red' }, mat);
+  assert.equal(plain.headers.location, `/admin/competitions/${compId}/results`);
+
+  // Officials can use it; coaches can't; unknown courts don't exist.
+  await post(admin, '/admin/accounts/officials', { full_name: 'Olive', email: 'olive@test.test', password: PASSWORD }, '/admin/accounts');
+  assert.equal((await (await login(app, 'olive@test.test')).get(mat)).status, 200);
+  assert.equal((await club.get(mat)).status, 403);
+  assert.equal((await admin.get(`/admin/competitions/${compId}/mat/1/9`)).status, 404);
+
+  // It's linked from the court screens list and the filtered results page.
+  assert.match((await admin.get(`/screens/${compId}`)).text, new RegExp(`href="${mat}">Record results`));
+  assert.match((await admin.get(`/admin/competitions/${compId}/results?day=1&court=1`)).text, new RegExp(`href="${mat}">Open mat view`));
+  await post(admin, `${bouts}/publish`, {}, bouts);
+  assert.doesNotMatch((await club.get(`/screens/${compId}`)).text, /Record results/, 'coaches only get the screen');
+
+  // The phone menu button is in the top bar, hidden until JavaScript shows it.
+  const top = (await admin.get('/admin')).text;
+  assert.match(top, /<button class="nav-toggle" type="button" aria-expanded="false" aria-controls="main-nav" hidden>Menu<\/button>/);
+  assert.match(top, /<nav class="nav" id="main-nav" aria-label="Main">/);
+});

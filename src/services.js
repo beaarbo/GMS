@@ -803,6 +803,16 @@ function ageLabel(row, competition) {
   return openEnded ? `${row.age_group} ${row.min_age}+ yrs` : `${row.age_group} ${row.min_age}-${row.max_age} yrs`;
 }
 
+// Every real bout (no byes) with its division, day and court, in running order.
+// Used by court screens and the results-by-mat page.
+function listBouts(db, competitionId) {
+  return loadBoutList(db, competitionId)
+    .flatMap((division) => division.bouts
+      .filter((b) => !b.isBye)
+      .map((b) => ({ ...b, title: division.title, day: division.day, court: division.court })))
+    .sort((a, b) => a.day - b.day || a.court - b.court || a.number - b.number);
+}
+
 // Shapes the stored draw for the web page and the PDF, one entry per division.
 function loadBoutList(db, competitionId) {
   const competition = db.prepare('SELECT * FROM competitions WHERE id = ?').get(competitionId);
@@ -1165,6 +1175,7 @@ module.exports = {
   loadDivisionDays,
   saveDivisionDays,
   loadBoutList,
+  listBouts,
   hasResults,
   recordResult,
   clearResult,

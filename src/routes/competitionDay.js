@@ -1,7 +1,7 @@
 // Competition-day work shared by admins and officials: the weigh-in and
 // recording results. Everything else about a competition stays admin-only.
 const express = require('express');
-const { formatEventDates, GENDERS } = require('../divisions');
+const { formatEventDates, formatDay, GENDERS } = require('../divisions');
 const {
   hasBoutList,
   loadBoutList,
@@ -11,6 +11,7 @@ const {
   weighInCounts,
   recordWeighIn,
   getEventDates,
+  listBouts,
 } = require('../services');
 const { computeMedals } = require('../bracket');
 const { clean, requireRole, notFound } = require('./helpers');
@@ -19,7 +20,7 @@ const router = express.Router();
 const staff = requireRole(['admin', 'official']);
 
 // Officials only reach competitions that are past registration.
-router.use('/competitions/:id(\\d+)/:page(weigh-in|results)', staff, (req, res, next) => {
+router.use('/competitions/:id(\\d+)/:page(weigh-in|results|mat)', staff, (req, res, next) => {
   const competition = req.app.locals.db.prepare('SELECT * FROM competitions WHERE id = ?').get(req.params.id);
   if (!competition || (req.user.role === 'official' && competition.status !== 'closed')) return notFound(res);
   req.competition = competition;
@@ -218,7 +219,39 @@ router.post('/competitions/:id(\\d+)/results/:boutId(\\d+)', (req, res) => {
     const changedFrom = before.winner && before.winner !== after.winner ? `, changed from ${before.winner}` : '';
     req.logActivity('result.recorded', `${after.winner} won ${after.place}, ${after.fighters}${changedFrom}`, req.competition.id);
   }
-  return res.redirect(resultsPath(req.competition, req.body.day, req.body.court));
+  const fromMat = req.body.back === 'mat' && /^\d+$/.test(req.body.day || '') && /^\d+$/.test(req.body.court || '');
+  return res.redirect(fromMat ? matPath(req.competition, req.body.day, req.body.court) : resultsPath(req.competition, req.body.day, req.body.court));
+});
+
+const matPath = (competition, day, court) => `/admin/competitions/${competition.id}/mat/${day}/${court}`;
+
+// Results by mat: one court on one day, for an official's tablet. The bout on now
+// with a big button per athlete, what's next, and the last result with undo.
+// Results go through the same route as the results page, so the same rules apply.
+router.get('/competitions/:id(\\d+)/mat/:day(\\d+)/:court(\\d+)', (req, res) => {
+  const { db } = req.app.locals;
+  const day = Number(req.params.day);
+  const court = Number(req.params.court);
+  const bouts = listBouts(db, req.competition.id).filter((b) => b.day === day && b.court === court);
+  if (bouts.length === 0) return notFound(res);
+  const waiting = bouts.filter((b) => !b.winner);
+  const now = waiting.find((b) => b.blue && b.red) || null;
+  // An earlier bout still waiting for its athletes is why nothing is on yet.
+  const blockedBy = !now && waiting.length > 0 ? waiting[0] : null;
+  const date = getEventDates(db, req.competition.id)[day - 1];
+  return res.render('admin/mat', {
+    title: `Court ${court} results`,
+    competition: req.competition,
+    day,
+    court,
+    dayLabel: date ? `Day ${day} · ${formatDay(date)}` : `Day ${day}`,
+    now,
+    blockedBy,
+    next: waiting.filter((b) => b !== now).slice(0, 3),
+    last: bouts.filter((b) => b.winner).slice(-1)[0] || null,
+    done: bouts.length - waiting.length,
+    total: bouts.length,
+  });
 });
 
 module.exports = { router, resultsPath };

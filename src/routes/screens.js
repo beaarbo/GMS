@@ -2,7 +2,7 @@
 // the bout on now, what's next and recent results. Logged-in users only, because
 // they show athletes' names, and coaches only once the bout list is published.
 const express = require('express');
-const { loadBoutList, getEventDates } = require('../services');
+const { listBouts, getEventDates } = require('../services');
 const { formatDay } = require('../divisions');
 const { notFound } = require('./helpers');
 
@@ -21,14 +21,7 @@ function screenCompetition(req, res, next) {
   return next();
 }
 
-// Every real bout with its division, day and court, in running order.
-function allBouts(db, competitionId) {
-  return loadBoutList(db, competitionId)
-    .flatMap((division) => division.bouts
-      .filter((b) => !b.isBye)
-      .map((b) => ({ ...b, title: division.title, day: division.day, court: division.court })))
-    .sort((a, b) => a.day - b.day || a.court - b.court || a.number - b.number);
-}
+const allBouts = listBouts;
 
 router.get('/:id(\\d+)', screenCompetition, (req, res) => {
   const { db } = req.app.locals;

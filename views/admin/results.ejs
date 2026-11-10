@@ -7,6 +7,7 @@
     <p class="sub"><%= competition.name %> · <%= done %> of <%= total %> bouts recorded</p>
   </div>
   <div class="actions">
+    <% if (total > 0 && day && court) { %><a class="btn" href="/admin/competitions/<%= competition.id %>/mat/<%= day %>/<%= court %>">Open mat view</a><% } %>
     <% if (total > 0) { %><a class="btn secondary" href="/screens/<%= competition.id %>">Court screens</a><% } %>
     <% if (isAdmin && done > 0) { %>
       <form method="post" action="/admin/competitions/<%= competition.id %>/results/clear-all" data-confirm="Clear every recorded result? This cannot be undone.">

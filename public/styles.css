@@ -144,6 +144,7 @@ html { scroll-padding-top: calc(var(--topbar-height, 72px) + var(--space-3)); }
 .nav a[aria-current="page"] { background: var(--chung-soft); color: var(--chung-dark); }
 .who:hover { color: var(--ink); }
 .nav form { margin: 0; }
+.nav-toggle { display: none; }
 .link-button { background: none; border: 0; cursor: pointer; }
 .who {
   display: inline-flex;
@@ -522,6 +523,39 @@ a.stat-tile:hover { border-color: var(--chung); color: var(--ink); }
 .overview-list li { padding: var(--space-3) 0; border-top: 1px solid var(--line); font-size: var(--text-sm); }
 .overview-list li:first-child { border-top: 0; padding-top: 0; }
 .overview-list .badge { margin-left: var(--space-1); }
+
+/* Results by mat: a tablet page for one court, with buttons big enough to tap. */
+body.mat { background: var(--page); }
+.mat-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-4) var(--space-5); background: var(--surface); border-bottom: 4px solid; border-image: linear-gradient(90deg, var(--hong) 50%, var(--chung) 50%) 1; }
+.mat-head h1 { margin: 0; font-size: 2rem; }
+.mat-head .sub { margin: 0; }
+.mat-head .screen-status { justify-content: flex-start; margin: 0; }
+.mat-head .screen-status[data-state="up"] { color: var(--ok); }
+.mat-head .screen-status[data-state="down"] { color: var(--warn); }
+.mat-main { max-width: 1100px; margin: 0 auto; padding: var(--space-4) var(--space-5) var(--space-6); }
+.mat-progress { color: var(--muted); font-size: var(--text-sm); margin: 0 0 var(--space-3); }
+.mat-now h2 { font-size: 1.4rem; }
+.mat-choices { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); margin-top: var(--space-3); }
+.mat-winner { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1); min-height: 160px; padding: var(--space-5); border: 0; border-radius: var(--radius-lg); color: #fff; font: inherit; text-align: left; cursor: pointer; box-shadow: var(--shadow); }
+.mat-winner strong { font-size: 2rem; line-height: 1.15; }
+.mat-winner span { font-size: 1.1rem; opacity: 0.9; }
+.mat-winner .mat-corner { font-size: 0.9rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+.mat-winner.blue { background: var(--chung); }
+.mat-winner.red { background: var(--hong); }
+.mat-winner:hover, .mat-winner:focus-visible { filter: brightness(0.92); }
+.blue-text-dark { color: var(--chung-dark); font-weight: 600; }
+.red-text-dark { color: var(--hong-dark); font-weight: 600; }
+@media (max-width: 640px) {
+  /* With JavaScript, phones get a Menu button instead of a menu that wraps onto many lines. */
+  .has-menu-toggle .nav-toggle { display: inline-flex; align-items: center; min-height: var(--control-height-sm); padding: 0 var(--space-3); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink-2); font: inherit; font-size: var(--text-sm); font-weight: 600; cursor: pointer; }
+  .has-menu-toggle .nav { display: none; width: 100%; flex-direction: column; align-items: stretch; padding-bottom: var(--space-2); }
+  .has-menu-toggle .nav.open { display: flex; }
+  .has-menu-toggle .nav a, .has-menu-toggle .nav .link-button { min-height: var(--control-height); }
+  .has-menu-toggle .who { border-left: 0; margin-left: 0; padding-left: var(--space-3); }
+  .mat-choices { grid-template-columns: 1fr; }
+  .mat-winner { min-height: 120px; }
+  .mat-winner strong { font-size: 1.6rem; }
+}
 
 /* Small screens */
 

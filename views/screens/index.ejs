@@ -21,7 +21,10 @@
         <article class="card">
           <h3 class="card-title">Court <%= c.court %></h3>
           <p class="sub"><%= c.done %> of <%= c.total %> bouts finished</p>
-          <div class="actions"><a class="btn" href="/screens/<%= competition.id %>/<%= c.day %>/<%= c.court %>">Open screen</a></div>
+          <div class="actions">
+            <a class="btn" href="/screens/<%= competition.id %>/<%= c.day %>/<%= c.court %>">Open screen</a>
+            <% if (user.role !== 'coach') { %><a class="btn secondary" href="/admin/competitions/<%= competition.id %>/mat/<%= c.day %>/<%= c.court %>">Record results</a><% } %>
+          </div>
         </article>
       <% }) %>
     </div>

@@ -1,5 +1,27 @@
 // Progressive enhancement only: every feature also works through plain forms.
 
+// Phones: fold the menu behind a Menu button. CSS only folds it once this runs,
+// so without JavaScript the full menu shows as before.
+(function phoneMenu() {
+  const button = document.querySelector('.nav-toggle');
+  const nav = document.getElementById('main-nav');
+  if (!button || !nav) return;
+  document.documentElement.classList.add('has-menu-toggle');
+  button.hidden = false;
+  const set = (open) => {
+    button.setAttribute('aria-expanded', String(open));
+    nav.classList.toggle('open', open);
+    button.textContent = open ? 'Close menu' : 'Menu';
+  };
+  button.addEventListener('click', () => set(button.getAttribute('aria-expanded') !== 'true'));
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && nav.classList.contains('open')) {
+      set(false);
+      button.focus();
+    }
+  });
+}());
+
 // The sticky top bar's real height, so jumps to a row (#reg-12) stop below it.
 // The bar grows when its menu wraps, so this follows resizes. CSS has a fallback.
 (function trackTopbarHeight() {
