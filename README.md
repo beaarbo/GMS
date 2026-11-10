@@ -111,6 +111,13 @@ While a bout list exists, approvals can't change and registration can't reopen. 
 - **Reinstate** a withdrawn athlete from the list above the brackets. Their division is redrawn to include them.
 - **Redraw this division** makes a new random draw for that division only.
 
+## Deleting things
+
+- **Competitions:** an empty draft has a **Delete** button on the dashboard. A competition with entries can be deleted once registration is closed: **Delete** opens a page listing what will go (registrations, bouts, results, files), and you type its name to confirm. A backup is made first, so it can be restored. Athletes stay with their clubs.
+- **News posts:** **Delete** on Admin → News.
+- **Accounts:** on **Accounts**, coaches can be deleted (their club keeps its athletes and entries) and officials removed. Admin accounts can't be deleted.
+- **Clubs** with no coaches or athletes, and **athletes** never entered in a competition, can also be deleted.
+
 ## Competition day
 
 **Weigh-in**, on a closed competition, checks each approved athlete against the weight class their coach chose. Athletes over their class are moved up or disqualified, athletes under it can stay or move down, and no-shows are marked. Only the result is kept, not the weight. No-shows and disqualified athletes are left out of the draw.

@@ -947,6 +947,42 @@ async function createOfficialAccount(db, { full_name, email, password }) {
   );
 }
 
+// Deletes a coach's account. Their club keeps its athletes and registrations,
+// which belong to the club, and the activity log keeps their name. Their
+// applications and reset links go with them. Returns the coach, or null.
+function deleteCoachAccount(db, userId) {
+  const coach = db
+    .prepare("SELECT u.id, u.full_name, u.email, c.name AS club FROM users u LEFT JOIN clubs c ON c.id = u.club_id WHERE u.id = ? AND u.role = 'coach'")
+    .get(userId);
+  if (!coach) return null;
+  db.prepare('DELETE FROM users WHERE id = ?').run(coach.id);
+  return coach;
+}
+
+// What deleting a competition would remove, for the confirm page.
+function competitionFootprint(db, competitionId) {
+  const count = (sql) => db.prepare(sql).get(competitionId).n;
+  return {
+    registrations: count('SELECT COUNT(*) AS n FROM registrations WHERE competition_id = ?'),
+    bouts: count('SELECT COUNT(*) AS n FROM bouts WHERE competition_id = ? AND is_bye = 0'),
+    results: count('SELECT COUNT(*) AS n FROM bouts WHERE competition_id = ? AND winner_registration_id IS NOT NULL'),
+    files: count('SELECT COUNT(*) AS n FROM competition_files WHERE competition_id = ?'),
+  };
+}
+
+// Deletes a competition and everything in it: bouts, registrations, divisions,
+// dates, logo and files. Bouts point at registrations, and registrations at
+// weight classes, so they go first, in that order. Athletes stay with their
+// clubs, and the activity log keeps its history.
+function deleteCompetition(db, competitionId) {
+  db.transaction(() => {
+    db.prepare('DELETE FROM bouts WHERE competition_id = ?').run(competitionId);
+    db.prepare('DELETE FROM division_days WHERE competition_id = ?').run(competitionId);
+    db.prepare('DELETE FROM registrations WHERE competition_id = ?').run(competitionId);
+    db.prepare('DELETE FROM competitions WHERE id = ?').run(competitionId);
+  })();
+}
+
 // Removes an official's account. Any open session ends with it, because each
 // request looks the user up afresh. Activity log entries keep their name.
 function removeOfficial(db, userId) {
@@ -1071,6 +1107,9 @@ module.exports = {
   createCoachAccount,
   createOfficialAccount,
   removeOfficial,
+  deleteCoachAccount,
+  competitionFootprint,
+  deleteCompetition,
   applyToClub,
   approveApplication,
   rejectApplication,

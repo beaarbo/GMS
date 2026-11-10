@@ -1906,3 +1906,77 @@ test('court screens get a live change event when a result is recorded', async ()
   assert.equal(app.locals.live.listenerCount(compId), 0);
   await new Promise((r) => server.close(r));
 });
+
+test('admins delete coach accounts, and the club keeps its athletes and entries', async () => {
+  const { db, app } = await setup();
+  const { compId, admin } = await closedCompetitionWithFighters(db, app, [['T', 'Alpha'], ['D', 'Bravo']]);
+  const coach = db.prepare("SELECT id, club_id FROM users WHERE email = 'tigers@test.test'").get();
+  const fightersBefore = db.prepare('SELECT COUNT(*) AS n FROM fighters WHERE club_id = ?').get(coach.club_id).n;
+
+  const accounts = '/admin/accounts';
+  assert.match((await admin.get(accounts)).text, new RegExp(`/admin/accounts/coaches/${coach.id}/delete`));
+  await post(admin, `${accounts}/coaches/${coach.id}/delete`, { type: 'coach' }, accounts);
+
+  assert.equal(db.prepare('SELECT 1 FROM users WHERE id = ?').get(coach.id), undefined);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM club_applications WHERE user_id = ?').get(coach.id).n, 0);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM fighters WHERE club_id = ?').get(coach.club_id).n, fightersBefore, 'athletes stay with the club');
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM registrations WHERE competition_id = ?').get(compId).n, 2, 'entries stay');
+  assert.match(db.prepare("SELECT summary FROM activity_log WHERE action = 'account.coach_deleted'").get().summary, /\(tigers@test\.test\), coach of Tigers/);
+
+  // Their login no longer works, and admins can't be deleted this way.
+  const gone = request.agent(app);
+  const token = await csrfFrom(gone, '/login');
+  assert.equal((await gone.post('/login').type('form').send({ _csrf: token, email: 'tigers@test.test', password: PASSWORD })).status, 401);
+  const adminId = db.prepare("SELECT id FROM users WHERE role = 'admin'").get().id;
+  await post(admin, `${accounts}/coaches/${adminId}/delete`, {}, accounts);
+  assert.ok(db.prepare('SELECT 1 FROM users WHERE id = ?').get(adminId));
+  assert.deepEqual(db.pragma('foreign_key_check'), []);
+});
+
+test('deleting a finished competition needs its name typed, backs up first, and removes everything in it', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gms-delete-'));
+  const db = openDb(path.join(root, 'gms.sqlite'));
+  await ensureAdmin(db, 'admin@test.test', PASSWORD);
+  const backupDir = path.join(root, 'backups');
+  const app = createApp({ db, sessionSecret: 'test-secret', mailer: capturingMailer(), publicUrl: 'https://gms.test', backups: { dir: backupDir, keep: { daily: 7, manual: 10 } } });
+  const { compId, admin } = await closedCompetitionWithFighters(db, app, [['T', 'Alpha'], ['T', 'Bravo'], ['D', 'Charlie'], ['D', 'Delta']]);
+  const bouts = `/admin/competitions/${compId}/bouts`;
+  await post(admin, `${bouts}/generate`, { courts: '1', start: '09:00', minutes: '10', rest: '0' }, bouts);
+  const first = db.prepare('SELECT id FROM bouts WHERE bout_number = 1').get();
+  await post(admin, `/admin/competitions/${compId}/results/${first.id}`, { winner: 'blue' }, `/admin/competitions/${compId}/results`);
+  const fighters = db.prepare('SELECT COUNT(*) AS n FROM fighters').get().n;
+
+  // An open competition must be closed first.
+  const open = openCompetition(db, { name: 'Still open' });
+  assert.equal((await admin.get(`/admin/competitions/${open}/delete`)).headers.location, '/admin');
+
+  const del = `/admin/competitions/${compId}/delete`;
+  assert.match((await admin.get('/admin')).text, new RegExp(`href="${del}">Delete`));
+  const page = await admin.get(del);
+  assert.match(page.text, /<strong>4<\/strong> registrations/);
+  assert.match(page.text, /<strong>1<\/strong> recorded result/);
+  assert.match(page.text, /A backup of the whole database is made first/);
+
+  const wrong = await post(admin, del, { confirm_name: 'Something else' }, del);
+  assert.equal(wrong.status, 400);
+  assert.ok(db.prepare('SELECT 1 FROM competitions WHERE id = ?').get(compId), 'nothing deleted');
+
+  const done = await post(admin, del, { confirm_name: ' open ' }, del);
+  assert.equal(done.headers.location, '/admin');
+  for (const table of ['competitions', 'bouts', 'registrations', 'competition_dates', 'weight_classes', 'age_groups', 'competition_logos', 'division_days']) {
+    const column = table === 'competitions' ? 'id' : 'competition_id';
+    assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE ${column} = ?`).get(compId).n, 0, table);
+  }
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM fighters').get().n, fighters, 'athletes stay with their clubs');
+  assert.ok(db.prepare("SELECT COUNT(*) AS n FROM activity_log WHERE competition_id = ? AND action != 'competition.deleted'").get(compId).n > 0, 'history stays');
+  assert.deepEqual(db.pragma('foreign_key_check'), []);
+
+  // The backup made first still has it.
+  const [backup] = fs.readdirSync(backupDir).filter((n) => n.endsWith('-manual.sqlite'));
+  assert.ok(backup);
+  const copy = new Database(path.join(backupDir, backup), { readonly: true });
+  assert.equal(copy.prepare('SELECT COUNT(*) AS n FROM registrations WHERE competition_id = ?').get(compId).n, 4);
+  copy.close();
+  assert.match(db.prepare("SELECT summary FROM activity_log WHERE action = 'competition.deleted'").get().summary, /4 registrations and 1 results, after backup gms-/);
+  db.close();
+});

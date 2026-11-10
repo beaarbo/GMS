@@ -40,6 +40,9 @@ const {
   deleteCompetitionFile,
   createOfficialAccount,
   removeOfficial,
+  deleteCoachAccount,
+  competitionFootprint,
+  deleteCompetition,
   swapAthletes,
   withdrawAthlete,
   reinstateAthlete,
@@ -55,6 +58,7 @@ const { layoutBracket, computeMedals } = require('../bracket');
 const { writeBoutListPdf } = require('../boutlistPdf');
 const { clean, toArray, requireRole, notFound, wrap, passwordError } = require('./helpers');
 const { resultsPath } = require('./competitionDay');
+const { createBackup, pruneBackups } = require('../backups');
 
 const router = express.Router();
 router.use(requireRole('admin'));
@@ -335,17 +339,70 @@ router.post('/competitions/:id(\\d+)/files/:fileId(\\d+)/delete', (req, res) => 
   return res.redirect(filesPath(req.competition));
 });
 
-router.post('/competitions/:id(\\d+)/delete', (req, res) => {
-  const { db } = req.app.locals;
-  if (req.competition.status !== 'draft' || countRegistrations(db, req.competition.id) > 0) {
-    req.flash('error', 'Only draft competitions without registrations can be deleted.');
-  } else {
-    db.prepare('DELETE FROM competitions WHERE id = ?').run(req.competition.id);
-    req.logActivity('competition.deleted', `Deleted draft competition ${req.competition.name}`, req.competition.id);
-    req.flash('success', 'Draft competition deleted.');
+// A competition with entries goes only after registration closes, with its name
+// typed to confirm, and after a backup. An empty draft goes with one click.
+const emptyDraft = (db, competition) => competition.status === 'draft' && countRegistrations(db, competition.id) === 0;
+
+router.get('/competitions/:id(\\d+)/delete', (req, res) => {
+  const { db, backups } = req.app.locals;
+  if (req.competition.status === 'open') {
+    req.flash('error', 'Close registration before deleting this competition.');
+    return res.redirect('/admin');
   }
-  return res.redirect('/admin');
+  return res.render('admin/comp_delete', {
+    title: 'Delete competition',
+    competition: req.competition,
+    footprint: competitionFootprint(db, req.competition.id),
+    backupsOn: Boolean(backups && backups.dir),
+    error: null,
+  });
 });
+
+router.post('/competitions/:id(\\d+)/delete', wrap(async (req, res) => {
+  const { db, backups } = req.app.locals;
+  const competition = req.competition;
+  if (competition.status === 'open') {
+    req.flash('error', 'Close registration before deleting this competition.');
+    return res.redirect('/admin');
+  }
+  if (emptyDraft(db, competition)) {
+    deleteCompetition(db, competition.id);
+    req.logActivity('competition.deleted', `Deleted draft competition ${competition.name}`, competition.id);
+    req.flash('success', 'Draft competition deleted.');
+    return res.redirect('/admin');
+  }
+
+  const typed = clean(req.body.confirm_name, 300);
+  if (typed.toLowerCase() !== competition.name.trim().toLowerCase()) {
+    return res.status(400).render('admin/comp_delete', {
+      title: 'Delete competition',
+      competition,
+      footprint: competitionFootprint(db, competition.id),
+      backupsOn: Boolean(backups && backups.dir),
+      error: 'The name you typed doesn\'t match, so nothing was deleted.',
+    });
+  }
+  // A copy first, so a mistake can be undone with RESTORE_BACKUP.
+  let backupName = null;
+  if (backups && backups.dir) {
+    try {
+      backupName = (await createBackup(db, backups.dir, { kind: 'manual' })).name;
+      pruneBackups(backups.dir, backups.keep);
+    } catch (error) {
+      req.flash('error', `The backup before deleting failed, so nothing was deleted: ${error.message}`);
+      return res.redirect(`/admin/competitions/${competition.id}/delete`);
+    }
+  }
+  const footprint = competitionFootprint(db, competition.id);
+  deleteCompetition(db, competition.id);
+  req.logActivity(
+    'competition.deleted',
+    `Deleted ${competition.name} with ${footprint.registrations} registrations and ${footprint.results} results${backupName ? `, after backup ${backupName}` : ''}`,
+    competition.id
+  );
+  req.flash('success', `${competition.name} was deleted.${backupName ? ` A backup was made first: ${backupName}.` : ''}`);
+  return res.redirect('/admin');
+}));
 
 function setupRowsForForm(setup) {
   return setup.ageGroups.map((group) => {
@@ -912,6 +969,19 @@ router.post('/accounts/officials/:userId(\\d+)/remove', (req, res) => {
     req.flash('success', `${official.full_name}'s official account was removed.`);
   }
   return res.redirect('/admin/accounts?type=official');
+});
+
+// Deletes a coach's account. The club keeps its athletes and entries.
+router.post('/accounts/coaches/:userId(\\d+)/delete', (req, res) => {
+  const coach = deleteCoachAccount(req.app.locals.db, Number(req.params.userId));
+  if (coach) {
+    req.logActivity('account.coach_deleted', `Deleted the coach account of ${coach.full_name || coach.email} (${coach.email})${coach.club ? `, coach of ${coach.club}` : ''}`);
+    req.flash('success', `${coach.full_name || coach.email}'s account was deleted.${coach.club ? ` ${coach.club} keeps its athletes and entries.` : ''}`);
+  } else {
+    req.flash('error', 'Only coach accounts can be deleted here.');
+  }
+  const back = ACCOUNT_TYPES[clean(req.body.type, 20)] ? `?type=${clean(req.body.type, 20)}` : '';
+  return res.redirect(`/admin/accounts${back}`);
 });
 
 router.get('/accounts', (req, res) => {

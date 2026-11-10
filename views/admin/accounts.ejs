@@ -80,6 +80,13 @@
                 <% } else if (a.type === 'coach') { %><span class="badge approved">Coach</span>
                 <% } else if (a.type === 'pending') { %><span class="badge pending">Awaiting approval</span>
                 <% } else { %><span class="badge draft">No club</span><% } %>
+                <% if (a.role === 'coach') { %>
+                  <form class="inline-form" method="post" action="/admin/accounts/coaches/<%= a.id %>/delete" data-confirm="Delete <%= a.full_name || a.email %>'s account? This cannot be undone.<%= a.club ? ` ${a.club} keeps its athletes and entries.` : '' %>">
+                    <input type="hidden" name="_csrf" value="<%= csrf %>">
+                    <input type="hidden" name="type" value="<%= type %>">
+                    <button class="btn danger small" type="submit">Delete</button>
+                  </form>
+                <% } %>
               </td>
               <td><%= a.club || (a.pending_club ? `Applied to ${a.pending_club}` : '–') %></td>
               <td class="nowrap"><%= formatActivityTime(a.created_at) %></td>
