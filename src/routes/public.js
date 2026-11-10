@@ -1,5 +1,12 @@
 const express = require('express');
-const { loadDivisionSetup, listNews, getNews, getCompetitionLogo, listCompetitionFiles, getCompetitionFile } = require('../services');
+const {
+  loadDivisionSetup, listNews, getNews, getCompetitionLogo, listCompetitionFiles, getCompetitionFile,
+  loadBoutList, poomsaeBoutList, getEventDates,
+} = require('../services');
+const { formatEventDates } = require('../divisions');
+const { hasPoomsae } = require('../poomsae');
+const { layoutBracket, computeMedals } = require('../bracket');
+const { writeBoutListPdf } = require('../boutlistPdf');
 const { sendAttachment } = require('../documents');
 const { notFound } = require('./helpers');
 
@@ -32,7 +39,9 @@ function visibleCompetition(req) {
   return competition;
 }
 
-// Public pages show the rules only. Fighter data (minors included) stays private.
+// Public pages show the rules and, once the organiser publishes them, the bout
+// lists: athlete names and clubs only. Ages, birth dates, documents and contact
+// details stay private, because many athletes are minors.
 router.get('/competitions/:id(\\d+)', (req, res) => {
   const { db } = req.app.locals;
   const competition = visibleCompetition(req);
@@ -42,7 +51,68 @@ router.get('/competitions/:id(\\d+)', (req, res) => {
     competition,
     setup: loadDivisionSetup(db, competition.id),
     files: listCompetitionFiles(db, competition.id),
+    poomsaePublished: hasPoomsae(competition) && poomsaeBoutList(db, competition, { published: true }).length > 0,
   });
+});
+
+const dateLabel = (db, competition) => formatEventDates(getEventDates(db, competition.id));
+
+function pdfHeaders(res, name, competition) {
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${name}-competition-${competition.id}.pdf"`);
+}
+
+// The published kyorugi bout list, for anyone. A coach's own club is highlighted.
+function publishedKyorugi(req) {
+  const competition = visibleCompetition(req);
+  return competition && competition.bouts_published_at ? competition : null;
+}
+
+router.get('/competitions/:id(\\d+)/bouts', (req, res) => {
+  const competition = publishedKyorugi(req);
+  if (!competition) return notFound(res);
+  const divisions = loadBoutList(req.app.locals.db, competition.id);
+  return res.render('bouts_public', {
+    title: `${competition.name}: bout list`,
+    competition,
+    divisions: divisions.map((division) => ({ ...division, layout: layoutBracket(division.bouts, { slotHeight: 30, top: 4 }) })),
+    medals: computeMedals(divisions),
+    highlightClubId: (req.user && req.user.club_id) || null,
+  });
+});
+
+router.get('/competitions/:id(\\d+)/bouts.pdf', (req, res) => {
+  const competition = publishedKyorugi(req);
+  if (!competition) return notFound(res);
+  const { db } = req.app.locals;
+  pdfHeaders(res, 'bout-list', competition);
+  return writeBoutListPdf(res, { competition, divisions: loadBoutList(db, competition.id), dateLabel: dateLabel(db, competition) });
+});
+
+// The published poomsae stages (performance order, brackets), for anyone.
+function publishedPoomsae(req) {
+  const competition = visibleCompetition(req);
+  if (!competition || !hasPoomsae(competition)) return null;
+  const pages = poomsaeBoutList(req.app.locals.db, competition, { published: true });
+  return pages.length > 0 ? { competition, pages } : null;
+}
+
+router.get('/competitions/:id(\\d+)/poomsae', (req, res) => {
+  const found = publishedPoomsae(req);
+  if (!found) return notFound(res);
+  return res.render('poomsae_public', {
+    title: `${found.competition.name}: poomsae`,
+    competition: found.competition,
+    pages: found.pages,
+    highlightClubId: (req.user && req.user.club_id) || null,
+  });
+});
+
+router.get('/competitions/:id(\\d+)/poomsae.pdf', (req, res) => {
+  const found = publishedPoomsae(req);
+  if (!found) return notFound(res);
+  pdfHeaders(res, 'poomsae-list', found.competition);
+  return writeBoutListPdf(res, { competition: found.competition, divisions: found.pages, dateLabel: dateLabel(req.app.locals.db, found.competition) });
 });
 
 // The link carries the upload time, so a new logo gets a new address.

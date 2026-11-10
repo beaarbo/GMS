@@ -72,8 +72,9 @@ CREATE TABLE IF NOT EXISTS competitions (
   poomsae_start TEXT NOT NULL DEFAULT '09:00',
   poomsae_minutes INTEGER NOT NULL DEFAULT 5,
   poomsae_rest_minutes INTEGER NOT NULL DEFAULT 0,
-  -- When the poomsae performance lists and brackets were shown to coaches.
+  -- When the poomsae performance lists, and separately the brackets, were published.
   poomsae_published_at TEXT,
+  poomsae_brackets_published_at TEXT,
   bouts_published_at TEXT,
   reminder_sent_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -641,6 +642,16 @@ function migratePoomsaeOrder(db) {
   })();
 }
 
+// Version 17: poomsae brackets are published apart from the performance lists,
+// since brackets come later. Lists already published keep their brackets shown.
+function migratePoomsaeStages(db) {
+  db.transaction(() => {
+    addColumnIfMissing(db, 'competitions', 'poomsae_brackets_published_at', 'TEXT');
+    db.exec('UPDATE competitions SET poomsae_brackets_published_at = poomsae_published_at WHERE poomsae_brackets_published_at IS NULL');
+    db.pragma('user_version = 17');
+  })();
+}
+
 function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 1) migrateBelts(db);
   if (db.pragma('user_version', { simple: true }) < 2) migrateSchedule(db);
@@ -658,6 +669,7 @@ function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 14) migratePoomsaeFormat(db);
   if (db.pragma('user_version', { simple: true }) < 15) migratePoomsaeSchedule(db);
   if (db.pragma('user_version', { simple: true }) < 16) migratePoomsaeOrder(db);
+  if (db.pragma('user_version', { simple: true }) < 17) migratePoomsaeStages(db);
 }
 
 // Safe on old databases: only tables that don't exist yet are created.

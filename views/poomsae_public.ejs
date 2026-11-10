@@ -1,0 +1,31 @@
+<%- include('partials/top') %>
+<p class="breadcrumb"><a href="/competitions/<%= competition.id %>"><%= competition.name %></a></p>
+<div class="page-head">
+  <div>
+    <h1>Poomsae order and brackets</h1>
+    <p class="sub"><%= competition.name %> · <%= competition.venue %>, <%= eventDatesText(competition) %> · in running order</p>
+  </div>
+  <div class="actions">
+    <a class="btn" href="/competitions/<%= competition.id %>/poomsae.pdf">Download PDF</a>
+  </div>
+</div>
+
+<% pages.forEach((page) => { %>
+  <section class="card">
+    <h2><%= page.title %></h2>
+    <p class="sub"><% if (page.court) { %><strong>Day <%= page.dayLabel %>, Poomsae court <%= page.court %></strong>, from <%= page.start %><% } else { %>Not on a court<% } %> · <%= page.kind === 'list' ? 'performance order, drawn at random' : 'single elimination' %></p>
+    <% if (page.kind === 'list') { %>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>Athletes</th><th>Club</th><th>Time</th></tr></thead>
+          <tbody>
+            <% page.performers.forEach((p, i) => { %><tr<%- highlightClubId && p.clubId === highlightClubId ? ' class="own-row"' : '' %>><td class="num"><%= i + 1 %></td><td><strong><%= p.name %></strong></td><td><%= p.club %></td><td class="nowrap"><%= p.time || '' %></td></tr><% }) %>
+          </tbody>
+        </table>
+      </div>
+    <% } else { %>
+      <%- include('partials/bracket', { division: page, highlightClubId }) %>
+    <% } %>
+  </section>
+<% }) %>
+<%- include('partials/bottom') %>

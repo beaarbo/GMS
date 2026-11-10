@@ -719,8 +719,12 @@ function generatePoomsaeOrder(db, competition, key, rng = secureRandom) {
 
 // The poomsae "bout list": each performance order and bracket as its own page,
 // in running order (day, court, start). clubId keeps only divisions where that
-// club has an entry. Pages carry what the PDF and web page both draw.
-function poomsaeBoutList(db, competition, { clubId = null } = {}) {
+// club has an entry; published keeps only the stages published so far (lists,
+// brackets). Pages carry what the PDF and web page both draw.
+function poomsaeBoutList(db, competition, { clubId = null, published = false } = {}) {
+  const show = published
+    ? { list: Boolean(competition.poomsae_published_at), bracket: Boolean(competition.poomsae_brackets_published_at) }
+    : { list: true, bracket: true };
   const entries = listPoomsaeEntries(db, competition.id);
   const divisions = poomsaeDivisions(entries, competition, loadPoomsaeBrackets(db, competition.id, entries), loadPoomsaeSettings(db, competition.id));
   const dates = getEventDates(db, competition.id);
@@ -747,7 +751,7 @@ function poomsaeBoutList(db, competition, { clubId = null } = {}) {
         });
       }
     });
-  return pages.sort((a, b) => (a.day || 99) - (b.day || 99) || (a.court || 99) - (b.court || 99) || String(a.start).localeCompare(String(b.start)));
+  return pages.filter((p) => show[p.kind]).sort((a, b) => (a.day || 99) - (b.day || 99) || (a.court || 99) - (b.court || 99) || String(a.start).localeCompare(String(b.start)));
 }
 
 // Removes a division's performance list, while it has no scores.

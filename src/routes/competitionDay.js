@@ -361,6 +361,8 @@ router.get('/competitions/:id(\\d+)/poomsae', (req, res) => {
     drawable: divisions.filter((d) => d.mode !== 'score' && !d.bouts && !d.drawProblem && d.pending === 0).length,
     orderable: divisions.filter((d) => d.canOrder && d.order.length === 0).length,
     hasPages: divisions.some((d) => d.order.length > 0 || d.bouts),
+    hasLists: divisions.some((d) => d.order.length > 0),
+    hasBrackets: divisions.some((d) => d.bouts),
     days: getEventDates(db, req.competition.id).map((date, i) => [i + 1, `Day ${i + 1} · ${formatDay(date)}`]),
   });
 });
@@ -389,24 +391,35 @@ router.post('/competitions/:id(\\d+)/poomsae/clear-order', requireRole('admin'),
   return res.redirect(poomsaePath(req.competition, null, key));
 });
 
-// Coaches see the performance lists and brackets once published, as with the kyorugi bout list.
+// Two stages, published apart: the performance lists (the first draw), then the
+// brackets that follow the score rounds. Published pages are public, like the
+// kyorugi bout list. Brackets drawn after their stage is published show at once.
+const STAGES = {
+  lists: { column: 'poomsae_published_at', kind: 'list', what: 'performance order' },
+  brackets: { column: 'poomsae_brackets_published_at', kind: 'bracket', what: 'brackets' },
+};
+
 router.post('/competitions/:id(\\d+)/poomsae/publish', requireRole('admin'), (req, res) => {
   const { db, notify } = req.app.locals;
-  if (poomsaeBoutList(db, req.competition).length === 0) {
-    req.flash('error', 'Make a performance list or draw a bracket first.');
+  const stage = STAGES[req.body.stage];
+  if (!stage) return notFound(res);
+  if (!poomsaeBoutList(db, req.competition).some((p) => p.kind === stage.kind)) {
+    req.flash('error', stage.kind === 'list' ? 'Make a performance list first.' : 'Draw a bracket first.');
     return res.redirect(poomsaePath(req.competition));
   }
-  db.prepare("UPDATE competitions SET poomsae_published_at = datetime('now') WHERE id = ?").run(req.competition.id);
-  notifyPoomsaePublished(notify, req.competition);
-  req.logActivity('poomsae.published', `Published the poomsae order and brackets for ${req.competition.name}`, req.competition.id);
-  req.flash('success', 'Poomsae order published. Coaches with entries have been emailed.');
+  db.prepare(`UPDATE competitions SET ${stage.column} = datetime('now') WHERE id = ?`).run(req.competition.id);
+  notifyPoomsaePublished(notify, req.competition, stage.what);
+  req.logActivity('poomsae.published', `Published the poomsae ${stage.what} for ${req.competition.name}`, req.competition.id);
+  req.flash('success', `Poomsae ${stage.what} published for everyone to see. Coaches with entries have been emailed.`);
   return res.redirect(poomsaePath(req.competition));
 });
 
 router.post('/competitions/:id(\\d+)/poomsae/unpublish', requireRole('admin'), (req, res) => {
-  req.app.locals.db.prepare('UPDATE competitions SET poomsae_published_at = NULL WHERE id = ?').run(req.competition.id);
-  req.logActivity('poomsae.unpublished', `Hid the poomsae order and brackets for ${req.competition.name} from coaches`, req.competition.id);
-  req.flash('success', 'Poomsae order hidden from coaches.');
+  const stage = STAGES[req.body.stage];
+  if (!stage) return notFound(res);
+  req.app.locals.db.prepare(`UPDATE competitions SET ${stage.column} = NULL WHERE id = ?`).run(req.competition.id);
+  req.logActivity('poomsae.unpublished', `Hid the poomsae ${stage.what} for ${req.competition.name}`, req.competition.id);
+  req.flash('success', `Poomsae ${stage.what} hidden.`);
   return res.redirect(poomsaePath(req.competition));
 });
 

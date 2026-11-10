@@ -920,14 +920,14 @@ router.post('/competitions/:id(\\d+)/bouts/publish', (req, res) => {
   db.prepare("UPDATE competitions SET bouts_published_at = datetime('now') WHERE id = ?").run(req.competition.id);
   notifyBoutListPublished(notify, req.competition);
   req.logActivity('bouts.published', `Published the bout list for ${req.competition.name}`, req.competition.id);
-  req.flash('success', 'Bout list published. Coaches with athletes in it have been emailed.');
+  req.flash('success', 'Bout list published for everyone to see. Coaches with athletes in it have been emailed.');
   return res.redirect(boutListPath(req.competition));
 });
 
 router.post('/competitions/:id(\\d+)/bouts/unpublish', (req, res) => {
   req.app.locals.db.prepare('UPDATE competitions SET bouts_published_at = NULL WHERE id = ?').run(req.competition.id);
   req.logActivity('bouts.unpublished', `Hid the bout list for ${req.competition.name} from coaches`, req.competition.id);
-  req.flash('success', 'Bout list hidden from coaches.');
+  req.flash('success', 'Bout list hidden.');
   return res.redirect(boutListPath(req.competition));
 });
 

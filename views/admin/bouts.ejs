@@ -8,15 +8,15 @@
   <% if (divisions.length > 0) { %>
     <div class="actions">
 <% if (competition.bouts_published_at) { %>
-        <span class="badge approved">Visible to coaches</span>
+        <span class="badge approved">Published for everyone</span> <a href="/competitions/<%= competition.id %>/bouts">Public page</a>
         <form method="post" action="/admin/competitions/<%= competition.id %>/bouts/unpublish">
           <input type="hidden" name="_csrf" value="<%= csrf %>">
-          <button class="btn secondary" type="submit">Hide from coaches</button>
+          <button class="btn secondary" type="submit">Hide bout list</button>
         </form>
       <% } else { %>
         <form method="post" action="/admin/competitions/<%= competition.id %>/bouts/publish" data-confirm="Publish this bout list? Coaches with athletes in it will be emailed.">
           <input type="hidden" name="_csrf" value="<%= csrf %>">
-          <button class="btn approve" type="submit">Publish to coaches</button>
+          <button class="btn approve" type="submit">Publish bout list</button>
         </form>
       <% } %>
       <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/results">Record results</a>
@@ -83,7 +83,7 @@
         <% } else { %>
           <button class="btn" type="submit" formaction="/admin/competitions/<%= competition.id %>/bouts/schedule">Update schedule</button>
           <% if (!resultsRecorded) { %>
-          <button class="btn secondary" type="submit" data-confirm="Redraw every division? The current draw will be replaced and hidden from coaches until you publish again.">Redraw</button>
+          <button class="btn secondary" type="submit" data-confirm="Redraw every division? The current draw will be replaced and hidden until you publish again.">Redraw</button>
           <% } %>
         <% } %>
       </div>
@@ -203,7 +203,7 @@
           <button class="btn secondary small" type="submit">Redraw this division</button>
           <span class="hint">A new random draw for this division only. Club-mates are kept apart as usual.</span>
         </form>
-        <% if (competition.bouts_published_at) { %><p class="hint">The bout list is published, so coaches see changes straight away.</p><% } %>
+        <% if (competition.bouts_published_at) { %><p class="hint">The bout list is published, so everyone sees changes straight away.</p><% } %>
       <% } %>
     </details>
   </section>

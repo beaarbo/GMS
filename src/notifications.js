@@ -133,14 +133,15 @@ function notifyPoomsaeDecisions(ctx, competition, entries, decision) {
 }
 
 // Coaches of clubs with approved poomsae entries, once the lists and brackets are out.
-function notifyPoomsaePublished(ctx, competition) {
+// `what` is the stage published: "performance order" or "brackets".
+function notifyPoomsaePublished(ctx, competition, what = 'performance order') {
   const { db } = ctx;
   const clubs = db.prepare("SELECT DISTINCT club_id FROM poomsae_entries WHERE competition_id = ? AND status = 'approved'").all(competition.id);
   return sendAll(
     ctx,
     clubs.flatMap((club) => clubCoachEmails(db, club.club_id)),
-    `Poomsae order published: ${competition.name}`,
-    `The poomsae performance order and brackets for ${competition.name} (${formatEventDates(getEventDates(db, competition.id))}) are ready.\n\nSee when your athletes perform: ${ctx.publicUrl}/club/competitions/${competition.id}/poomsae`
+    `Poomsae ${what} published: ${competition.name}`,
+    `The poomsae ${what} for ${competition.name} (${formatEventDates(getEventDates(db, competition.id))}) ${what === 'brackets' ? 'are' : 'is'} ready.\n\nSee when your athletes perform: ${ctx.publicUrl}/club/competitions/${competition.id}/poomsae`
   );
 }
 

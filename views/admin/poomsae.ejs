@@ -20,12 +20,17 @@
       </form>
     <% } %>
     <% if (hasPages) { %><a class="btn secondary" href="/admin/competitions/<%= competition.id %>/poomsae.pdf">Download PDF</a><% } %>
-    <% if (isAdmin && hasPages) { %>
-      <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/<%= competition.poomsae_published_at ? 'unpublish' : 'publish' %>">
-        <input type="hidden" name="_csrf" value="<%= csrf %>">
-        <button class="btn <%= competition.poomsae_published_at ? 'secondary' : 'approve' %>" type="submit"><%= competition.poomsae_published_at ? 'Hide from coaches' : 'Publish to coaches' %></button>
-      </form>
+    <% if (isAdmin) { %>
+      <% [['lists', 'performance order', hasLists, competition.poomsae_published_at], ['brackets', 'brackets', hasBrackets, competition.poomsae_brackets_published_at]].forEach(([stage, label, ready, published]) => { %>
+        <% if (ready || published) { %>
+          <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/<%= published ? 'unpublish' : 'publish' %>">
+            <input type="hidden" name="_csrf" value="<%= csrf %>">
+            <button class="btn <%= published ? 'secondary' : 'approve' %>" name="stage" value="<%= stage %>" type="submit"><%= published ? `Hide ${label}` : `Publish ${label}` %></button>
+          </form>
+        <% } %>
+      <% }) %>
     <% } %>
+    <% if (competition.poomsae_published_at || competition.poomsae_brackets_published_at) { %><a class="btn secondary" href="/competitions/<%= competition.id %>/poomsae">Public page</a><% } %>
     <% if (isAdmin && closed && drawable > 0) { %>
       <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/draw">
         <input type="hidden" name="_csrf" value="<%= csrf %>">

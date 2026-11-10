@@ -634,7 +634,7 @@ test('schedule migration clears old draws and keeps competitions', () => {
 
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM bouts').get().n, 0);
   assert.equal(db.prepare('SELECT bout_courts FROM competitions WHERE id = ?').get(compId).bout_courts, 2);
-  assert.equal(db.pragma('user_version', { simple: true }), 16);
+  assert.equal(db.pragma('user_version', { simple: true }), 17);
 });
 
 test('admin creates a club, a coach applies, and only approval unlocks athlete registration', async () => {
@@ -799,7 +799,7 @@ test('migrating old club accounts keeps logins and fighters and approves each co
   const clubColumns = db.pragma('table_info(clubs)').map((c) => c.name);
   assert.ok(!clubColumns.includes('coach_name'));
   assert.equal(db.pragma('foreign_key_check').length, 0);
-  assert.equal(db.pragma('user_version', { simple: true }), 16);
+  assert.equal(db.pragma('user_version', { simple: true }), 17);
 });
 
 test('a fighter alone in a division has no bout number', async () => {
@@ -973,7 +973,7 @@ test('migration turns a day count into consecutive dates', () => {
   const { id } = db.prepare('SELECT id FROM competitions').get();
   assert.deepEqual(getEventDates(db, id), ['2030-01-30', '2030-01-31', '2030-02-01']);
   assert.ok(!db.pragma('table_info(competitions)').some((c) => c.name === 'bout_days'));
-  assert.equal(db.pragma('user_version', { simple: true }), 16);
+  assert.equal(db.pragma('user_version', { simple: true }), 17);
 });
 
 const tokenIn = (message) => message.text.match(/reset-password\/([0-9a-f]{64})/)[1];
@@ -1218,7 +1218,7 @@ test('the results migration removes declared weights and keeps registrations', (
   db.pragma('user_version = 4');
   migrate(db);
   assert.ok(!db.pragma('table_info(registrations)').some((c) => c.name === 'declared_weight_kg'));
-  assert.equal(db.pragma('user_version', { simple: true }), 16);
+  assert.equal(db.pragma('user_version', { simple: true }), 17);
 });
 
 test('athletes need the right document before they can enter', async () => {
@@ -1835,7 +1835,7 @@ test('rebuilding the users table for officials keeps every linked row', async ()
   db.close();
 
   db = openDb(file);
-  assert.equal(db.pragma('user_version', { simple: true }), 16);
+  assert.equal(db.pragma('user_version', { simple: true }), 17);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM club_applications').get().n, 1);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM password_resets').get().n, 1);
   assert.equal(db.prepare('SELECT author_id FROM news_posts').get().author_id, coachId);
@@ -2319,7 +2319,7 @@ test('migrating to version 13 moves poomsae entries onto poomsae age groups', ()
   db.pragma('user_version = 12');
 
   migrate(db);
-  assert.equal(db.pragma('user_version', { simple: true }), 16);
+  assert.equal(db.pragma('user_version', { simple: true }), 17);
   const moved = db.prepare('SELECT a.name, e.status FROM poomsae_entries e JOIN poomsae_age_groups a ON a.id = e.age_group_id WHERE e.id = ?').get(entry);
   assert.deepEqual(moved, { name: 'U40', status: 'approved' });
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM poomsae_members').get().n, 1);
@@ -2376,7 +2376,7 @@ test('poomsae score round then bracket: the top entries are seeded in, and offic
   assert.match(mine, /Ana Reyes<\/strong><\/td>[\s\S]*?<td>Silver<\/td>/);
   assert.match(mine, /Fay Reyes<\/strong><\/td>[\s\S]*?<td>Not in the top 2 \(3rd · 7.00\)<\/td>/);
   assert.doesNotMatch(mine, /<svg class="bracket"/, 'brackets wait for publishing');
-  await post(admin, `${review}/publish`, {}, review);
+  await post(admin, `${review}/publish`, { stage: 'brackets' }, review);
   assert.match((await club.get(page)).text, /<svg class="bracket"/);
   assert.match((await admin.get(review)).text, /Poomsae medal standings/);
 
@@ -2453,7 +2453,7 @@ test('poomsae divisions choose their own format and day, and brackets get courts
   await post(admin, `${review}/division`, { division: female, format: 'score', day: '1' }, review);
   assert.deepEqual(db.prepare('SELECT format, day FROM poomsae_divisions WHERE division_key = ?').get(female), { format: 'elimination', day: 1 });
   assert.equal(db.prepare('SELECT DISTINCT day FROM poomsae_bouts WHERE division_key = ?').get(female).day, 1);
-  await post(admin, `${review}/publish`, {}, review);
+  await post(admin, `${review}/publish`, { stage: 'brackets' }, review);
   const mine = (await club.get(page)).text;
   assert.match(mine, /Day 1 \([^)]+\), Poomsae court 1<\/strong>, from 09:30/);
 
@@ -2513,12 +2513,12 @@ test('ranked poomsae gets a random performance order with times, published to co
   assert.equal(all.body.subarray(0, 5).toString(), '%PDF-');
   assert.equal((await pdf(club, `${page}.pdf`)).status, 404);
   assert.doesNotMatch((await club.get(page)).text, /Performance order and brackets/);
-  await post(admin, `${review}/publish`, {}, review);
-  assert.ok(mailer.sent.some((m) => m.subject === 'Poomsae order published: Order Cup'));
+  await post(admin, `${review}/publish`, { stage: 'lists' }, review);
+  assert.ok(mailer.sent.some((m) => m.subject === 'Poomsae performance order published: Order Cup'));
   const mine = (await club.get(page)).text;
   assert.match(mine, /Performance order and brackets[\s\S]*?class="own-row"/);
   assert.equal((await pdf(club, `${page}.pdf`)).status, 200);
-  await post(admin, `${review}/unpublish`, {}, review);
+  await post(admin, `${review}/unpublish`, { stage: 'lists' }, review);
   assert.equal((await pdf(club, `${page}.pdf`)).status, 404);
 
   // An unscored list can be redrawn in place or cleared.
@@ -2528,4 +2528,78 @@ test('ranked poomsae gets a random performance order with times, published to co
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM poomsae_entries WHERE gender = 'M' AND perform_order IS NOT NULL").get().n, 0);
   await post(admin, `/admin/competitions/${compId}/status`, { status: 'open' }, '/admin/competitions');
   assert.equal(db.prepare('SELECT status FROM competitions WHERE id = ?').get(compId).status, 'closed', 'no reopening while lists exist');
+});
+
+test('published bout lists are public: kyorugi, and poomsae order and brackets as separate stages', async () => {
+  const { app, db } = await setup();
+  const visitor = request(app);
+  const pdfOf = (path) => visitor.get(path).buffer(true).parse((res, callback) => {
+    const chunks = [];
+    res.on('data', (chunk) => chunks.push(chunk));
+    res.on('end', () => callback(null, Buffer.concat(chunks)));
+  });
+
+  // Kyorugi: nothing public until the bout list is published.
+  const { compId, admin } = await closedCompetitionWithFighters(db, app, [['T', 'Alpha'], ['D', 'Bravo']]);
+  const path = `/admin/competitions/${compId}/bouts`;
+  await post(admin, `${path}/generate`, {}, path);
+  assert.equal((await visitor.get(`/competitions/${compId}/bouts`)).status, 404);
+  assert.doesNotMatch((await visitor.get(`/competitions/${compId}`)).text, /Kyorugi bout list/);
+  await post(admin, `${path}/publish`, {}, path);
+  const bouts = (await visitor.get(`/competitions/${compId}/bouts`)).text;
+  assert.match(bouts, /Ana Alpha|Alpha Ana/);
+  assert.match(bouts, /<svg class="bracket"/);
+  assert.doesNotMatch(bouts, new RegExp(JUNIOR_DOB), 'no birth dates');
+  assert.match((await visitor.get(`/competitions/${compId}`)).text, /Kyorugi bout list/);
+  const kyorugiPdf = await pdfOf(`/competitions/${compId}/bouts.pdf`);
+  assert.equal(kyorugiPdf.status, 200);
+  assert.equal(kyorugiPdf.body.subarray(0, 5).toString(), '%PDF-');
+  await post(admin, `${path}/unpublish`, {}, path);
+  assert.equal((await visitor.get(`/competitions/${compId}/bouts`)).status, 404);
+
+  // Poomsae: a score round of three with a cut of two, then a bracket.
+  const formsId = openCompetition(db, { name: 'Forms', events: 'poomsae', poomsae_format: 'cut', poomsae_cut: 2 });
+  const club = await signUpClub(app, 'Cranes', 'cranes@test.test');
+  const ids = [];
+  for (const first of ['Ana', 'Eve', 'Fay']) ids.push(String(await addFighter(club, { first_name: first, last_name: 'Crane', gender: 'F', date_of_birth: JUNIOR_DOB, belt_rank: '3' })));
+  const page = `/club/competitions/${formsId}/poomsae`;
+  await post(club, `${page}/enter`, { event: 'individual', fighter_ids: ids }, page);
+  const review = `/admin/competitions/${formsId}/poomsae`;
+  await post(admin, `${review}/review`, { bulk: 'approve-pending' }, review);
+  db.prepare("UPDATE competitions SET status = 'closed' WHERE id = ?").run(formsId);
+  await post(admin, `${review}/order`, { division: 'all' }, review);
+  const publicPage = `/competitions/${formsId}/poomsae`;
+  assert.equal((await visitor.get(publicPage)).status, 404, 'nothing until published');
+
+  // Publish the first draw (the score round order) on its own.
+  assert.doesNotMatch((await admin.get(review)).text, /Publish brackets/);
+  await post(admin, `${review}/publish`, { stage: 'lists' }, review);
+  let text = (await visitor.get(publicPage)).text;
+  assert.match(text, /Score round order|performance order, drawn at random/);
+  assert.match(text, /Ana Crane/);
+  assert.doesNotMatch(text, /<svg class="bracket"/);
+  assert.match((await visitor.get(`/competitions/${formsId}`)).text, /Poomsae order and brackets/);
+
+  // Score, draw the bracket: it stays hidden until its own publish.
+  const entries = db.prepare('SELECT id FROM poomsae_entries WHERE competition_id = ? ORDER BY id').all(formsId);
+  for (const [i, entry] of entries.entries()) await post(admin, `${review}/${entry.id}/score`, { score: String(8 - i) }, review);
+  const e = db.prepare('SELECT event, gender, age_group_id, belt_group_id FROM poomsae_entries WHERE id = ?').get(entries[0].id);
+  await post(admin, `${review}/draw`, { division: [e.event, e.gender, e.age_group_id, e.belt_group_id].join('-') }, review);
+  assert.doesNotMatch((await visitor.get(publicPage)).text, /<svg class="bracket"/);
+  assert.match((await admin.get(review)).text, /Publish brackets/);
+  await post(admin, `${review}/publish`, { stage: 'brackets' }, review);
+  text = (await visitor.get(publicPage)).text;
+  assert.match(text, /<svg class="bracket"/);
+  assert.match(text, /FINAL ROUND/);
+  const poomsaePdf = await pdfOf(`${publicPage}.pdf`);
+  assert.equal(poomsaePdf.status, 200);
+
+  // Hiding the order leaves the brackets; hiding both takes the page down.
+  await post(admin, `${review}/unpublish`, { stage: 'lists' }, review);
+  text = (await visitor.get(publicPage)).text;
+  assert.match(text, /<svg class="bracket"/);
+  assert.doesNotMatch(text, /performance order, drawn at random/);
+  await post(admin, `${review}/unpublish`, { stage: 'brackets' }, review);
+  assert.equal((await visitor.get(publicPage)).status, 404);
+  assert.equal((await post(club, `${review}/publish`, { stage: 'lists' }, page)).status, 403, 'coaches cannot publish');
 });

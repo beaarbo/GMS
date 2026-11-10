@@ -471,7 +471,7 @@ router.get('/competitions/:id(\\d+)/poomsae', (req, res) => {
       const division = divisionOf.get(e.id);
       return { ...e, result: division ? entryResult(ranked.get(e.id), division) : '' };
     }),
-    pages: competition.poomsae_published_at ? poomsaeBoutList(db, competition, { clubId: req.user.club_id }) : [],
+    pages: poomsaeBoutList(db, competition, { clubId: req.user.club_id, published: true }),
     open: isRegistrationOpen(competition),
   });
 });
@@ -479,8 +479,8 @@ router.get('/competitions/:id(\\d+)/poomsae', (req, res) => {
 router.get('/competitions/:id(\\d+)/poomsae.pdf', (req, res) => {
   const { db } = req.app.locals;
   const competition = poomsaeCompetition(req);
-  if (!competition || !competition.poomsae_published_at) return notFound(res);
-  const pages = poomsaeBoutList(db, competition, { clubId: req.user.club_id });
+  if (!competition) return notFound(res);
+  const pages = poomsaeBoutList(db, competition, { clubId: req.user.club_id, published: true });
   if (pages.length === 0) return notFound(res);
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="poomsae-list-competition-${competition.id}.pdf"`);
