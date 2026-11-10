@@ -1,5 +1,5 @@
 <%- include('../partials/top') %>
-<p class="breadcrumb"><a href="/admin">Admin dashboard</a></p>
+<p class="breadcrumb"><a href="/admin/competitions">Competitions</a></p>
 <div class="page-head">
   <div>
     <h1>Bout list</h1>
@@ -34,7 +34,7 @@
 <% if (competition.status !== 'closed' && divisions.length === 0) { %>
   <section class="card">
     <h2>Registration is still open</h2>
-    <p class="empty">Close registration from the <a href="/admin">admin dashboard</a> to generate the bout list.</p>
+    <p class="empty">Close registration on the <a href="/admin/competitions">Competitions</a> page to generate the bout list.</p>
   </section>
 <% } else { %>
   <section class="card">

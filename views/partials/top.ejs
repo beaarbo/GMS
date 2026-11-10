@@ -13,11 +13,12 @@
   <div class="topbar-inner">
     <a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span>Game Management System</a>
     <%
-      // Marks the section the visitor is in. Admin sub-pages belong to the dashboard.
+      // Marks the section the visitor is in. A competition's admin pages belong to Competitions.
       const current = (href) => {
         if (href === '/') return currentPath === '/' || currentPath.startsWith('/competitions');
         if (href === '/news') return currentPath === '/news' || currentPath.startsWith('/news/') || currentPath.startsWith('/admin/news');
-        if (href === '/admin') return currentPath === '/admin' || currentPath.startsWith('/admin/competitions') || currentPath.startsWith('/admin/fighters');
+        if (href === '/admin') return currentPath === '/admin';
+        if (href === '/admin/competitions') return currentPath.startsWith('/admin/competitions') || currentPath.startsWith('/admin/fighters') || currentPath.startsWith('/competitions');
         if (href === '/official') return currentPath === '/official' || currentPath.startsWith('/admin/competitions') || currentPath.startsWith('/screens');
         return currentPath === href || currentPath.startsWith(`${href}/`);
       };
@@ -33,7 +34,8 @@
         <%- link('/home', 'Home') %>
         <%- user.club_id ? link('/club', 'Club dashboard') : link('/coach', 'Join a club') %>
       <% } %>
-      <%- link('/', 'Competitions') %>
+      <%# Admins manage competitions; everyone else sees the public list. %>
+      <%- user && user.role === 'admin' ? link('/admin/competitions', 'Competitions') : link('/', 'Competitions') %>
       <%- link('/news', 'News') %>
       <% if (user && user.role === 'admin') { %>
         <%- link('/admin/clubs', 'Clubs and coaches') %>

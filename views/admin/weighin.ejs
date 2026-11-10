@@ -1,6 +1,6 @@
 <%- include('../partials/top') %>
 <% const isAdmin = user.role === 'admin'; %>
-<p class="breadcrumb"><% if (isAdmin) { %><a href="/admin">Admin dashboard</a><% } else { %><a href="/official">Competition day</a><% } %></p>
+<p class="breadcrumb"><% if (isAdmin) { %><a href="/admin/competitions">Competitions</a><% } else { %><a href="/official">Competition day</a><% } %></p>
 <div class="page-head">
   <div class="title-row">
     <%- include('../partials/comp_logo', { competition, size: 'md' }) %>

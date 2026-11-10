@@ -40,6 +40,8 @@ const {
   deleteCompetitionFile,
   createOfficialAccount,
   removeOfficial,
+  today,
+  listNews,
   deleteCoachAccount,
   competitionFootprint,
   deleteCompetition,
@@ -58,7 +60,7 @@ const { layoutBracket, computeMedals } = require('../bracket');
 const { writeBoutListPdf } = require('../boutlistPdf');
 const { clean, toArray, requireRole, notFound, wrap, passwordError } = require('./helpers');
 const { resultsPath } = require('./competitionDay');
-const { createBackup, pruneBackups } = require('../backups');
+const { createBackup, pruneBackups, listBackups } = require('../backups');
 
 const router = express.Router();
 router.use(requireRole('admin'));
@@ -107,23 +109,83 @@ function loadCompetition(req, res, next) {
   return next();
 }
 
-router.get('/', (req, res) => {
-  const competitions = req.app.locals.db
+function competitionsWithCounts(db) {
+  return db
     .prepare(
       `SELECT comp.*,
          SUM(r.status = 'pending') AS pending,
          SUM(r.status = 'approved') AS approved,
-         SUM(r.status = 'rejected') AS rejected
+         SUM(r.status = 'rejected') AS rejected,
+         (SELECT COUNT(*) FROM bouts b WHERE b.competition_id = comp.id) AS bout_count,
+         (SELECT MAX(d.event_date) FROM competition_dates d WHERE d.competition_id = comp.id) AS last_day
        FROM competitions comp LEFT JOIN registrations r ON r.competition_id = comp.id
        GROUP BY comp.id ORDER BY comp.status = 'closed', comp.event_date`
     )
     .all();
+}
+
+// Things the admin should act on, most urgent first, each with where to do it.
+function attentionItems(db, competitions, { emailConfigured, backupsDir }) {
+  const items = [];
+  if (!emailConfigured) {
+    items.push({ level: 'error', text: 'Email is not set up, so password resets, approvals and reminders aren\'t sent.', href: '/admin/email', link: 'Check email settings' });
+  }
+  const applications = db.prepare("SELECT COUNT(*) AS n FROM club_applications WHERE status = 'pending'").get().n;
+  if (applications > 0) {
+    items.push({ level: 'info', text: `${applications} coach application${applications === 1 ? ' is' : 's are'} waiting for approval.`, href: '/admin/clubs', link: 'Review' });
+  }
+  const upcomingOrRunning = (c) => !c.last_day || c.last_day >= today();
+  competitions.forEach((c) => {
+    if (c.pending > 0) {
+      items.push({ level: 'info', text: `${c.pending} registration${c.pending === 1 ? '' : 's'} waiting for review in ${c.name}.`, href: `/admin/competitions/${c.id}/registrations?status=pending`, link: 'Review' });
+    }
+    if (c.status === 'closed' && upcomingOrRunning(c) && c.approved > 0 && c.bout_count === 0) {
+      items.push({ level: 'info', text: `${c.name} is closed: run the weigh-in, then draw the bout list.`, href: `/admin/competitions/${c.id}/bouts`, link: 'Bout list' });
+    }
+    if (c.status === 'closed' && upcomingOrRunning(c) && c.bout_count > 0 && !c.bouts_published_at) {
+      items.push({ level: 'info', text: `The bout list for ${c.name} is drawn but coaches can't see it yet.`, href: `/admin/competitions/${c.id}/bouts`, link: 'Publish' });
+    }
+    if (c.status === 'draft' && (!hasCompetitionLogo(db, c.id) || !String(c.description || '').trim())) {
+      items.push({ level: 'info', text: `${c.name} needs a logo and a description before it can open.`, href: `/admin/competitions/${c.id}/files`, link: 'Add them' });
+    }
+  });
+  if (backupsDir) {
+    const [latest] = listBackups(backupsDir);
+    const ageDays = latest ? (Date.now() - new Date(latest.createdAt.replace(' ', 'T')).getTime()) / 86400000 : Infinity;
+    if (ageDays > 2) {
+      items.push({ level: 'error', text: latest ? `The newest backup is ${Math.floor(ageDays)} days old.` : 'There are no backups yet.', href: '/admin/backups', link: 'Backups' });
+    }
+  }
+  return items;
+}
+
+// An overview of the whole site: what needs doing, totals, what's coming up, and recent changes.
+router.get('/', (req, res) => {
+  const { db, notify, backups } = req.app.locals;
+  const competitions = competitionsWithCounts(db);
+  const count = (sql) => db.prepare(sql).get().n;
   res.render('admin/dashboard', {
     title: 'Admin dashboard',
-    competitions,
-    pendingCoaches: req.app.locals.db.prepare("SELECT COUNT(*) AS n FROM club_applications WHERE status = 'pending'").get().n,
-    emailConfigured: Boolean(req.app.locals.notify.mailer.configured),
+    attention: attentionItems(db, competitions, { emailConfigured: Boolean(notify.mailer.configured), backupsDir: backups && backups.dir }),
+    totals: {
+      open: competitions.filter((c) => c.status === 'open').length,
+      closed: competitions.filter((c) => c.status === 'closed').length,
+      draft: competitions.filter((c) => c.status === 'draft').length,
+      clubs: count('SELECT COUNT(*) AS n FROM clubs'),
+      coaches: count("SELECT COUNT(*) AS n FROM users WHERE role = 'coach' AND club_id IS NOT NULL"),
+      officials: count("SELECT COUNT(*) AS n FROM users WHERE role = 'official'"),
+      athletes: count('SELECT COUNT(*) AS n FROM fighters'),
+      news: count('SELECT COUNT(*) AS n FROM news_posts'),
+    },
+    upcoming: competitions.filter((c) => c.status !== 'draft' && c.last_day && c.last_day >= today()).sort((a, b) => a.event_date.localeCompare(b.event_date)).slice(0, 4),
+    activity: listActivity(db, {}, { limit: 8, offset: 0 }),
+    news: listNews(db, { signedIn: true, limit: 3 }),
+    formatActivityTime,
   });
+});
+
+router.get('/competitions', (req, res) => {
+  res.render('admin/competitions', { title: 'Competitions', competitions: competitionsWithCounts(req.app.locals.db) });
 });
 
 router.get('/competitions/new', (req, res) => {
@@ -255,7 +317,7 @@ router.post('/competitions/:id(\\d+)', (req, res) => {
     req.competition.id
   );
   req.flash('success', 'Competition updated.');
-  return res.redirect('/admin');
+  return res.redirect('/admin/competitions');
 });
 
 router.post('/competitions/:id(\\d+)/status', (req, res) => {
@@ -264,11 +326,11 @@ router.post('/competitions/:id(\\d+)/status', (req, res) => {
   const { db } = req.app.locals;
   if (status === 'draft' && countRegistrations(db, req.competition.id) > 0) {
     req.flash('error', 'A competition with registrations cannot go back to draft. Close it instead.');
-    return res.redirect('/admin');
+    return res.redirect('/admin/competitions');
   }
   if (status !== 'closed' && hasBoutList(db, req.competition.id)) {
     req.flash('error', 'Delete the bout list before reopening registration.');
-    return res.redirect('/admin');
+    return res.redirect('/admin/competitions');
   }
   if (status === 'open' && (!hasCompetitionLogo(db, req.competition.id) || !req.competition.description.trim())) {
     req.flash('error', `${req.competition.name} needs a logo and a description before clubs can register. Add them first.`);
@@ -276,7 +338,7 @@ router.post('/competitions/:id(\\d+)/status', (req, res) => {
   }
   if (status === 'open' && deadlinePassed(req.competition)) {
     req.flash('error', 'The registration deadline has passed. Edit the competition to set a later deadline first.');
-    return res.redirect('/admin');
+    return res.redirect('/admin/competitions');
   }
   db.prepare('UPDATE competitions SET status = ? WHERE id = ?').run(status, req.competition.id);
   const actions = { open: 'Opened registration for', closed: 'Closed registration for', draft: 'Moved to draft:' };
@@ -287,7 +349,7 @@ router.post('/competitions/:id(\\d+)/status', (req, res) => {
     draft: 'Competition moved back to draft.',
   };
   req.flash('success', messages[status]);
-  return res.redirect('/admin');
+  return res.redirect('/admin/competitions');
 });
 
 function filesPage(req, res, status = 200, error = null) {
@@ -347,7 +409,7 @@ router.get('/competitions/:id(\\d+)/delete', (req, res) => {
   const { db, backups } = req.app.locals;
   if (req.competition.status === 'open') {
     req.flash('error', 'Close registration before deleting this competition.');
-    return res.redirect('/admin');
+    return res.redirect('/admin/competitions');
   }
   return res.render('admin/comp_delete', {
     title: 'Delete competition',
@@ -363,13 +425,13 @@ router.post('/competitions/:id(\\d+)/delete', wrap(async (req, res) => {
   const competition = req.competition;
   if (competition.status === 'open') {
     req.flash('error', 'Close registration before deleting this competition.');
-    return res.redirect('/admin');
+    return res.redirect('/admin/competitions');
   }
   if (emptyDraft(db, competition)) {
     deleteCompetition(db, competition.id);
     req.logActivity('competition.deleted', `Deleted draft competition ${competition.name}`, competition.id);
     req.flash('success', 'Draft competition deleted.');
-    return res.redirect('/admin');
+    return res.redirect('/admin/competitions');
   }
 
   const typed = clean(req.body.confirm_name, 300);
@@ -401,7 +463,7 @@ router.post('/competitions/:id(\\d+)/delete', wrap(async (req, res) => {
     competition.id
   );
   req.flash('success', `${competition.name} was deleted.${backupName ? ` A backup was made first: ${backupName}.` : ''}`);
-  return res.redirect('/admin');
+  return res.redirect('/admin/competitions');
 }));
 
 function setupRowsForForm(setup) {

@@ -1948,10 +1948,10 @@ test('deleting a finished competition needs its name typed, backs up first, and 
 
   // An open competition must be closed first.
   const open = openCompetition(db, { name: 'Still open' });
-  assert.equal((await admin.get(`/admin/competitions/${open}/delete`)).headers.location, '/admin');
+  assert.equal((await admin.get(`/admin/competitions/${open}/delete`)).headers.location, '/admin/competitions');
 
   const del = `/admin/competitions/${compId}/delete`;
-  assert.match((await admin.get('/admin')).text, new RegExp(`href="${del}">Delete`));
+  assert.match((await admin.get('/admin/competitions')).text, new RegExp(`href="${del}">Delete`));
   const page = await admin.get(del);
   assert.match(page.text, /<strong>4<\/strong> registrations/);
   assert.match(page.text, /<strong>1<\/strong> recorded result/);
@@ -1962,7 +1962,7 @@ test('deleting a finished competition needs its name typed, backs up first, and 
   assert.ok(db.prepare('SELECT 1 FROM competitions WHERE id = ?').get(compId), 'nothing deleted');
 
   const done = await post(admin, del, { confirm_name: ' open ' }, del);
-  assert.equal(done.headers.location, '/admin');
+  assert.equal(done.headers.location, '/admin/competitions');
   for (const table of ['competitions', 'bouts', 'registrations', 'competition_dates', 'weight_classes', 'age_groups', 'competition_logos', 'division_days']) {
     const column = table === 'competitions' ? 'id' : 'competition_id';
     assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE ${column} = ?`).get(compId).n, 0, table);
@@ -1979,4 +1979,44 @@ test('deleting a finished competition needs its name typed, backs up first, and 
   copy.close();
   assert.match(db.prepare("SELECT summary FROM activity_log WHERE action = 'competition.deleted'").get().summary, /4 registrations and 1 results, after backup gms-/);
   db.close();
+});
+
+test('the admin dashboard gives an overview, and competitions are managed on their own page', async () => {
+  const { db, app } = await setup();
+  const { compId, admin } = await closedCompetitionWithFighters(db, app, [['T', 'Alpha'], ['D', 'Bravo']]);
+  const draft = createCompetition(db, { name: 'Spring Draft', event_date: `${EVENT_YEAR}-06-01`, registration_deadline: `${EVENT_YEAR}-05-01`, venue: 'Hall' });
+
+  const dash = (await admin.get('/admin')).text;
+  // No competition cards or create buttons on the dashboard any more.
+  assert.doesNotMatch(dash, /href="\/admin\/competitions\/new" class|New news post/);
+  assert.doesNotMatch(dash, /Review registrations/);
+  // What needs doing, with links.
+  assert.match(dash, /Needs attention/);
+  assert.match(dash, new RegExp(`Open is closed: run the weigh-in, then draw the bout list[\\s\\S]*href="/admin/competitions/${compId}/bouts"`));
+  assert.match(dash, new RegExp(`Spring Draft needs a logo and a description[\\s\\S]*href="/admin/competitions/${draft}/files"`));
+  // Totals for the site.
+  assert.match(dash, /Competitions<\/span>\s*<strong class="stat-value">2<\/strong>/);
+  assert.match(dash, /0 open · 1 closed · 1 draft/);
+  assert.match(dash, /Clubs<\/span>\s*<strong class="stat-value">2<\/strong>/);
+  assert.match(dash, /Athletes<\/span>\s*<strong class="stat-value">2<\/strong>/);
+  // Coming up, recent activity and news, each linking onwards.
+  assert.match(dash, new RegExp(`Coming up[\\s\\S]*href="/admin/competitions#competition-${compId}"`));
+  assert.match(dash, /Recent activity[\s\S]*href="\/admin\/activity"/);
+  assert.match(dash, /Latest news[\s\S]*No news posted yet/);
+  assert.match(dash, /<a href="\/admin" aria-current="page">Dashboard<\/a>/);
+
+  // The Competitions page has the cards and New competition, and the menu points there.
+  const list = (await admin.get('/admin/competitions')).text;
+  assert.match(list, /<a class="btn" href="\/admin\/competitions\/new">New competition<\/a>/);
+  assert.match(list, new RegExp(`id="competition-${compId}"[\\s\\S]*Review registrations`));
+  assert.match(list, /<a href="\/admin\/competitions" aria-current="page">Competitions<\/a>/);
+  // A competition's own pages lead back to it.
+  assert.match((await admin.get(`/admin/competitions/${compId}/registrations`)).text, /class="breadcrumb"><a href="\/admin\/competitions">Competitions<\/a>/);
+  const status = await post(admin, `/admin/competitions/${draft}/status`, { status: 'open' }, '/admin/competitions');
+  assert.equal(status.headers.location, `/admin/competitions/${draft}/files`, 'publishing without a logo sends you to add one');
+  assert.equal((await post(admin, `/admin/competitions/${compId}/status`, { status: 'closed' }, '/admin/competitions')).headers.location, '/admin/competitions');
+
+  // Coaches still see the public list under Competitions.
+  const coachPage = (await (await login(app, 'tigers@test.test')).get('/home')).text;
+  assert.match(coachPage, /<a href="\/">Competitions<\/a>/);
 });

@@ -32,9 +32,14 @@ To run the tests:
 npm test
 ```
 
+## The admin side
+
+- **Dashboard** is an overview: a **Needs attention** list (coach applications and registrations to review, competitions ready to draw or publish, drafts missing a logo or description, email or backup problems), totals for competitions, clubs, athletes, officials and news, what's coming up, recent activity and the latest news.
+- **Competitions** is where competitions are created and run: **New competition**, and a card per competition with its registrations, divisions, weigh-in, bout list, results, settings, files and delete. The public list of competitions is still at the site's home page.
+
 ## How divisions work
 
-Each competition has its own division setup, under **Division setup** in the admin dashboard. New competitions start from a default template:
+Each competition has its own division setup, under **Division setup** on the admin **Competitions** page. New competitions start from a default template:
 
 | Setting | Default | Check before use |
 | --- | --- | --- |
@@ -62,7 +67,7 @@ Documents lock once a registration is approved. Changing a belt between Blue or 
 
 ## Activity log
 
-**Activity log** on the admin dashboard shows who did what and when, and can be filtered by type and competition or exported as CSV. It covers registrations and their rejection reasons, competitions, division setup, draws, schedules, publishing, results, clubs, coach approvals, athletes, document uploads, new accounts and password resets, plus competitions closing at their deadline. Logins and views aren't recorded. Entries can't be edited or deleted from the site. Anyone with direct access to the database could still change them.
+**Activity log** in the admin menu shows who did what and when, and can be filtered by type and competition or exported as CSV. It covers registrations and their rejection reasons, competitions, division setup, draws, schedules, publishing, results, clubs, coach approvals, athletes, document uploads, new accounts and password resets, plus competitions closing at their deadline. Logins and views aren't recorded. Entries can't be edited or deleted from the site. Anyone with direct access to the database could still change them.
 
 ## Email and password reset
 
@@ -89,7 +94,7 @@ Each competition has a deadline date and closing time, set by the admin and show
 
 ## Bout lists
 
-After closing registration, open **Bout list** on the admin dashboard, enter the courts, start time and minutes per bout, and generate it. Bouts are spread across the competition's event dates, keeping divisions in age order.
+After closing registration, open **Bout list** on the competition's card on the admin **Competitions** page, enter the courts, start time and minutes per bout, and generate it. Bouts are spread across the competition's event dates, keeping divisions in age order.
 
 - Each division becomes a single-elimination bracket of its approved fighters. Pending fighters are left out.
 - Fighters from the same club are drawn into opposite halves, so two club-mates can only meet in the final. Clubs with more fighters are shared as evenly as possible.
@@ -113,7 +118,7 @@ While a bout list exists, approvals can't change and registration can't reopen. 
 
 ## Deleting things
 
-- **Competitions:** an empty draft has a **Delete** button on the dashboard. A competition with entries can be deleted once registration is closed: **Delete** opens a page listing what will go (registrations, bouts, results, files), and you type its name to confirm. A backup is made first, so it can be restored. Athletes stay with their clubs.
+- **Competitions:** an empty draft has a **Delete** button on the admin **Competitions** page. A competition with entries can be deleted once registration is closed: **Delete** opens a page listing what will go (registrations, bouts, results, files), and you type its name to confirm. A backup is made first, so it can be restored. Athletes stay with their clubs.
 - **News posts:** **Delete** on Admin → News.
 - **Accounts:** on **Accounts**, coaches can be deleted (their club keeps its athletes and entries) and officials removed. Admin accounts can't be deleted.
 - **Clubs** with no coaches or athletes, and **athletes** never entered in a competition, can also be deleted.
