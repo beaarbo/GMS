@@ -13,6 +13,19 @@
         <button class="btn approve" name="bulk" value="approve-pending" type="submit">Approve all pending</button>
       </form>
     <% } %>
+    <% if (isAdmin && closed && orderable > 0) { %>
+      <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/order">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <button class="btn" name="division" value="all" type="submit">Make <%= orderable %> performance list<%= orderable === 1 ? '' : 's' %></button>
+      </form>
+    <% } %>
+    <% if (hasPages) { %><a class="btn secondary" href="/admin/competitions/<%= competition.id %>/poomsae.pdf">Download PDF</a><% } %>
+    <% if (isAdmin && hasPages) { %>
+      <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/<%= competition.poomsae_published_at ? 'unpublish' : 'publish' %>">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <button class="btn <%= competition.poomsae_published_at ? 'secondary' : 'approve' %>" type="submit"><%= competition.poomsae_published_at ? 'Hide from coaches' : 'Publish to coaches' %></button>
+      </form>
+    <% } %>
     <% if (isAdmin && closed && drawable > 0) { %>
       <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/draw">
         <input type="hidden" name="_csrf" value="<%= csrf %>">
@@ -80,7 +93,7 @@
           </select>
         </label>
         <button class="btn secondary small" type="submit">Save division</button>
-        <% if (d.locked) { %><span class="hint">The format is fixed now that this division has scores or a bracket.</span><% } %>
+        <% if (d.locked) { %><span class="hint">The format is fixed now that this division has a performance list, scores or a bracket.</span><% } %>
       </form>
     <% } %>
     <% const medalLine = ['gold', 'silver', 'bronze'].filter((m) => d.medalists[m].length > 0); %>
@@ -114,6 +127,7 @@
                 <td>
                   <% if (e.score !== null) { %><span class="hint">Scored</span>
                   <% } else if (d.bouts) { %><span class="hint">In a bracket</span>
+                  <% } else if (e.perform_order !== null) { %><span class="hint">In the performance list</span>
                   <% } else { %>
                     <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/review" class="inline-form">
                       <input type="hidden" name="_csrf" value="<%= csrf %>">
@@ -129,6 +143,43 @@
         </tbody>
       </table>
     </div>
+
+    <% if (closed && (d.mode === 'score' || d.mode === 'cut')) { %>
+      <h3><%= d.mode === 'cut' ? 'Score round order' : 'Performance order' %></h3>
+      <% if (d.order.length > 0) { %>
+        <p class="sub"><% if (d.listCourt) { %><strong><%= (days.find(([n]) => n === d.listDay) || [, `Day ${d.listDay}`])[1] %>, Poomsae court <%= d.listCourt %></strong> · <% } %>drawn at random</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>#</th><th>Athletes</th><th>Club</th><th>Time</th></tr></thead>
+            <tbody>
+              <% d.order.forEach((e) => { %><tr><td class="num"><%= e.perform_order %></td><td><strong><%= e.names %></strong></td><td><%= e.club_name %></td><td class="nowrap"><%= e.perform_time || '' %></td></tr><% }) %>
+            </tbody>
+          </table>
+        </div>
+        <% if (isAdmin && d.canOrder) { %>
+          <div class="actions">
+            <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/order" data-confirm="Draw a new random order for this division?">
+              <input type="hidden" name="_csrf" value="<%= csrf %>">
+              <button class="btn secondary small" name="division" value="<%= d.key %>" type="submit">Redraw order</button>
+            </form>
+            <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/clear-order" data-confirm="Clear this performance list?">
+              <input type="hidden" name="_csrf" value="<%= csrf %>">
+              <button class="btn danger small" name="division" value="<%= d.key %>" type="submit">Clear list</button>
+            </form>
+          </div>
+        <% } %>
+      <% } else if (isAdmin && d.canOrder) { %>
+        <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/order">
+          <input type="hidden" name="_csrf" value="<%= csrf %>">
+          <p class="sub">Draws who performs first at random, and times it on the poomsae courts.</p>
+          <button class="btn secondary" name="division" value="<%= d.key %>" type="submit">Make performance list</button>
+        </form>
+      <% } else if (d.pending > 0) { %>
+        <p class="empty">Approve or reject the pending entries, then make the list.</p>
+      <% } else { %>
+        <p class="empty">No performance list yet.</p>
+      <% } %>
+    <% } %>
 
     <% if (d.mode !== 'score' && closed) { %>
       <h3>Bracket</h3>

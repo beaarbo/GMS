@@ -475,6 +475,7 @@ function reviewPoomsae(db, competitionId, entryId, decision, note = '') {
   if (!entry) return { ok: false, error: 'That entry no longer exists.' };
   if (entry.score !== null) return { ok: false, error: 'This entry has a score. Clear the score first.' };
   if (hasPoomsaeBracket(db, competitionId, poomsaeKey(entry))) return { ok: false, error: 'This division has a bracket. Delete the bracket first.' };
+  if (entry.perform_order !== null) return { ok: false, error: 'This entry is in a performance list. Clear the list first.' };
   if (decision === 'rejected' && !note) return { ok: false, error: 'Add a reason when rejecting, so the club knows what to fix.' };
   if (entry.status === decision) return { ok: true, changed: false };
   db.prepare("UPDATE poomsae_entries SET status = ?, review_note = ?, reviewed_at = datetime('now') WHERE id = ?")
@@ -504,7 +505,9 @@ function hasPoomsaeScores(db, competitionId) {
 
 // Scores or brackets: either keeps registration closed and the format fixed.
 function hasPoomsaeResults(db, competitionId) {
-  return hasPoomsaeScores(db, competitionId) || Boolean(db.prepare('SELECT 1 FROM poomsae_bouts WHERE competition_id = ? LIMIT 1').get(competitionId));
+  return hasPoomsaeScores(db, competitionId)
+    || Boolean(db.prepare('SELECT 1 FROM poomsae_bouts WHERE competition_id = ? LIMIT 1').get(competitionId))
+    || Boolean(db.prepare('SELECT 1 FROM poomsae_entries WHERE competition_id = ? AND perform_order IS NOT NULL LIMIT 1').get(competitionId));
 }
 
 // Every drawn poomsae bracket, by division key, in the shape bracket.js expects:
@@ -552,6 +555,7 @@ function poomsaeDivisions(entries, competition, brackets = new Map(), settings =
     const mode = divisionMode(rules, approved.length);
     const draw = mode === 'score' || bouts ? null : bracketEntrants(rules, approved);
     const place = bouts && bouts.find((b) => b.day);
+    const order = approved.filter((e) => e.perform_order !== null).sort((a, b) => a.perform_order - b.perform_order);
     return {
       ...d,
       mode,
@@ -569,7 +573,12 @@ function poomsaeDivisions(entries, competition, brackets = new Map(), settings =
       pinnedDay: setting ? setting.day : null,
       day: place ? place.day : null,
       court: place ? place.court : null,
-      locked: Boolean(bouts) || approved.some((e) => e.score !== null),
+      locked: Boolean(bouts) || approved.some((e) => e.score !== null) || order.length > 0,
+      // The random order entries perform in, for a ranked division or a score round.
+      order,
+      listDay: setting ? setting.list_day : null,
+      listCourt: setting ? setting.list_court : null,
+      canOrder: mode !== 'score' && mode !== 'cut' ? false : !approved.some((e) => e.score !== null) && d.entries.every((e) => e.status !== 'pending') && approved.length > 0,
       layout: bouts ? layoutBracket(bouts, { slotHeight: 30, top: 4 }) : null,
       drawProblem: draw && !draw.ok ? draw.error : null,
       medalists: poomsaeMedalists(mode, approved, bouts),
@@ -602,6 +611,10 @@ function drawPoomsaeBracket(db, competition, key, rng = secureRandom) {
         bout.blue && draw.seeded ? bout.blue.seed : null, bout.red && draw.seeded ? bout.red.seed : null
       );
     }));
+    db.prepare(
+      `INSERT INTO poomsae_divisions (competition_id, division_key, bracket_seq) VALUES (?, ?, ?)
+       ON CONFLICT(competition_id, division_key) DO UPDATE SET bracket_seq = excluded.bracket_seq`
+    ).run(competition.id, key, nextPoomsaeSeq(db, competition.id));
     applyPoomsaeSchedule(db, competition.id);
     return { ok: true, entrants: draw.entrants.length, title: division.title };
   })();
@@ -620,17 +633,34 @@ function deletePoomsaeBracket(db, competitionId, key) {
 
 // Gives every drawn bracket its day, court, bout numbers and times, in the order
 // the brackets were drawn (see schedulePoomsae). Who meets whom doesn't change.
+function nextPoomsaeSeq(db, competitionId) {
+  return db.prepare('SELECT COALESCE(MAX(MAX(COALESCE(list_seq, 0), COALESCE(bracket_seq, 0))), 0) + 1 AS n FROM poomsae_divisions WHERE competition_id = ?').get(competitionId).n;
+}
+
 function applyPoomsaeSchedule(db, competitionId) {
   const competition = db.prepare('SELECT * FROM competitions WHERE id = ?').get(competitionId);
   const settings = loadPoomsaeSettings(db, competitionId);
+  const setting = (key) => settings.get(key) || {};
   const rows = db.prepare('SELECT id, division_key, round, position, is_bye FROM poomsae_bouts WHERE competition_id = ? ORDER BY id').all(competitionId);
-  const divisions = new Map();
+  const units = new Map();
   rows.forEach((row) => {
-    if (!divisions.has(row.division_key)) divisions.set(row.division_key, { key: row.division_key, day: (settings.get(row.division_key) || {}).day ?? null, bouts: [] });
-    divisions.get(row.division_key).bouts.push({ ...row, isBye: row.is_bye === 1 });
+    if (!units.has(row.division_key)) {
+      // Brackets drawn before sequence numbers existed go after the rest, in draw order.
+      units.set(row.division_key, { key: row.division_key, seq: setting(row.division_key).bracket_seq ?? 1e9 + row.id, day: setting(row.division_key).day ?? null, bouts: [] });
+    }
+    units.get(row.division_key).bouts.push({ ...row, isBye: row.is_bye === 1 });
+  });
+  const performers = db
+    .prepare("SELECT id, event, gender, age_group_id, belt_group_id FROM poomsae_entries WHERE competition_id = ? AND status = 'approved' AND perform_order IS NOT NULL ORDER BY perform_order")
+    .all(competitionId);
+  performers.forEach((entry) => {
+    const key = poomsaeKey(entry);
+    const unit = `list:${key}`;
+    if (!units.has(unit)) units.set(unit, { key: unit, division: key, seq: setting(key).list_seq ?? 0, day: setting(key).day ?? null, list: [] });
+    units.get(unit).list.push(`e${entry.id}`);
   });
   const [hours, mins] = competition.poomsae_start.split(':').map(Number);
-  const { places, slots } = schedulePoomsae([...divisions.values()], {
+  const { places, slots } = schedulePoomsae([...units.values()].sort((a, b) => a.seq - b.seq), {
     days: getEventDates(db, competitionId).length,
     courts: competition.poomsae_courts,
     start: hours * 60 + mins,
@@ -638,11 +668,99 @@ function applyPoomsaeSchedule(db, competitionId) {
     rest: competition.poomsae_rest_minutes,
   });
   const update = db.prepare('UPDATE poomsae_bouts SET day = ?, court = ?, bout_number = ?, start_time = ? WHERE id = ?');
-  db.transaction(() => rows.forEach((row) => {
-    const place = places.get(row.division_key);
-    const slot = slots.get(row.id);
-    update.run(place.day, place.court, slot ? slot.number : null, slot ? formatTime(slot.start) : null, row.id);
-  }))();
+  const time = db.prepare('UPDATE poomsae_entries SET perform_time = ? WHERE id = ?');
+  const listPlace = db.prepare('UPDATE poomsae_divisions SET list_day = ?, list_court = ? WHERE competition_id = ? AND division_key = ?');
+  db.transaction(() => {
+    rows.forEach((row) => {
+      const place = places.get(row.division_key);
+      const slot = slots.get(row.id);
+      update.run(place.day, place.court, slot ? slot.number : null, slot ? formatTime(slot.start) : null, row.id);
+    });
+    performers.forEach((entry) => time.run(formatTime(slots.get(`e${entry.id}`).start), entry.id));
+    units.forEach((unit) => {
+      if (unit.list) listPlace.run(places.get(unit.key).day, places.get(unit.key).court, competitionId, unit.division);
+    });
+  })();
+}
+
+// A random performance order for ranked divisions and score rounds: key, or
+// "all" for every division that's ready. Only while a division has no scores.
+// A division ordered again keeps its place in the schedule. Returns { ok, error?, titles }.
+function generatePoomsaeOrder(db, competition, key, rng = secureRandom) {
+  if (competition.status !== 'closed') return { ok: false, error: 'Close registration before making performance lists.' };
+  return db.transaction(() => {
+    const entries = listPoomsaeEntries(db, competition.id);
+    const settings = loadPoomsaeSettings(db, competition.id);
+    const divisions = poomsaeDivisions(entries, competition, loadPoomsaeBrackets(db, competition.id, entries), settings);
+    const targets = key === 'all' ? divisions.filter((d) => d.canOrder && d.order.length === 0) : divisions.filter((d) => d.key === key);
+    if (targets.length === 0) return { ok: false, error: key === 'all' ? 'No divisions are waiting for a performance list.' : 'That division was not found.' };
+    const refused = targets.find((d) => !d.canOrder);
+    if (refused) {
+      return { ok: false, error: refused.mode === 'bracket' ? `${refused.title} goes straight to a bracket.` : `${refused.title} has scores or pending entries, so its order stays.` };
+    }
+    const order = db.prepare('UPDATE poomsae_entries SET perform_order = ? WHERE id = ?');
+    const seq = db.prepare(
+      `INSERT INTO poomsae_divisions (competition_id, division_key, list_seq) VALUES (?, ?, ?)
+       ON CONFLICT(competition_id, division_key) DO UPDATE SET list_seq = COALESCE(poomsae_divisions.list_seq, excluded.list_seq)`
+    );
+    targets.forEach((d) => {
+      const ids = d.entries.filter((e) => e.status === 'approved').map((e) => e.id);
+      for (let i = ids.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(rng() * (i + 1));
+        [ids[i], ids[j]] = [ids[j], ids[i]];
+      }
+      ids.forEach((id, i) => order.run(i + 1, id));
+      seq.run(competition.id, d.key, nextPoomsaeSeq(db, competition.id));
+    });
+    applyPoomsaeSchedule(db, competition.id);
+    return { ok: true, titles: targets.map((d) => d.title) };
+  })();
+}
+
+// The poomsae "bout list": each performance order and bracket as its own page,
+// in running order (day, court, start). clubId keeps only divisions where that
+// club has an entry. Pages carry what the PDF and web page both draw.
+function poomsaeBoutList(db, competition, { clubId = null } = {}) {
+  const entries = listPoomsaeEntries(db, competition.id);
+  const divisions = poomsaeDivisions(entries, competition, loadPoomsaeBrackets(db, competition.id, entries), loadPoomsaeSettings(db, competition.id));
+  const dates = getEventDates(db, competition.id);
+  const dayLabel = (day) => (day && dates[day - 1] ? `${day} (${formatDay(dates[day - 1])})` : day ? String(day) : '-');
+  const pages = [];
+  divisions
+    .filter((d) => !clubId || d.entries.some((e) => e.club_id === clubId && e.status === 'approved'))
+    .forEach((d) => {
+      if (d.order.length > 0) {
+        pages.push({
+          kind: 'list', key: d.key, title: `POOMSAE ${d.title.toUpperCase()}`, day: d.listDay, court: d.listCourt, start: d.order[0].perform_time || '',
+          meta: [`Day: ${dayLabel(d.listDay)}`, `Poomsae court: ${d.listCourt || '-'}`, `Entries: ${d.order.length}`, `Starts: ${d.order[0].perform_time || '-'}`],
+          performers: d.order.map((e) => ({ id: e.id, name: e.names, club: e.club_name, clubId: e.club_id, time: e.perform_time })),
+          dayLabel: dayLabel(d.listDay),
+        });
+      }
+      if (d.bouts) {
+        const matches = d.bouts.filter((b) => !b.isBye).length;
+        const times = d.bouts.map((b) => b.time).filter(Boolean).sort();
+        pages.push({
+          kind: 'bracket', key: d.key, title: `POOMSAE ${d.title.toUpperCase()}${d.mode === 'cut' ? ' - FINAL ROUND' : ''}`, day: d.day, court: d.court, start: times[0] || '',
+          meta: [`Day: ${dayLabel(d.day)}`, `Poomsae court: ${d.court || '-'}`, `Entries: ${d.bouts.filter((b) => b.round === 1).reduce((n, b) => n + (b.blue ? 1 : 0) + (b.red ? 1 : 0), 0)}`, `Bouts: ${matches}`],
+          bouts: d.bouts, matches, layout: d.layout, dayLabel: dayLabel(d.day),
+        });
+      }
+    });
+  return pages.sort((a, b) => (a.day || 99) - (b.day || 99) || (a.court || 99) - (b.court || 99) || String(a.start).localeCompare(String(b.start)));
+}
+
+// Removes a division's performance list, while it has no scores.
+function clearPoomsaeOrder(db, competition, key) {
+  return db.transaction(() => {
+    const entries = listPoomsaeEntries(db, competition.id).filter((e) => poomsaeKey(e) === key);
+    if (!entries.some((e) => e.perform_order !== null)) return { ok: false, error: 'That division has no performance list.' };
+    if (entries.some((e) => e.score !== null)) return { ok: false, error: 'Clear the scores first.' };
+    entries.forEach((e) => db.prepare('UPDATE poomsae_entries SET perform_order = NULL, perform_time = NULL WHERE id = ?').run(e.id));
+    db.prepare('UPDATE poomsae_divisions SET list_seq = NULL, list_day = NULL, list_court = NULL WHERE competition_id = ? AND division_key = ?').run(competition.id, key);
+    applyPoomsaeSchedule(db, competition.id);
+    return { ok: true, title: poomsaeDivisionTitle(entries[0]) };
+  })();
 }
 
 // The poomsae courts and timings. Callers validate first. Reschedules every bracket.
@@ -1551,6 +1669,9 @@ module.exports = {
   savePoomsaeSchedule,
   savePoomsaeDivision,
   applyPoomsaeSchedule,
+  generatePoomsaeOrder,
+  clearPoomsaeOrder,
+  poomsaeBoutList,
   drawPoomsaeBracket,
   deletePoomsaeBracket,
   recordPoomsaeBout,

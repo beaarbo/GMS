@@ -130,20 +130,21 @@ function entryResult(entry, division) {
   return division.mode === 'cut' ? (scoreText ? `Score round: ${scoreText}` : 'Score round') : 'Waiting for the draw';
 }
 
-// Gives each drawn bracket a day and court and times its bouts. `divisions` are
-// in the order their brackets were drawn, each { key, day (pinned, or null),
-// bouts }. Each one goes after what is already on the court that's free soonest
-// on its day, so a later draw never moves times already given out. Unpinned
-// divisions take the day with the least poomsae so far. Numbering runs on per
-// court and day, as in kyorugi. Returns { places: key → { day, court },
-// slots: bout id → { number, start } } with start in minutes after midnight.
-function schedulePoomsae(divisions, { days, courts, start, minutes, rest }) {
+// Gives each bracket or performance list a day and court and times it. `units`
+// are in the order they were made, each { key, day (pinned, or null), and
+// either bouts (a bracket) or list (performer ids in order, one slot each) }.
+// Each goes after what is already on the court that's free soonest on its day,
+// so a later one never moves times already given out. Unpinned units take the
+// day with the least poomsae so far. Bout numbering runs on per court and day,
+// as in kyorugi; performers aren't numbered. Returns { places: key → { day,
+// court }, slots: id → { number, start } } with start in minutes after midnight.
+function schedulePoomsae(units, { days, courts, start, minutes, rest }) {
   const courtsAt = new Map();
   const dayLoad = Array(days + 1).fill(0);
   const places = new Map();
   const slots = new Map();
-  divisions.forEach((d) => {
-    const fights = d.bouts.filter((b) => !b.isBye).length;
+  units.forEach((d) => {
+    const fights = d.list ? d.list.length : d.bouts.filter((b) => !b.isBye).length;
     let day = Number.isInteger(d.day) && d.day >= 1 && d.day <= days ? d.day : null;
     if (!day) {
       day = 1;
@@ -157,6 +158,13 @@ function schedulePoomsae(divisions, { days, courts, start, minutes, rest }) {
     let court = 1;
     for (let c = 2; c <= courts; c += 1) if (at(c).clock < at(court).clock) court = c;
     const free = at(court);
+    if (d.list) {
+      d.list.forEach((id, i) => slots.set(id, { number: null, start: free.clock + i * minutes }));
+      courtsAt.set(`${day}:${court}`, { clock: free.clock + d.list.length * minutes, count: free.count });
+      dayLoad[day] += fights * minutes;
+      places.set(d.key, { day, court });
+      return;
+    }
     const times = scheduleCourt([d.bouts], { start: free.clock, minutes, rest });
     let end = free.clock;
     times.forEach((slot, id) => {

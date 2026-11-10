@@ -634,7 +634,7 @@ test('schedule migration clears old draws and keeps competitions', () => {
 
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM bouts').get().n, 0);
   assert.equal(db.prepare('SELECT bout_courts FROM competitions WHERE id = ?').get(compId).bout_courts, 2);
-  assert.equal(db.pragma('user_version', { simple: true }), 15);
+  assert.equal(db.pragma('user_version', { simple: true }), 16);
 });
 
 test('admin creates a club, a coach applies, and only approval unlocks athlete registration', async () => {
@@ -799,7 +799,7 @@ test('migrating old club accounts keeps logins and fighters and approves each co
   const clubColumns = db.pragma('table_info(clubs)').map((c) => c.name);
   assert.ok(!clubColumns.includes('coach_name'));
   assert.equal(db.pragma('foreign_key_check').length, 0);
-  assert.equal(db.pragma('user_version', { simple: true }), 15);
+  assert.equal(db.pragma('user_version', { simple: true }), 16);
 });
 
 test('a fighter alone in a division has no bout number', async () => {
@@ -973,7 +973,7 @@ test('migration turns a day count into consecutive dates', () => {
   const { id } = db.prepare('SELECT id FROM competitions').get();
   assert.deepEqual(getEventDates(db, id), ['2030-01-30', '2030-01-31', '2030-02-01']);
   assert.ok(!db.pragma('table_info(competitions)').some((c) => c.name === 'bout_days'));
-  assert.equal(db.pragma('user_version', { simple: true }), 15);
+  assert.equal(db.pragma('user_version', { simple: true }), 16);
 });
 
 const tokenIn = (message) => message.text.match(/reset-password\/([0-9a-f]{64})/)[1];
@@ -1218,7 +1218,7 @@ test('the results migration removes declared weights and keeps registrations', (
   db.pragma('user_version = 4');
   migrate(db);
   assert.ok(!db.pragma('table_info(registrations)').some((c) => c.name === 'declared_weight_kg'));
-  assert.equal(db.pragma('user_version', { simple: true }), 15);
+  assert.equal(db.pragma('user_version', { simple: true }), 16);
 });
 
 test('athletes need the right document before they can enter', async () => {
@@ -1835,7 +1835,7 @@ test('rebuilding the users table for officials keeps every linked row', async ()
   db.close();
 
   db = openDb(file);
-  assert.equal(db.pragma('user_version', { simple: true }), 15);
+  assert.equal(db.pragma('user_version', { simple: true }), 16);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM club_applications').get().n, 1);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM password_resets').get().n, 1);
   assert.equal(db.prepare('SELECT author_id FROM news_posts').get().author_id, coachId);
@@ -2319,7 +2319,7 @@ test('migrating to version 13 moves poomsae entries onto poomsae age groups', ()
   db.pragma('user_version = 12');
 
   migrate(db);
-  assert.equal(db.pragma('user_version', { simple: true }), 15);
+  assert.equal(db.pragma('user_version', { simple: true }), 16);
   const moved = db.prepare('SELECT a.name, e.status FROM poomsae_entries e JOIN poomsae_age_groups a ON a.id = e.age_group_id WHERE e.id = ?').get(entry);
   assert.deepEqual(moved, { name: 'U40', status: 'approved' });
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM poomsae_members').get().n, 1);
@@ -2375,7 +2375,9 @@ test('poomsae score round then bracket: the top entries are seeded in, and offic
   assert.match(mine, /Eve Reyes<\/strong><\/td>[\s\S]*?<td>Gold<\/td>/);
   assert.match(mine, /Ana Reyes<\/strong><\/td>[\s\S]*?<td>Silver<\/td>/);
   assert.match(mine, /Fay Reyes<\/strong><\/td>[\s\S]*?<td>Not in the top 2 \(3rd · 7.00\)<\/td>/);
-  assert.match(mine, /<svg class="bracket"/);
+  assert.doesNotMatch(mine, /<svg class="bracket"/, 'brackets wait for publishing');
+  await post(admin, `${review}/publish`, {}, review);
+  assert.match((await club.get(page)).text, /<svg class="bracket"/);
   assert.match((await admin.get(review)).text, /Poomsae medal standings/);
 
   // Results keep the bracket; undoing them lets the admin delete and redraw it.
@@ -2451,12 +2453,79 @@ test('poomsae divisions choose their own format and day, and brackets get courts
   await post(admin, `${review}/division`, { division: female, format: 'score', day: '1' }, review);
   assert.deepEqual(db.prepare('SELECT format, day FROM poomsae_divisions WHERE division_key = ?').get(female), { format: 'elimination', day: 1 });
   assert.equal(db.prepare('SELECT DISTINCT day FROM poomsae_bouts WHERE division_key = ?').get(female).day, 1);
+  await post(admin, `${review}/publish`, {}, review);
   const mine = (await club.get(page)).text;
-  assert.match(mine, /Day 1, Poomsae court 1<\/strong>, from 09:30/);
+  assert.match(mine, /Day 1 \([^)]+\), Poomsae court 1<\/strong>, from 09:30/);
 
   // Officials can't change the schedule.
   assert.ok(await createOfficialAccount(db, { full_name: 'Olive', email: 'olive@test.test', password: PASSWORD }));
   const official = await login(app, 'olive@test.test');
   assert.equal((await post(official, `${review}/schedule`, { courts: '1', start: '08:00', minutes: '5', rest: '0' }, review)).status, 403);
   assert.doesNotMatch((await official.get(review)).text, /Save schedule/);
+});
+
+test('ranked poomsae gets a random performance order with times, published to coaches and downloadable', async () => {
+  const { app, db, mailer } = await setup();
+  const compId = openCompetition(db, { name: 'Order Cup', events: 'poomsae' });
+  const club = await signUpClub(app, 'Tigers', 'tigers@test.test');
+  for (const first of ['Ana', 'Eve', 'Fay']) await addFighter(club, { first_name: first, gender: 'F', date_of_birth: JUNIOR_DOB, belt_rank: '3' });
+  for (const first of ['Ben', 'Cal']) await addFighter(club, { first_name: first, gender: 'M', date_of_birth: JUNIOR_DOB, belt_rank: '3' });
+  const ids = db.prepare('SELECT id FROM fighters ORDER BY id').all().map((r) => String(r.id));
+  const page = `/club/competitions/${compId}/poomsae`;
+  await post(club, `${page}/enter`, { event: 'individual', fighter_ids: ids }, page);
+  const admin = await login(app, 'admin@test.test');
+  const review = `/admin/competitions/${compId}/poomsae`;
+  await post(admin, `${review}/review`, { bulk: 'approve-pending' }, review);
+  const pdf = (agent, path) => agent.get(path).buffer(true).parse((res, callback) => {
+    const chunks = [];
+    res.on('data', (chunk) => chunks.push(chunk));
+    res.on('end', () => callback(null, Buffer.concat(chunks)));
+  });
+
+  // Lists wait until registration closes. Then one button orders every ranked division.
+  await post(admin, `${review}/order`, { division: 'all' }, review);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM poomsae_entries WHERE perform_order IS NOT NULL').get().n, 0);
+  db.prepare("UPDATE competitions SET status = 'closed' WHERE id = ?").run(compId);
+  assert.match((await admin.get(review)).text, /Make 2 performance lists/);
+  await post(admin, `${review}/order`, { division: 'all' }, review);
+  const lists = db.prepare('SELECT gender, perform_order, perform_time FROM poomsae_entries WHERE competition_id = ? ORDER BY perform_time').all(compId);
+  assert.deepEqual(lists.map((e) => e.perform_time), ['09:00', '09:05', '09:10', '09:15', '09:20'], 'one court, five minutes each, one list after the other');
+  ['M', 'F'].forEach((gender) => {
+    assert.deepEqual(lists.filter((e) => e.gender === gender).map((e) => e.perform_order), gender === 'M' ? [1, 2] : [1, 2, 3]);
+  });
+  assert.match((await admin.get(review)).text, /Performance order[\s\S]*?Poomsae court 1/);
+
+  // An entry in a list can't be rejected, and a scored list can't be redrawn or cleared.
+  const [first] = db.prepare("SELECT id, event, gender, age_group_id, belt_group_id FROM poomsae_entries WHERE gender = 'F' ORDER BY perform_order").all();
+  const key = [first.event, first.gender, first.age_group_id, first.belt_group_id].join('-');
+  await post(admin, `${review}/review`, { single: `rejected:${first.id}`, [`note_${first.id}`]: 'x' }, review);
+  assert.equal(db.prepare('SELECT status FROM poomsae_entries WHERE id = ?').get(first.id).status, 'approved');
+  await post(admin, `${review}/${first.id}/score`, { score: '8.2' }, review);
+  const before = db.prepare('SELECT id, perform_order FROM poomsae_entries WHERE gender = ? ORDER BY id').all('F');
+  await post(admin, `${review}/order`, { division: key }, review);
+  await post(admin, `${review}/clear-order`, { division: key }, review);
+  assert.deepEqual(db.prepare('SELECT id, perform_order FROM poomsae_entries WHERE gender = ? ORDER BY id').all('F'), before);
+
+  // The PDF has every list. Coaches see their divisions once published, and are emailed.
+  const all = await pdf(admin, `/admin/competitions/${compId}/poomsae.pdf`);
+  assert.equal(all.status, 200);
+  assert.equal(all.headers['content-type'], 'application/pdf');
+  assert.equal(all.body.subarray(0, 5).toString(), '%PDF-');
+  assert.equal((await pdf(club, `${page}.pdf`)).status, 404);
+  assert.doesNotMatch((await club.get(page)).text, /Performance order and brackets/);
+  await post(admin, `${review}/publish`, {}, review);
+  assert.ok(mailer.sent.some((m) => m.subject === 'Poomsae order published: Order Cup'));
+  const mine = (await club.get(page)).text;
+  assert.match(mine, /Performance order and brackets[\s\S]*?class="own-row"/);
+  assert.equal((await pdf(club, `${page}.pdf`)).status, 200);
+  await post(admin, `${review}/unpublish`, {}, review);
+  assert.equal((await pdf(club, `${page}.pdf`)).status, 404);
+
+  // An unscored list can be redrawn in place or cleared.
+  const boys = db.prepare("SELECT id, event, gender, age_group_id, belt_group_id FROM poomsae_entries WHERE gender = 'M'").get();
+  const boysKey = [boys.event, boys.gender, boys.age_group_id, boys.belt_group_id].join('-');
+  await post(admin, `${review}/clear-order`, { division: boysKey }, review);
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM poomsae_entries WHERE gender = 'M' AND perform_order IS NOT NULL").get().n, 0);
+  await post(admin, `/admin/competitions/${compId}/status`, { status: 'open' }, '/admin/competitions');
+  assert.equal(db.prepare('SELECT status FROM competitions WHERE id = ?').get(compId).status, 'closed', 'no reopening while lists exist');
 });

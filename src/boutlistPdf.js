@@ -25,7 +25,7 @@ function drawHeader(doc, { competition, dateLabel }, division) {
   doc.fontSize(10);
   doc.text(division.title, titleX, doc.y + 3, { width: titleWidth, align: 'center' });
 
-  const meta = [
+  const meta = division.meta || [
     `Day: ${division.dayLabel}`,
     `Court: ${division.court || '-'}`,
     `Participants: ${division.participants}`,
@@ -84,7 +84,34 @@ function drawBracket(doc, division) {
   }
 }
 
-// Pipes an A4 bout list into `stream`, with one page per division.
+// A poomsae performance order: number, name and club in a ruled table, with each
+// performer's start time. `division.performers` are { name, club, time } in order.
+function drawPerformers(doc, division) {
+  const left = 60;
+  const widths = [26, 250, 190, 50];
+  const rowHeight = 18;
+  let y = 120;
+  doc.lineWidth(0.8).strokeColor('#000000').fillColor(INK);
+  const row = (cells, bold) => {
+    if (y + rowHeight > 820) {
+      doc.addPage();
+      y = 30;
+    }
+    let x = left;
+    cells.forEach((cell, i) => {
+      doc.rect(x, y, widths[i], rowHeight).stroke();
+      doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(10);
+      oneLine(doc, String(cell), x + 4, y + 5, widths[i] - 8, { align: i === 0 || i === 3 ? 'right' : i === 2 ? 'center' : 'left' });
+      x += widths[i];
+    });
+    y += rowHeight;
+  };
+  row(['#', 'Name', 'Club', 'Time'], true);
+  division.performers.forEach((p, i) => row([i + 1, p.name, p.club, p.time || ''], false));
+}
+
+// Pipes an A4 bout list into `stream`, with one page per division. A division
+// with `performers` is a poomsae performance order instead of a bracket.
 function writeBoutListPdf(stream, { competition, divisions, dateLabel }) {
   const doc = new PDFDocument({
     size: 'A4',
@@ -97,7 +124,8 @@ function writeBoutListPdf(stream, { competition, divisions, dateLabel }) {
   divisions.forEach((division) => {
     doc.addPage();
     drawHeader(doc, { competition, dateLabel }, division);
-    drawBracket(doc, division);
+    if (division.performers) drawPerformers(doc, division);
+    else drawBracket(doc, division);
   });
   doc.end();
 }

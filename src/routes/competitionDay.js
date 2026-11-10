@@ -20,6 +20,9 @@ const {
   loadPoomsaeSettings,
   savePoomsaeSchedule,
   savePoomsaeDivision,
+  generatePoomsaeOrder,
+  clearPoomsaeOrder,
+  poomsaeBoutList,
   drawPoomsaeBracket,
   deletePoomsaeBracket,
   recordPoomsaeBout,
@@ -27,7 +30,8 @@ const {
   recordPoomsaeScore,
 } = require('../services');
 const { hasPoomsae, parseScore, formatScore, poomsaeDivisionTitle, poomsaeMedalTable, POOMSAE_FORMATS, MAX_CUT } = require('../poomsae');
-const { notifyPoomsaeDecisions } = require('../notifications');
+const { notifyPoomsaeDecisions, notifyPoomsaePublished } = require('../notifications');
+const { writeBoutListPdf } = require('../boutlistPdf');
 const { computeMedals } = require('../bracket');
 const { clean, requireRole, notFound } = require('./helpers');
 
@@ -335,7 +339,7 @@ router.post('/competitions/:id(\\d+)/poomsae/division', requireRole('admin'), (r
         result.day ? `day ${result.day}` : 'any day',
       ].filter(Boolean);
       req.logActivity('poomsae.division', `Set ${result.title} to ${parts.join(', ')}: ${competition.name}`, competition.id);
-      req.flash('success', `${result.title} saved.${result.kept ? ' Its format stays as it was, because it has scores or a bracket.' : ''}`);
+      req.flash('success', `${result.title} saved.${result.kept ? ' Its format stays as it was, because it has a performance list, scores or a bracket.' : ''}`);
     }
   }
   return res.redirect(poomsaePath(competition, null, key));
@@ -355,8 +359,67 @@ router.get('/competitions/:id(\\d+)/poomsae', (req, res) => {
     approved: entries.filter((e) => e.status === 'approved').length,
     closed: req.competition.status === 'closed',
     drawable: divisions.filter((d) => d.mode !== 'score' && !d.bouts && !d.drawProblem && d.pending === 0).length,
+    orderable: divisions.filter((d) => d.canOrder && d.order.length === 0).length,
+    hasPages: divisions.some((d) => d.order.length > 0 || d.bouts),
     days: getEventDates(db, req.competition.id).map((date, i) => [i + 1, `Day ${i + 1} · ${formatDay(date)}`]),
   });
+});
+
+// A random performance order for one ranked division or score round, or all that are ready.
+router.post('/competitions/:id(\\d+)/poomsae/order', requireRole('admin'), (req, res) => {
+  const { db } = req.app.locals;
+  const key = clean(req.body.division, 60);
+  const result = generatePoomsaeOrder(db, req.competition, key);
+  if (!result.ok) req.flash('error', result.error);
+  else {
+    result.titles.forEach((title) => req.logActivity('poomsae.order', `Drew the poomsae performance order for ${title}: ${req.competition.name}`, req.competition.id));
+    req.flash('success', `${result.titles.length} performance list${result.titles.length === 1 ? '' : 's'} made in a random order and timed.`);
+  }
+  return res.redirect(poomsaePath(req.competition, null, key === 'all' ? null : key));
+});
+
+router.post('/competitions/:id(\\d+)/poomsae/clear-order', requireRole('admin'), (req, res) => {
+  const key = clean(req.body.division, 60);
+  const result = clearPoomsaeOrder(req.app.locals.db, req.competition, key);
+  if (!result.ok) req.flash('error', result.error);
+  else {
+    req.logActivity('poomsae.order_cleared', `Cleared the poomsae performance order for ${result.title}: ${req.competition.name}`, req.competition.id);
+    req.flash('success', 'Performance list cleared.');
+  }
+  return res.redirect(poomsaePath(req.competition, null, key));
+});
+
+// Coaches see the performance lists and brackets once published, as with the kyorugi bout list.
+router.post('/competitions/:id(\\d+)/poomsae/publish', requireRole('admin'), (req, res) => {
+  const { db, notify } = req.app.locals;
+  if (poomsaeBoutList(db, req.competition).length === 0) {
+    req.flash('error', 'Make a performance list or draw a bracket first.');
+    return res.redirect(poomsaePath(req.competition));
+  }
+  db.prepare("UPDATE competitions SET poomsae_published_at = datetime('now') WHERE id = ?").run(req.competition.id);
+  notifyPoomsaePublished(notify, req.competition);
+  req.logActivity('poomsae.published', `Published the poomsae order and brackets for ${req.competition.name}`, req.competition.id);
+  req.flash('success', 'Poomsae order published. Coaches with entries have been emailed.');
+  return res.redirect(poomsaePath(req.competition));
+});
+
+router.post('/competitions/:id(\\d+)/poomsae/unpublish', requireRole('admin'), (req, res) => {
+  req.app.locals.db.prepare('UPDATE competitions SET poomsae_published_at = NULL WHERE id = ?').run(req.competition.id);
+  req.logActivity('poomsae.unpublished', `Hid the poomsae order and brackets for ${req.competition.name} from coaches`, req.competition.id);
+  req.flash('success', 'Poomsae order hidden from coaches.');
+  return res.redirect(poomsaePath(req.competition));
+});
+
+// Every performance list and bracket, one page each, in running order.
+router.get('/competitions/:id(\\d+)/poomsae.pdf', staff, (req, res) => {
+  const { db } = req.app.locals;
+  const competition = db.prepare('SELECT * FROM competitions WHERE id = ?').get(req.params.id);
+  if (!competition || !hasPoomsae(competition) || (req.user.role === 'official' && competition.status !== 'closed')) return notFound(res);
+  const pages = poomsaeBoutList(db, competition);
+  if (pages.length === 0) return notFound(res);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="poomsae-list-competition-${competition.id}.pdf"`);
+  return writeBoutListPdf(res, { competition, divisions: pages, dateLabel: formatEventDates(getEventDates(db, competition.id)) });
 });
 
 // Draws one division's bracket, or every division that's ready ("all").

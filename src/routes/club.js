@@ -20,6 +20,7 @@ const {
   poomsaeDivisions,
   loadPoomsaeBrackets,
   loadPoomsaeSettings,
+  poomsaeBoutList,
   REGISTRATION_SELECT,
 } = require('../services');
 const { POOMSAE_EVENTS, hasKyorugi, hasPoomsae, placeEntry, entryResult } = require('../poomsae');
@@ -451,12 +452,12 @@ router.get('/competitions/:id(\\d+)/poomsae', (req, res) => {
     }));
   const entries = listPoomsaeEntries(db, competition.id, { clubId: req.user.club_id });
   // Places need every club's scores, but only this club's entries are listed. Like
-  // a published kyorugi bout list, brackets show who the club's entries face.
+  // the kyorugi bout list, the orders and brackets of the club's divisions show
+  // once the admin publishes them.
   const everyone = listPoomsaeEntries(db, competition.id);
   const divisions = poomsaeDivisions(everyone, competition, loadPoomsaeBrackets(db, competition.id, everyone), loadPoomsaeSettings(db, competition.id));
   const divisionOf = new Map(divisions.flatMap((d) => d.entries.map((e) => [e.id, d])));
   const ranked = new Map(divisions.flatMap((d) => d.entries).map((e) => [e.id, e]));
-  const mine = new Set(entries.map((e) => e.id));
   const inEvent = (event) => new Set(entries.filter((e) => e.event === event && e.status !== 'rejected').flatMap((e) => e.athletes.map((a) => a.id)));
   return res.render('club/poomsae', {
     title: `${competition.name}: poomsae`,
@@ -470,9 +471,20 @@ router.get('/competitions/:id(\\d+)/poomsae', (req, res) => {
       const division = divisionOf.get(e.id);
       return { ...e, result: division ? entryResult(ranked.get(e.id), division) : '' };
     }),
-    brackets: divisions.filter((d) => d.bouts && d.entries.some((e) => mine.has(e.id))),
+    pages: competition.poomsae_published_at ? poomsaeBoutList(db, competition, { clubId: req.user.club_id }) : [],
     open: isRegistrationOpen(competition),
   });
+});
+
+router.get('/competitions/:id(\\d+)/poomsae.pdf', (req, res) => {
+  const { db } = req.app.locals;
+  const competition = poomsaeCompetition(req);
+  if (!competition || !competition.poomsae_published_at) return notFound(res);
+  const pages = poomsaeBoutList(db, competition, { clubId: req.user.club_id });
+  if (pages.length === 0) return notFound(res);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="poomsae-list-competition-${competition.id}.pdf"`);
+  return writeBoutListPdf(res, { competition, divisions: pages, dateLabel: formatEventDates(getEventDates(db, competition.id)) });
 });
 
 router.post('/competitions/:id(\\d+)/poomsae/enter', (req, res) => {

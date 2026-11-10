@@ -72,6 +72,8 @@ CREATE TABLE IF NOT EXISTS competitions (
   poomsae_start TEXT NOT NULL DEFAULT '09:00',
   poomsae_minutes INTEGER NOT NULL DEFAULT 5,
   poomsae_rest_minutes INTEGER NOT NULL DEFAULT 0,
+  -- When the poomsae performance lists and brackets were shown to coaches.
+  poomsae_published_at TEXT,
   bouts_published_at TEXT,
   reminder_sent_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -277,7 +279,10 @@ CREATE TABLE IF NOT EXISTS poomsae_entries (
   reviewed_at TEXT,
   score REAL,
   scored_at TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  -- Place in its division's random performance order, and when it performs.
+  perform_order INTEGER,
+  perform_time TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_poomsae_entries_competition ON poomsae_entries(competition_id);
 
@@ -319,6 +324,11 @@ CREATE TABLE IF NOT EXISTS poomsae_divisions (
   format TEXT CHECK (format IN ('score', 'elimination', 'cut')),
   cut INTEGER,
   day INTEGER,
+  -- Scheduling: the order lists and brackets were made in, and where the list runs.
+  list_seq INTEGER,
+  bracket_seq INTEGER,
+  list_day INTEGER,
+  list_court INTEGER,
   PRIMARY KEY (competition_id, division_key)
 );
 
@@ -619,6 +629,18 @@ function migratePoomsaeSchedule(db) {
   })();
 }
 
+// Version 16: random performance orders for ranked poomsae and score rounds,
+// timed on the poomsae courts with the brackets, and published to coaches.
+function migratePoomsaeOrder(db) {
+  db.transaction(() => {
+    addColumnIfMissing(db, 'competitions', 'poomsae_published_at', 'TEXT');
+    addColumnIfMissing(db, 'poomsae_entries', 'perform_order', 'INTEGER');
+    addColumnIfMissing(db, 'poomsae_entries', 'perform_time', 'TEXT');
+    ['list_seq', 'bracket_seq', 'list_day', 'list_court'].forEach((column) => addColumnIfMissing(db, 'poomsae_divisions', column, 'INTEGER'));
+    db.pragma('user_version = 16');
+  })();
+}
+
 function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 1) migrateBelts(db);
   if (db.pragma('user_version', { simple: true }) < 2) migrateSchedule(db);
@@ -635,6 +657,7 @@ function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 13) migratePoomsaeAges(db);
   if (db.pragma('user_version', { simple: true }) < 14) migratePoomsaeFormat(db);
   if (db.pragma('user_version', { simple: true }) < 15) migratePoomsaeSchedule(db);
+  if (db.pragma('user_version', { simple: true }) < 16) migratePoomsaeOrder(db);
 }
 
 // Safe on old databases: only tables that don't exist yet are created.

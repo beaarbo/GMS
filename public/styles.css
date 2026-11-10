@@ -372,6 +372,8 @@ td.nowrap { white-space: nowrap; }
 .bracket .number { font-size: 10px; font-weight: 700; }
 .bracket .winner { font-size: 8px; font-weight: 700; fill: var(--ok); }
 .bracket .own { fill: var(--chung); }
+.own-row td { background: var(--chung-soft, rgba(37, 99, 235, 0.08)); }
+.own-row td strong { color: var(--chung); }
 .medal-count { text-align: center; font-variant-numeric: tabular-nums; }
 .result-row-done td { background: var(--ok-soft); }
 tbody tr.result-row-done:hover td { background: var(--ok-soft); }
