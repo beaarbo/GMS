@@ -28,6 +28,21 @@
   <p class="sub">Enter each final score, the judges' average, such as 7.85. Equal scores share a place. Clear a score to undo it.</p>
 <% } %>
 
+<% if (isAdmin) { %>
+  <section class="card">
+    <h2>Poomsae schedule</h2>
+    <p class="sub">Brackets run on their own courts, called Poomsae court 1 and up. Each bracket is timed when it's drawn, after the brackets already on the court that's free soonest, so times already given out stay put. Saving here times every bracket again.</p>
+    <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/schedule" class="filters">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <div><label for="p-courts">Courts</label><input id="p-courts" name="courts" type="number" min="1" max="20" value="<%= competition.poomsae_courts %>" required></div>
+      <div><label for="p-start">Start time</label><input id="p-start" name="start" type="time" value="<%= competition.poomsae_start %>" required></div>
+      <div><label for="p-minutes">Minutes per bout</label><input id="p-minutes" name="minutes" type="number" min="1" max="60" value="<%= competition.poomsae_minutes %>" required></div>
+      <div><label for="p-rest">Rest between bouts (min)</label><input id="p-rest" name="rest" type="number" min="0" max="120" value="<%= competition.poomsae_rest_minutes %>" required></div>
+      <div class="actions"><button class="btn secondary" type="submit">Save schedule</button></div>
+    </form>
+  </section>
+<% } %>
+
 <% if (divisions.length === 0) { %>
   <section class="card"><p class="empty">No poomsae entries yet.</p></section>
 <% } %>
@@ -43,7 +58,31 @@
       <% if (d.mode === 'score') { %>ranked by score
       <% } else if (d.mode === 'cut') { %>score round: the top <%= d.cut %> go into the bracket
       <% } else { %>single elimination<% } %>
+      <% if (d.court) { %> · <strong><%= (days.find(([n]) => n === d.day) || [, `Day ${d.day}`])[1] %>, Poomsae court <%= d.court %></strong><% } %>
     </p>
+    <% if (isAdmin) { %>
+      <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/division" class="division-edit-row">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <input type="hidden" name="division" value="<%= d.key %>">
+        <label>Format
+          <select name="format" <%= d.locked ? 'disabled' : '' %>>
+            <option value="">Competition's: <%= POOMSAE_FORMATS[competition.poomsae_format] %></option>
+            <% Object.entries(POOMSAE_FORMATS).forEach(([value, label]) => { %><option value="<%= value %>" <%= d.ownFormat && d.format === value ? 'selected' : '' %>><%= label %></option><% }) %>
+          </select>
+        </label>
+        <label>Top into the bracket
+          <input name="cut" type="number" min="2" max="<%= MAX_CUT %>" value="<%= d.ownCut ?? '' %>" placeholder="<%= competition.poomsae_cut %>" <%= d.locked ? 'disabled' : '' %>>
+        </label>
+        <label>Day
+          <select name="day">
+            <option value="">Any day</option>
+            <% days.forEach(([value, label]) => { %><option value="<%= value %>" <%= d.pinnedDay === value ? 'selected' : '' %>><%= label %></option><% }) %>
+          </select>
+        </label>
+        <button class="btn secondary small" type="submit">Save division</button>
+        <% if (d.locked) { %><span class="hint">The format is fixed now that this division has scores or a bracket.</span><% } %>
+      </form>
+    <% } %>
     <% const medalLine = ['gold', 'silver', 'bronze'].filter((m) => d.medalists[m].length > 0); %>
     <% if (medalLine.length > 0) { %>
       <p class="stats"><% medalLine.forEach((m) => { %><span><strong><%= m[0].toUpperCase() + m.slice(1) %>:</strong> <%= d.medalists[m].map((id) => names.get(id)).join(', ') %></span><% }) %></p>
@@ -99,11 +138,12 @@
         <% if (played.length > 0) { %>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>Bout</th><th>Blue</th><th>Red</th><th></th></tr></thead>
+              <thead><tr><th>Bout</th><th>When</th><th>Blue</th><th>Red</th><th></th></tr></thead>
               <tbody>
                 <% played.forEach((b) => { %>
                   <tr class="<%= b.winner ? 'result-row-done' : '' %>">
                     <td class="num"><strong><%= b.number %></strong></td>
+                    <td class="nowrap"><%= b.time %></td>
                     <% [['blue', b.blue, b.bluePlaceholder], ['red', b.red, b.redPlaceholder]].forEach(([color, side, placeholder]) => { %>
                       <td>
                         <% if (!side) { %><span class="hint"><%= placeholder %></span>

@@ -17,13 +17,16 @@ const {
   getPoomsaeEntry,
   poomsaeDivisions,
   loadPoomsaeBrackets,
+  loadPoomsaeSettings,
+  savePoomsaeSchedule,
+  savePoomsaeDivision,
   drawPoomsaeBracket,
   deletePoomsaeBracket,
   recordPoomsaeBout,
   reviewPoomsae,
   recordPoomsaeScore,
 } = require('../services');
-const { hasPoomsae, parseScore, formatScore, poomsaeDivisionTitle, poomsaeMedalTable } = require('../poomsae');
+const { hasPoomsae, parseScore, formatScore, poomsaeDivisionTitle, poomsaeMedalTable, POOMSAE_FORMATS, MAX_CUT } = require('../poomsae');
 const { notifyPoomsaeDecisions } = require('../notifications');
 const { computeMedals } = require('../bracket');
 const { clean, requireRole, notFound } = require('./helpers');
@@ -273,8 +276,70 @@ const poomsaePath = (competition, entryId = null, divisionKey = null) =>
 
 function poomsaeOverview(db, competition) {
   const entries = listPoomsaeEntries(db, competition.id);
-  return { entries, divisions: poomsaeDivisions(entries, competition, loadPoomsaeBrackets(db, competition.id, entries)) };
+  return {
+    entries,
+    divisions: poomsaeDivisions(entries, competition, loadPoomsaeBrackets(db, competition.id, entries), loadPoomsaeSettings(db, competition.id)),
+  };
 }
+
+// The poomsae courts and timings, then every bracket is timed again.
+router.post('/competitions/:id(\\d+)/poomsae/schedule', requireRole('admin'), (req, res) => {
+  const { db } = req.app.locals;
+  const number = (value) => (/^\d{1,3}$/.test(clean(value, 3)) ? Number(clean(value, 3)) : NaN);
+  const values = {
+    courts: number(req.body.courts),
+    start: clean(req.body.start, 5),
+    minutes: number(req.body.minutes),
+    rest: number(req.body.rest),
+  };
+  const errors = [];
+  if (!(values.courts >= 1 && values.courts <= 20)) errors.push('Enter from 1 to 20 poomsae courts.');
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(values.start)) errors.push('Enter a valid start time.');
+  if (!(values.minutes >= 1 && values.minutes <= 60)) errors.push('Enter from 1 to 60 minutes per bout.');
+  if (!(values.rest >= 0 && values.rest <= 120)) errors.push('Enter a rest from 0 to 120 minutes.');
+  if (errors.length > 0) errors.forEach((error) => req.flash('error', error));
+  else {
+    savePoomsaeSchedule(db, req.competition.id, values);
+    req.logActivity(
+      'poomsae.schedule',
+      `Set the poomsae schedule for ${req.competition.name}: ${values.courts} court${values.courts === 1 ? '' : 's'} from ${values.start}, ${values.minutes} minutes a bout, ${values.rest} minutes rest`,
+      req.competition.id
+    );
+    req.flash('success', 'Poomsae schedule saved. Every bracket has been timed again.');
+  }
+  return res.redirect(poomsaePath(req.competition));
+});
+
+// One division's own format, cut and day. Blank keeps the competition's choice.
+router.post('/competitions/:id(\\d+)/poomsae/division', requireRole('admin'), (req, res) => {
+  const { db } = req.app.locals;
+  const competition = req.competition;
+  const key = clean(req.body.division, 60);
+  const format = POOMSAE_FORMATS[req.body.format] ? req.body.format : null;
+  const cutText = clean(req.body.cut, 3);
+  const cut = cutText === '' ? null : Number(cutText);
+  const dayText = clean(req.body.day, 2);
+  const day = dayText === '' ? null : Number(dayText);
+  const days = getEventDates(db, competition.id).length;
+  if (cut !== null && !(Number.isInteger(cut) && cut >= 2 && cut <= MAX_CUT)) {
+    req.flash('error', `Enter a cut from 2 to ${MAX_CUT}, or leave it blank for the competition's.`);
+  } else if (day !== null && !(Number.isInteger(day) && day >= 1 && day <= days)) {
+    req.flash('error', 'Choose one of the competition days.');
+  } else {
+    const result = savePoomsaeDivision(db, competition, key, { format, cut, day });
+    if (!result.ok) req.flash('error', result.error);
+    else {
+      const parts = [
+        result.format ? POOMSAE_FORMATS[result.format].toLowerCase() : 'the competition format',
+        result.cut ? `top ${result.cut}` : null,
+        result.day ? `day ${result.day}` : 'any day',
+      ].filter(Boolean);
+      req.logActivity('poomsae.division', `Set ${result.title} to ${parts.join(', ')}: ${competition.name}`, competition.id);
+      req.flash('success', `${result.title} saved.${result.kept ? ' Its format stays as it was, because it has scores or a bracket.' : ''}`);
+    }
+  }
+  return res.redirect(poomsaePath(competition, null, key));
+});
 
 router.get('/competitions/:id(\\d+)/poomsae', (req, res) => {
   const { db } = req.app.locals;
@@ -290,6 +355,7 @@ router.get('/competitions/:id(\\d+)/poomsae', (req, res) => {
     approved: entries.filter((e) => e.status === 'approved').length,
     closed: req.competition.status === 'closed',
     drawable: divisions.filter((d) => d.mode !== 'score' && !d.bouts && !d.drawProblem && d.pending === 0).length,
+    days: getEventDates(db, req.competition.id).map((date, i) => [i + 1, `Day ${i + 1} · ${formatDay(date)}`]),
   });
 });
 

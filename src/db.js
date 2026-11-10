@@ -67,6 +67,11 @@ CREATE TABLE IF NOT EXISTS competitions (
   -- How poomsae divisions are decided, and how many go from a score round into the bracket.
   poomsae_format TEXT NOT NULL DEFAULT 'score' CHECK (poomsae_format IN ('score', 'elimination', 'cut')),
   poomsae_cut INTEGER NOT NULL DEFAULT 16,
+  -- Poomsae brackets run on their own courts, numbered "Poomsae court 1" and up.
+  poomsae_courts INTEGER NOT NULL DEFAULT 1,
+  poomsae_start TEXT NOT NULL DEFAULT '09:00',
+  poomsae_minutes INTEGER NOT NULL DEFAULT 5,
+  poomsae_rest_minutes INTEGER NOT NULL DEFAULT 0,
   bouts_published_at TEXT,
   reminder_sent_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -299,9 +304,23 @@ CREATE TABLE IF NOT EXISTS poomsae_bouts (
   is_bye INTEGER NOT NULL DEFAULT 0,
   blue_seed INTEGER,
   red_seed INTEGER,
-  winner_entry_id INTEGER REFERENCES poomsae_entries(id)
+  winner_entry_id INTEGER REFERENCES poomsae_entries(id),
+  day INTEGER,
+  court INTEGER,
+  start_time TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_poomsae_bouts_division ON poomsae_bouts(competition_id, division_key);
+
+-- A poomsae division's own choices. NULL keeps the competition's format and cut,
+-- and an automatic day.
+CREATE TABLE IF NOT EXISTS poomsae_divisions (
+  competition_id INTEGER NOT NULL REFERENCES competitions(id) ON DELETE CASCADE,
+  division_key TEXT NOT NULL,
+  format TEXT CHECK (format IN ('score', 'elimination', 'cut')),
+  cut INTEGER,
+  day INTEGER,
+  PRIMARY KEY (competition_id, division_key)
+);
 
 CREATE TABLE IF NOT EXISTS sessions (
   sid TEXT PRIMARY KEY,
@@ -583,6 +602,23 @@ function migratePoomsaeFormat(db) {
   })();
 }
 
+// Version 15: poomsae brackets get a day, court and time, and each division can
+// choose its own format, cut and day. Brackets drawn before have no times yet;
+// the admin's next draw or schedule save gives them one.
+function migratePoomsaeSchedule(db) {
+  db.transaction(() => {
+    addColumnIfMissing(db, 'competitions', 'poomsae_courts', 'INTEGER NOT NULL DEFAULT 1');
+    addColumnIfMissing(db, 'competitions', 'poomsae_start', "TEXT NOT NULL DEFAULT '09:00'");
+    addColumnIfMissing(db, 'competitions', 'poomsae_minutes', 'INTEGER NOT NULL DEFAULT 5');
+    addColumnIfMissing(db, 'competitions', 'poomsae_rest_minutes', 'INTEGER NOT NULL DEFAULT 0');
+    ['day INTEGER', 'court INTEGER', 'start_time TEXT'].forEach((column) => {
+      const [name, type] = column.split(' ');
+      addColumnIfMissing(db, 'poomsae_bouts', name, type);
+    });
+    db.pragma('user_version = 15');
+  })();
+}
+
 function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 1) migrateBelts(db);
   if (db.pragma('user_version', { simple: true }) < 2) migrateSchedule(db);
@@ -598,6 +634,7 @@ function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 12) migrateEvents(db);
   if (db.pragma('user_version', { simple: true }) < 13) migratePoomsaeAges(db);
   if (db.pragma('user_version', { simple: true }) < 14) migratePoomsaeFormat(db);
+  if (db.pragma('user_version', { simple: true }) < 15) migratePoomsaeSchedule(db);
 }
 
 // Safe on old databases: only tables that don't exist yet are created.

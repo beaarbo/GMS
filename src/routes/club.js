@@ -19,6 +19,7 @@ const {
   withdrawPoomsae,
   poomsaeDivisions,
   loadPoomsaeBrackets,
+  loadPoomsaeSettings,
   REGISTRATION_SELECT,
 } = require('../services');
 const { POOMSAE_EVENTS, hasKyorugi, hasPoomsae, placeEntry, entryResult } = require('../poomsae');
@@ -452,7 +453,7 @@ router.get('/competitions/:id(\\d+)/poomsae', (req, res) => {
   // Places need every club's scores, but only this club's entries are listed. Like
   // a published kyorugi bout list, brackets show who the club's entries face.
   const everyone = listPoomsaeEntries(db, competition.id);
-  const divisions = poomsaeDivisions(everyone, competition, loadPoomsaeBrackets(db, competition.id, everyone));
+  const divisions = poomsaeDivisions(everyone, competition, loadPoomsaeBrackets(db, competition.id, everyone), loadPoomsaeSettings(db, competition.id));
   const divisionOf = new Map(divisions.flatMap((d) => d.entries.map((e) => [e.id, d])));
   const ranked = new Map(divisions.flatMap((d) => d.entries).map((e) => [e.id, e]));
   const mine = new Set(entries.map((e) => e.id));

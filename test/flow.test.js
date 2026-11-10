@@ -634,7 +634,7 @@ test('schedule migration clears old draws and keeps competitions', () => {
 
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM bouts').get().n, 0);
   assert.equal(db.prepare('SELECT bout_courts FROM competitions WHERE id = ?').get(compId).bout_courts, 2);
-  assert.equal(db.pragma('user_version', { simple: true }), 14);
+  assert.equal(db.pragma('user_version', { simple: true }), 15);
 });
 
 test('admin creates a club, a coach applies, and only approval unlocks athlete registration', async () => {
@@ -799,7 +799,7 @@ test('migrating old club accounts keeps logins and fighters and approves each co
   const clubColumns = db.pragma('table_info(clubs)').map((c) => c.name);
   assert.ok(!clubColumns.includes('coach_name'));
   assert.equal(db.pragma('foreign_key_check').length, 0);
-  assert.equal(db.pragma('user_version', { simple: true }), 14);
+  assert.equal(db.pragma('user_version', { simple: true }), 15);
 });
 
 test('a fighter alone in a division has no bout number', async () => {
@@ -973,7 +973,7 @@ test('migration turns a day count into consecutive dates', () => {
   const { id } = db.prepare('SELECT id FROM competitions').get();
   assert.deepEqual(getEventDates(db, id), ['2030-01-30', '2030-01-31', '2030-02-01']);
   assert.ok(!db.pragma('table_info(competitions)').some((c) => c.name === 'bout_days'));
-  assert.equal(db.pragma('user_version', { simple: true }), 14);
+  assert.equal(db.pragma('user_version', { simple: true }), 15);
 });
 
 const tokenIn = (message) => message.text.match(/reset-password\/([0-9a-f]{64})/)[1];
@@ -1218,7 +1218,7 @@ test('the results migration removes declared weights and keeps registrations', (
   db.pragma('user_version = 4');
   migrate(db);
   assert.ok(!db.pragma('table_info(registrations)').some((c) => c.name === 'declared_weight_kg'));
-  assert.equal(db.pragma('user_version', { simple: true }), 14);
+  assert.equal(db.pragma('user_version', { simple: true }), 15);
 });
 
 test('athletes need the right document before they can enter', async () => {
@@ -1835,7 +1835,7 @@ test('rebuilding the users table for officials keeps every linked row', async ()
   db.close();
 
   db = openDb(file);
-  assert.equal(db.pragma('user_version', { simple: true }), 14);
+  assert.equal(db.pragma('user_version', { simple: true }), 15);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM club_applications').get().n, 1);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM password_resets').get().n, 1);
   assert.equal(db.prepare('SELECT author_id FROM news_posts').get().author_id, coachId);
@@ -2319,7 +2319,7 @@ test('migrating to version 13 moves poomsae entries onto poomsae age groups', ()
   db.pragma('user_version = 12');
 
   migrate(db);
-  assert.equal(db.pragma('user_version', { simple: true }), 14);
+  assert.equal(db.pragma('user_version', { simple: true }), 15);
   const moved = db.prepare('SELECT a.name, e.status FROM poomsae_entries e JOIN poomsae_age_groups a ON a.id = e.age_group_id WHERE e.id = ?').get(entry);
   assert.deepEqual(moved, { name: 'U40', status: 'approved' });
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM poomsae_members').get().n, 1);
@@ -2411,4 +2411,52 @@ test('poomsae single elimination draws straight away, with byes and no scores', 
   assert.deepEqual([bouts.length, bouts.filter((b) => b.is_bye).length, bouts.filter((b) => b.bout_number).length], [3, 1, 2], 'three entries: one bye, two bouts');
   assert.match((await admin.get(review)).text, /<svg class="bracket"/);
   assert.match((await request(app).get(`/competitions/${compId}`)).text, /single-elimination bracket/);
+});
+
+test('poomsae divisions choose their own format and day, and brackets get courts and times', async () => {
+  const { app, db } = await setup();
+  const compId = openCompetition(db, { name: 'Mixed Cup', events: 'poomsae', event_date: `${EVENT_YEAR}-12-01` });
+  saveEventDates(db, compId, [`${EVENT_YEAR}-12-01`, `${EVENT_YEAR}-12-02`]);
+  const club = await signUpClub(app, 'Tigers', 'tigers@test.test');
+  const girls = [];
+  for (const first of ['Ana', 'Eve', 'Fay']) girls.push(await addFighter(club, { first_name: first, gender: 'F', date_of_birth: JUNIOR_DOB, belt_rank: '3' }));
+  const boys = [];
+  for (const first of ['Ben', 'Cal']) boys.push(await addFighter(club, { first_name: first, gender: 'M', date_of_birth: JUNIOR_DOB, belt_rank: '3' }));
+  const page = `/club/competitions/${compId}/poomsae`;
+  await post(club, `${page}/enter`, { event: 'individual', fighter_ids: [...girls, ...boys].map(String) }, page);
+  const admin = await login(app, 'admin@test.test');
+  const review = `/admin/competitions/${compId}/poomsae`;
+  await post(admin, `${review}/review`, { bulk: 'approve-pending' }, review);
+  db.prepare("UPDATE competitions SET status = 'closed' WHERE id = ?").run(compId);
+  const keyOf = (gender) => {
+    const e = db.prepare('SELECT event, gender, age_group_id, belt_group_id FROM poomsae_entries WHERE competition_id = ? AND gender = ?').get(compId, gender);
+    return [e.event, e.gender, e.age_group_id, e.belt_group_id].join('-');
+  };
+  const [female, male] = [keyOf('F'), keyOf('M')];
+
+  // The competition ranks by score; the girls' division switches to single elimination on day 2.
+  await post(admin, `${review}/schedule`, { courts: '2', start: '13:00', minutes: '6', rest: '0' }, review);
+  await post(admin, `${review}/division`, { division: female, format: 'elimination', cut: '', day: '2' }, review);
+  const text = (await admin.get(review)).text;
+  assert.match(text, new RegExp(`id="division-${female}".*?single elimination`, 's'));
+  assert.match(text, new RegExp(`id="division-${male}".*?ranked by score`, 's'));
+  await post(admin, `${review}/draw`, { division: 'all' }, review);
+  const bouts = db.prepare('SELECT * FROM poomsae_bouts WHERE competition_id = ? AND is_bye = 0 ORDER BY bout_number').all(compId);
+  assert.deepEqual(bouts.map((b) => [b.day, b.court, b.bout_number, b.start_time]), [[2, 1, 1, '13:00'], [2, 1, 2, '13:06']], 'only the girls are drawn, on day 2 from 13:00');
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM poomsae_bouts WHERE division_key = ?').get(male).n, 0, 'the boys stay ranked by score');
+
+  // Schedule changes retime the bracket; the format is fixed once drawn, the day isn't.
+  await post(admin, `${review}/schedule`, { courts: '2', start: '09:30', minutes: '5', rest: '0' }, review);
+  assert.equal(db.prepare('SELECT start_time FROM poomsae_bouts WHERE competition_id = ? AND bout_number = 1').get(compId).start_time, '09:30');
+  await post(admin, `${review}/division`, { division: female, format: 'score', day: '1' }, review);
+  assert.deepEqual(db.prepare('SELECT format, day FROM poomsae_divisions WHERE division_key = ?').get(female), { format: 'elimination', day: 1 });
+  assert.equal(db.prepare('SELECT DISTINCT day FROM poomsae_bouts WHERE division_key = ?').get(female).day, 1);
+  const mine = (await club.get(page)).text;
+  assert.match(mine, /Day 1, Poomsae court 1<\/strong>, from 09:30/);
+
+  // Officials can't change the schedule.
+  assert.ok(await createOfficialAccount(db, { full_name: 'Olive', email: 'olive@test.test', password: PASSWORD }));
+  const official = await login(app, 'olive@test.test');
+  assert.equal((await post(official, `${review}/schedule`, { courts: '1', start: '08:00', minutes: '5', rest: '0' }, review)).status, 403);
+  assert.doesNotMatch((await official.get(review)).text, /Save schedule/);
 });

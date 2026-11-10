@@ -85,3 +85,29 @@ test('ranked divisions give medals by place, and brackets by the final and semif
   assert.equal(entryResult({ id: 3, status: 'approved', score: 8, place: 1 }, division), 'Gold');
   assert.equal(entryResult({ id: 9, status: 'approved', score: 5, place: 9 }, division), 'Not in the top 2 (9th · 5.00)');
 });
+
+const { schedulePoomsae } = require('../src/poomsae');
+
+test('brackets are timed in draw order on the court free soonest, keeping each entry\'s rest', () => {
+  // A bracket of four: two semifinals, then the final. A bracket of two: one bout.
+  const four = (key, base) => ({ key, day: null, bouts: [
+    { id: base + 1, round: 1, position: 0, isBye: false },
+    { id: base + 2, round: 1, position: 1, isBye: false },
+    { id: base + 3, round: 2, position: 0, isBye: false },
+  ] });
+  const two = (key, id) => ({ key, day: null, bouts: [{ id, round: 1, position: 0, isBye: false }] });
+  const options = { days: 2, courts: 2, start: 540, minutes: 5, rest: 10 };
+  const { places, slots } = schedulePoomsae([four('a', 0), two('b', 10), two('c', 20)], options);
+  assert.deepEqual(places.get('a'), { day: 1, court: 1 });
+  assert.deepEqual([1, 2, 3].map((id) => slots.get(id)), [{ number: 1, start: 540 }, { number: 2, start: 545 }, { number: 3, start: 560 }], 'the final waits for rest');
+  assert.deepEqual(places.get('b'), { day: 2, court: 1 }, 'the day with less poomsae');
+  assert.deepEqual(places.get('c'), { day: 2, court: 2 }, 'the court free soonest');
+
+  // Drawing another bracket later never moves the ones already timed.
+  const later = schedulePoomsae([four('a', 0), two('b', 10), two('c', 20), four('d', 30)], options);
+  [1, 2, 3, 11, 21].forEach((id) => assert.deepEqual(later.slots.get(id), slots.get(id)));
+
+  // A pinned day is kept, and a lone entry gets a day but no court.
+  const pinned = schedulePoomsae([{ ...two('e', 40), day: 2 }, { key: 'f', day: null, bouts: [{ id: 50, round: 1, position: 0, isBye: true }] }], options);
+  assert.deepEqual([pinned.places.get('e'), pinned.places.get('f')], [{ day: 2, court: 1 }, { day: 1, court: null }]);
+});

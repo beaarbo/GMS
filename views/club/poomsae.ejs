@@ -117,7 +117,7 @@
 <% brackets.forEach((division) => { %>
   <section class="card">
     <h2><%= division.title %></h2>
-    <p class="sub">Single elimination bracket. Your club's entries are highlighted.</p>
+    <p class="sub">Single elimination<% if (division.court) { %> · <strong>Day <%= division.day %>, Poomsae court <%= division.court %></strong>, from <%= division.bouts.filter((b) => b.time).map((b) => b.time).sort()[0] %><% } %>. Bout numbers and start times are on the bracket. Your club's entries are highlighted.</p>
     <%- include('../partials/bracket', { division, highlightClubId: user.club_id }) %>
   </section>
 <% }) %>

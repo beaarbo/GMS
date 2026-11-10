@@ -2,7 +2,7 @@
 // gender + age group + belt group; there are no weight classes.
 
 const { competitionAge, findAgeGroup, findBeltGroup, beltName } = require('./divisions');
-const { divisionMedalists } = require('./bracket');
+const { divisionMedalists, scheduleCourt } = require('./bracket');
 
 const EVENT_TYPES = { kyorugi: 'Kyorugi', poomsae: 'Poomsae', both: 'Kyorugi and poomsae' };
 
@@ -130,6 +130,46 @@ function entryResult(entry, division) {
   return division.mode === 'cut' ? (scoreText ? `Score round: ${scoreText}` : 'Score round') : 'Waiting for the draw';
 }
 
+// Gives each drawn bracket a day and court and times its bouts. `divisions` are
+// in the order their brackets were drawn, each { key, day (pinned, or null),
+// bouts }. Each one goes after what is already on the court that's free soonest
+// on its day, so a later draw never moves times already given out. Unpinned
+// divisions take the day with the least poomsae so far. Numbering runs on per
+// court and day, as in kyorugi. Returns { places: key → { day, court },
+// slots: bout id → { number, start } } with start in minutes after midnight.
+function schedulePoomsae(divisions, { days, courts, start, minutes, rest }) {
+  const courtsAt = new Map();
+  const dayLoad = Array(days + 1).fill(0);
+  const places = new Map();
+  const slots = new Map();
+  divisions.forEach((d) => {
+    const fights = d.bouts.filter((b) => !b.isBye).length;
+    let day = Number.isInteger(d.day) && d.day >= 1 && d.day <= days ? d.day : null;
+    if (!day) {
+      day = 1;
+      for (let i = 2; i <= days; i += 1) if (dayLoad[i] < dayLoad[day]) day = i;
+    }
+    if (fights === 0) {
+      places.set(d.key, { day, court: null });
+      return;
+    }
+    const at = (court) => courtsAt.get(`${day}:${court}`) || { clock: start, count: 0 };
+    let court = 1;
+    for (let c = 2; c <= courts; c += 1) if (at(c).clock < at(court).clock) court = c;
+    const free = at(court);
+    const times = scheduleCourt([d.bouts], { start: free.clock, minutes, rest });
+    let end = free.clock;
+    times.forEach((slot, id) => {
+      slots.set(id, { number: free.count + slot.number, start: slot.start });
+      end = Math.max(end, slot.start + minutes);
+    });
+    courtsAt.set(`${day}:${court}`, { clock: end, count: free.count + times.size });
+    dayLoad[day] += fights * minutes;
+    places.set(d.key, { day, court });
+  });
+  return { places, slots };
+}
+
 const hasKyorugi = (competition) => competition.events !== 'poomsae';
 const hasPoomsae = (competition) => competition.events === 'poomsae' || competition.events === 'both';
 
@@ -208,6 +248,7 @@ module.exports = {
   bracketEntrants,
   poomsaeMedalists,
   poomsaeMedalTable,
+  schedulePoomsae,
   entryResult,
   hasKyorugi,
   hasPoomsae,
