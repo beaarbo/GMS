@@ -18,14 +18,14 @@
   <% } %>
 </div>
 
-<% if (competition.bouts_published_at || poomsaePublished) { %>
+<% if (hasBoutList) { %>
   <section class="card">
-    <h2>Bout lists and results</h2>
-    <p class="sub">Who competes when, on which court, and who won.</p>
+    <h2>Bout list and results</h2>
+    <p class="sub">Who competes when, on which court, and who won<%= hasKyorugi(competition) && hasPoomsae(competition) ? ', for kyorugi and poomsae together' : '' %>.</p>
     <div class="actions">
+      <a class="btn" href="/competitions/<%= competition.id %>/bouts">Bout list</a>
       <% if (hasResults) { %><a class="btn approve" href="/competitions/<%= competition.id %>/results">Results and medals</a><% } %>
-      <% if (competition.bouts_published_at) { %><a class="btn" href="/competitions/<%= competition.id %>/bouts">Kyorugi bout list</a><a class="btn secondary" href="/competitions/<%= competition.id %>/bouts.pdf">Kyorugi PDF</a><% } %>
-      <% if (poomsaePublished) { %><a class="btn" href="/competitions/<%= competition.id %>/poomsae">Poomsae order and brackets</a><a class="btn secondary" href="/competitions/<%= competition.id %>/poomsae.pdf">Poomsae PDF</a><% } %>
+      <a class="btn secondary" href="/competitions/<%= competition.id %>/bouts.pdf">Download PDF</a>
     </div>
   </section>
 <% } %>

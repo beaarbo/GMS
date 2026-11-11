@@ -1,0 +1,50 @@
+<%- include('partials/top') %>
+<% const pdfQuery = new URLSearchParams(Object.entries({ event: filters.event, club: filters.clubId ? 'mine' : null }).filter(([, v]) => v)).toString(); %>
+<p class="breadcrumb"><a href="/competitions/<%= competition.id %>"><%= competition.name %></a></p>
+<div class="page-head">
+  <div>
+    <h1>Bout list</h1>
+    <p class="sub"><%= competition.name %> · <%= competition.venue %>, <%= eventDatesText(competition) %> · in running order</p>
+  </div>
+  <% if (parts.length > 0) { %>
+    <div class="actions"><a class="btn" href="/competitions/<%= competition.id %>/bouts.pdf<%= pdfQuery ? `?${pdfQuery}` : '' %>">Download PDF</a></div>
+  <% } %>
+</div>
+
+<%- include('partials/programme_nav') %>
+
+<% if (parts.length === 0) { %>
+  <section class="card"><p class="empty">Nothing is published for these filters yet.</p></section>
+<% } else { %>
+  <% const days = [...new Set(parts.map((p) => p.dayLabel || ''))]; %>
+  <section class="card">
+    <h2>Running order</h2>
+    <% days.forEach((day) => { const list = parts.filter((p) => (p.dayLabel || '') === day); %>
+      <h3><%= day && day !== '-' ? `Day ${day}` : 'Day to be set' %></h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Court</th><th>Starts</th><th>Event</th><th>Division</th></tr></thead>
+          <tbody>
+            <% list.forEach((p) => { %>
+              <tr>
+                <td class="nowrap"><%= p.courtLabel %></td>
+                <td class="nowrap"><%= p.start || '–' %></td>
+                <td><%= p.event %><%= p.kind === 'list' ? ' order' : p.kind === 'bracket' ? ' bracket' : '' %></td>
+                <td><a href="#<%= p.anchor %>"><%= p.title %></a></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    <% }) %>
+  </section>
+
+  <% parts.forEach((p) => { %>
+    <% if (p.kind === 'kyorugi') { %>
+      <%- include('partials/kyorugi_division', { division: p, highlightClubId, anchor: p.anchor }) %>
+    <% } else { %>
+      <%- include('partials/poomsae_page', { page: p, highlightClubId, anchor: p.anchor }) %>
+    <% } %>
+  <% }) %>
+<% } %>
+<%- include('partials/bottom') %>

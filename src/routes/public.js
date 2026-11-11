@@ -1,11 +1,10 @@
 const express = require('express');
 const {
   loadDivisionSetup, listNews, getNews, getCompetitionLogo, listCompetitionFiles, getCompetitionFile,
-  loadBoutList, poomsaeBoutList, getEventDates, competitionResults,
+  getEventDates, competitionResults, competitionProgramme,
 } = require('../services');
 const { formatEventDates } = require('../divisions');
-const { hasPoomsae } = require('../poomsae');
-const { layoutBracket, computeMedals } = require('../bracket');
+const { hasKyorugi, hasPoomsae } = require('../poomsae');
 const { writeBoutListPdf } = require('../boutlistPdf');
 const { sendAttachment } = require('../documents');
 const { notFound } = require('./helpers');
@@ -51,7 +50,7 @@ router.get('/competitions/:id(\\d+)', (req, res) => {
     competition,
     setup: loadDivisionSetup(db, competition.id),
     files: listCompetitionFiles(db, competition.id),
-    poomsaePublished: hasPoomsae(competition) && poomsaeBoutList(db, competition, { published: true }).length > 0,
+    hasBoutList: competitionProgramme(db, competition, { published: true }).length > 0,
     hasResults: competitionResults(db, competition, { published: true }).divisions.length > 0,
   });
 });
@@ -63,77 +62,74 @@ function pdfHeaders(res, name, competition) {
   res.setHeader('Content-Disposition', `attachment; filename="${name}-competition-${competition.id}.pdf"`);
 }
 
+// The bout list and results share their filters: one event (?event=kyorugi or
+// poomsae), and for a coach, only their club's divisions (?club=mine).
+function programmeFilters(req, competition) {
+  const event = ['kyorugi', 'poomsae'].includes(req.query.event) && hasKyorugi(competition) && hasPoomsae(competition) ? req.query.event : null;
+  const clubId = req.query.club === 'mine' && req.user && req.user.club_id ? req.user.club_id : null;
+  return { event, clubId };
+}
+
+function programmeLocals(req, competition, filters, page) {
+  return {
+    competition,
+    filters,
+    page,
+    bothEvents: hasKyorugi(competition) && hasPoomsae(competition),
+    ownClubId: (req.user && req.user.club_id) || null,
+    highlightClubId: (req.user && req.user.club_id) || null,
+  };
+}
+
 // Final results: each division's medallists and one club medal table for both
 // events. Visitors and coaches see only published events; admins and officials see all.
 router.get('/competitions/:id(\\d+)/results', (req, res) => {
   const competition = visibleCompetition(req);
   if (!competition) return notFound(res);
+  const { db } = req.app.locals;
   const staff = Boolean(req.user && ['admin', 'official'].includes(req.user.role));
-  const results = competitionResults(req.app.locals.db, competition, { published: !staff });
-  if (!staff && results.divisions.length === 0) return notFound(res);
+  const filters = programmeFilters(req, competition);
+  if (!staff && competitionResults(db, competition, { published: true }).divisions.length === 0) return notFound(res);
+  const results = competitionResults(db, competition, { published: !staff, event: filters.event });
+  const mine = (d) => ['gold', 'silver', 'bronze'].some((medal) => d[medal].some((m) => m.clubId === filters.clubId));
   return res.render('results_public', {
     title: `${competition.name}: results`,
-    competition,
-    ...results,
+    ...programmeLocals(req, competition, filters, 'results'),
+    table: results.table,
+    divisions: filters.clubId ? results.divisions.filter(mine) : results.divisions,
     staff,
-    highlightClubId: (req.user && req.user.club_id) || null,
   });
 });
 
-// The published kyorugi bout list, for anyone. A coach's own club is highlighted.
-function publishedKyorugi(req) {
-  const competition = visibleCompetition(req);
-  return competition && competition.bouts_published_at ? competition : null;
-}
-
+// The bout list: kyorugi divisions and poomsae lists and brackets together, in
+// running order, once each is published. Anyone can see it; a coach's club is highlighted.
 router.get('/competitions/:id(\\d+)/bouts', (req, res) => {
-  const competition = publishedKyorugi(req);
+  const competition = visibleCompetition(req);
   if (!competition) return notFound(res);
-  const divisions = loadBoutList(req.app.locals.db, competition.id);
-  return res.render('bouts_public', {
+  const { db } = req.app.locals;
+  if (competitionProgramme(db, competition, { published: true }).length === 0) return notFound(res);
+  const filters = programmeFilters(req, competition);
+  return res.render('programme', {
     title: `${competition.name}: bout list`,
-    competition,
-    divisions: divisions.map((division) => ({ ...division, layout: layoutBracket(division.bouts, { slotHeight: 30, top: 4 }) })),
-    medals: computeMedals(divisions),
-    highlightClubId: (req.user && req.user.club_id) || null,
+    ...programmeLocals(req, competition, filters, 'bouts'),
+    parts: competitionProgramme(db, competition, { published: true, ...filters }),
   });
 });
 
 router.get('/competitions/:id(\\d+)/bouts.pdf', (req, res) => {
-  const competition = publishedKyorugi(req);
+  const competition = visibleCompetition(req);
   if (!competition) return notFound(res);
   const { db } = req.app.locals;
+  const parts = competitionProgramme(db, competition, { published: true, ...programmeFilters(req, competition) });
+  if (parts.length === 0) return notFound(res);
   pdfHeaders(res, 'bout-list', competition);
-  return writeBoutListPdf(res, { competition, divisions: loadBoutList(db, competition.id), dateLabel: dateLabel(db, competition) });
+  return writeBoutListPdf(res, { competition, divisions: parts, dateLabel: dateLabel(db, competition) });
 });
 
-// The published poomsae stages (performance order, brackets), for anyone.
-function publishedPoomsae(req) {
-  const competition = visibleCompetition(req);
-  if (!competition || !hasPoomsae(competition)) return null;
-  const pages = poomsaeBoutList(req.app.locals.db, competition, { published: true });
-  return pages.length > 0 ? { competition, pages } : null;
-}
+// The old poomsae addresses, kept for links already shared.
+router.get('/competitions/:id(\\d+)/poomsae', (req, res) => res.redirect(301, `/competitions/${req.params.id}/bouts?event=poomsae`));
+router.get('/competitions/:id(\\d+)/poomsae.pdf', (req, res) => res.redirect(301, `/competitions/${req.params.id}/bouts.pdf?event=poomsae`));
 
-router.get('/competitions/:id(\\d+)/poomsae', (req, res) => {
-  const found = publishedPoomsae(req);
-  if (!found) return notFound(res);
-  return res.render('poomsae_public', {
-    title: `${found.competition.name}: poomsae`,
-    competition: found.competition,
-    pages: found.pages,
-    highlightClubId: (req.user && req.user.club_id) || null,
-  });
-});
-
-router.get('/competitions/:id(\\d+)/poomsae.pdf', (req, res) => {
-  const found = publishedPoomsae(req);
-  if (!found) return notFound(res);
-  pdfHeaders(res, 'poomsae-list', found.competition);
-  return writeBoutListPdf(res, { competition: found.competition, divisions: found.pages, dateLabel: dateLabel(req.app.locals.db, found.competition) });
-});
-
-// The link carries the upload time, so a new logo gets a new address.
 router.get('/competitions/:id(\\d+)/logo', (req, res) => {
   const competition = visibleCompetition(req);
   const logo = competition && getCompetitionLogo(req.app.locals.db, competition.id);

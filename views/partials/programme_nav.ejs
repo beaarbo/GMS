@@ -1,0 +1,22 @@
+<%# Shared by the bout list and results: links between them, and the same filters on both. Expects competition, filters, page, bothEvents and ownClubId. %>
+<% const link = (path, over) => { const params = new URLSearchParams(Object.entries({ event: filters.event, club: filters.clubId ? 'mine' : null, ...over }).filter(([, v]) => v)).toString(); return `/competitions/${competition.id}/${path}${params ? `?${params}` : ''}`; }; %>
+<% const current = (on) => (on ? ' class="current-filter" aria-current="page"' : ''); %>
+<nav class="card programme-nav" aria-label="Bout list and results">
+  <p class="stats">
+    <a href="<%= link('bouts', {}) %>"<%- current(page === 'bouts') %>>Bout list</a>
+    <a href="<%= link('results', {}) %>"<%- current(page === 'results') %>>Results and medals</a>
+  </p>
+  <% if (bothEvents || ownClubId) { %>
+    <p class="stats">
+      <% if (bothEvents) { %>
+        <a href="<%= link(page, { event: null }) %>"<%- current(!filters.event) %>>Both events</a>
+        <a href="<%= link(page, { event: 'kyorugi' }) %>"<%- current(filters.event === 'kyorugi') %>>Kyorugi</a>
+        <a href="<%= link(page, { event: 'poomsae' }) %>"<%- current(filters.event === 'poomsae') %>>Poomsae</a>
+      <% } %>
+      <% if (ownClubId) { %>
+        <a href="<%= link(page, { club: null }) %>"<%- current(!filters.clubId) %>>All clubs</a>
+        <a href="<%= link(page, { club: 'mine' }) %>"<%- current(Boolean(filters.clubId)) %>>My club</a>
+      <% } %>
+    </p>
+  <% } %>
+</nav>

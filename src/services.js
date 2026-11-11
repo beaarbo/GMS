@@ -816,28 +816,57 @@ function poomsaeCourtQueue(db, competition, day, court, options = {}) {
   };
 }
 
+// The whole bout list as one running order: each kyorugi division and each
+// poomsae performance list or bracket, sorted by day, then court (kyorugi courts
+// first), then start time. published keeps only what visitors may see; event
+// ('kyorugi' or 'poomsae') and clubId (divisions that club is in) narrow it.
+// Each part has what its card and the PDF draw, plus anchor and courtLabel.
+function competitionProgramme(db, competition, { published = false, event = null, clubId = null } = {}) {
+  const parts = [];
+  if (event !== 'poomsae' && hasKyorugi(competition) && (!published || competition.bouts_published_at)) {
+    loadBoutList(db, competition.id)
+      .filter((d) => !clubId || d.bouts.some((b) => [b.blue, b.red].some((s) => s && s.clubId === clubId)))
+      .forEach((d) => {
+        const times = d.bouts.map((b) => b.time).filter(Boolean).sort();
+        parts.push({
+          ...d, kind: 'kyorugi', event: 'Kyorugi', anchor: `kyorugi-${d.key}`, courtOrder: 0,
+          courtLabel: d.court ? `Court ${d.court}` : 'No court', start: times[0] || '',
+          layout: layoutBracket(d.bouts, { slotHeight: 30, top: 4 }),
+        });
+      });
+  }
+  if (event !== 'kyorugi' && hasPoomsae(competition)) {
+    poomsaeBoutList(db, competition, { published, clubId }).forEach((p) => parts.push({
+      ...p, event: 'Poomsae', anchor: `poomsae-${p.kind}-${p.key}`, courtOrder: 1,
+      courtLabel: p.court ? `Poomsae court ${p.court}` : 'No court',
+    }));
+  }
+  return parts.sort((a, b) => (a.day || 99) - (b.day || 99) || a.courtOrder - b.courtOrder
+    || (a.court || 99) - (b.court || 99) || String(a.start).localeCompare(String(b.start)));
+}
+
 // The competition's final results: every division with its medallists (gold
 // decided), and one club medal table for kyorugi and poomsae together.
 // published keeps only what visitors may see: the kyorugi bout list once
 // published, ranked poomsae once its order is published, poomsae brackets once
 // the brackets are. Medallists carry name, club and clubId only.
-function competitionResults(db, competition, { published = false } = {}) {
+function competitionResults(db, competition, { published = false, event = null } = {}) {
   const divisions = [];
-  if (hasKyorugi(competition) && (!published || competition.bouts_published_at)) {
+  if (event !== 'poomsae' && hasKyorugi(competition) && (!published || competition.bouts_published_at)) {
     computeMedals(loadBoutList(db, competition.id)).divisions.forEach((d) => {
       if (!d.gold) return;
       const side = (f) => ({ name: f.name, club: f.club, clubId: f.clubId });
       divisions.push({ event: 'Kyorugi', title: d.title, gold: [side(d.gold)], silver: d.silver ? [side(d.silver)] : [], bronze: d.bronze.map(side) });
     });
   }
-  if (hasPoomsae(competition)) {
+  if (event !== 'kyorugi' && hasPoomsae(competition)) {
     const entries = listPoomsaeEntries(db, competition.id);
     const byId = new Map(entries.map((e) => [e.id, { name: e.names, club: e.club_name, clubId: e.club_id }]));
     poomsaeDivisions(entries, competition, loadPoomsaeBrackets(db, competition.id, entries), loadPoomsaeSettings(db, competition.id)).forEach((d) => {
       const visible = d.mode === 'score' ? competition.poomsae_published_at : competition.poomsae_brackets_published_at;
       if ((published && !visible) || d.medalists.gold.length === 0) return;
       const people = (ids) => ids.map((id) => byId.get(id));
-      divisions.push({ event: 'Poomsae', title: d.title, gold: people(d.medalists.gold), silver: people(d.medalists.silver), bronze: people(d.medalists.bronze) });
+      divisions.push({ event: 'Poomsae', title: boutListTitle(d), gold: people(d.medalists.gold), silver: people(d.medalists.silver), bronze: people(d.medalists.bronze) });
     });
   }
   const clubs = new Map();
@@ -1836,6 +1865,7 @@ module.exports = {
   poomsaeCourtItems,
   poomsaeCourtQueue,
   competitionResults,
+  competitionProgramme,
   drawPoomsaeBracket,
   deletePoomsaeBracket,
   recordPoomsaeBout,

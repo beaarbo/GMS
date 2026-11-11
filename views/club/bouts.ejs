@@ -6,6 +6,7 @@
     <p class="sub"><%= competition.name %> · <%= competition.venue %>, <%= eventDatesText(competition) %></p>
   </div>
   <div class="actions">
+    <a class="btn secondary" href="/competitions/<%= competition.id %>/bouts?club=mine">Full bout list</a>
     <a class="btn secondary" href="/screens/<%= competition.id %>">Court screens</a>
     <% if (divisions.length > 0) { %><a class="btn" href="/club/competitions/<%= competition.id %>/bouts.pdf">Download PDF</a><% } %>
   </div>

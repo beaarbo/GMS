@@ -1,5 +1,5 @@
 <%# One published poomsae page (a performance order or a bracket), as on the kyorugi bout list. Expects page and highlightClubId. %>
-<section class="card">
+<section class="card"<%- locals.anchor ? ` id="${anchor}"` : '' %>>
   <div class="division-head">
     <h2><%= page.title %></h2>
     <p class="stats">

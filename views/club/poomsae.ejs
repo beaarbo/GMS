@@ -120,7 +120,10 @@
       <h2>Performance order and brackets</h2>
       <p class="sub">Your club's divisions, in running order. Your club's entries are highlighted.</p>
     </div>
-    <a class="btn" href="/club/competitions/<%= competition.id %>/poomsae.pdf">Download PDF</a>
+    <div class="actions">
+      <a class="btn secondary" href="/competitions/<%= competition.id %>/bouts?club=mine">Full bout list</a>
+      <a class="btn" href="/club/competitions/<%= competition.id %>/poomsae.pdf">Download PDF</a>
+    </div>
   </div>
 <% } %>
 <% pages.forEach((page) => { %>

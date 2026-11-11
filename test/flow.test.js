@@ -25,6 +25,7 @@ const {
   loadBoutList,
   enterPoomsae,
   competitionResults,
+  competitionProgramme,
 } = require('../src/services');
 const { computeMedals } = require('../src/bracket');
 const { divisionOptions, findWeightClass } = require('../src/divisions');
@@ -2562,13 +2563,14 @@ test('published bout lists are public: kyorugi, and poomsae order and brackets a
   const path = `/admin/competitions/${compId}/bouts`;
   await post(admin, `${path}/generate`, {}, path);
   assert.equal((await visitor.get(`/competitions/${compId}/bouts`)).status, 404);
-  assert.doesNotMatch((await visitor.get(`/competitions/${compId}`)).text, /Kyorugi bout list/);
+  const boutListLink = (id) => new RegExp(`href="/competitions/${id}/bouts">Bout list`);
+  assert.doesNotMatch((await visitor.get(`/competitions/${compId}`)).text, boutListLink(compId));
   await post(admin, `${path}/publish`, {}, path);
   const bouts = (await visitor.get(`/competitions/${compId}/bouts`)).text;
   assert.match(bouts, /Ana Alpha|Alpha Ana/);
   assert.match(bouts, /<svg class="bracket"/);
   assert.doesNotMatch(bouts, new RegExp(JUNIOR_DOB), 'no birth dates');
-  assert.match((await visitor.get(`/competitions/${compId}`)).text, /Kyorugi bout list/);
+  assert.match((await visitor.get(`/competitions/${compId}`)).text, boutListLink(compId));
   const kyorugiPdf = await pdfOf(`/competitions/${compId}/bouts.pdf`);
   assert.equal(kyorugiPdf.status, 200);
   assert.equal(kyorugiPdf.body.subarray(0, 5).toString(), '%PDF-');
@@ -2588,8 +2590,9 @@ test('published bout lists are public: kyorugi, and poomsae order and brackets a
   // Two poomsae courts: the score round takes court 1, so its bracket lands on court 2.
   await post(admin, `${review}/schedule`, { courts: '2', start: '09:00', minutes: '5', rest: '0' }, review);
   await post(admin, `${review}/order`, { division: 'all' }, review);
-  const publicPage = `/competitions/${formsId}/poomsae`;
+  const publicPage = `/competitions/${formsId}/bouts`;
   assert.equal((await visitor.get(publicPage)).status, 404, 'nothing until published');
+  assert.equal((await visitor.get(`/competitions/${formsId}/poomsae`)).headers.location, `${publicPage}?event=poomsae`, 'old links still work');
 
   // Publish the first draw (the score round order) on its own.
   assert.doesNotMatch((await admin.get(review)).text, /Publish brackets/);
@@ -2598,7 +2601,7 @@ test('published bout lists are public: kyorugi, and poomsae order and brackets a
   assert.match(text, /Performance order, drawn at random/);
   assert.match(text, /Ana Crane/);
   assert.doesNotMatch(text, /<svg class="bracket"/);
-  assert.match((await visitor.get(`/competitions/${formsId}`)).text, /Poomsae order and brackets/);
+  assert.match((await visitor.get(`/competitions/${formsId}`)).text, boutListLink(formsId));
 
   // Score, draw the bracket: it stays hidden until its own publish.
   const entries = db.prepare('SELECT id FROM poomsae_entries WHERE competition_id = ? ORDER BY id').all(formsId);
@@ -2750,6 +2753,26 @@ test('poomsae on court screens and the mat page, judges\' scores, and final resu
   assert.equal(total('Tigers') + total('Dragons'), 5);
   assert.ok(total('Tigers') >= 3);
   assert.equal(table.reduce((n, r) => n + r.gold, 0), 2, 'one gold per event division');
+
+  // One bout list for both events, in running order, with the same filters as the results.
+  const list = `/competitions/${compId}/bouts`;
+  const both = (await visitor.get(list)).text;
+  assert.match(both, /Running order[\s\S]*?Court 1[\s\S]*?Poomsae court 1/, 'kyorugi courts, then poomsae courts');
+  assert.match(both, /id="kyorugi-[^"]+"[\s\S]*?id="poomsae-list-[^"]+"/);
+  assert.match(both, /<a href="\/competitions\/\d+\/results"[^>]*>Results and medals/);
+  assert.doesNotMatch((await visitor.get(`${list}?event=kyorugi`)).text, /id="poomsae-/);
+  assert.doesNotMatch((await visitor.get(`${list}?event=poomsae`)).text, /id="kyorugi-/);
+  assert.doesNotMatch((await visitor.get(`${results}?event=kyorugi`)).text, /Form/, 'results filter by event too');
+  // A coach can narrow it to their club; for a visitor that filter does nothing.
+  assert.match((await club.get(list)).text, /My club/);
+  assert.doesNotMatch(both, /My club/);
+  const pdf = await visitor.get(`${list}.pdf`).buffer(true).parse((res, callback) => {
+    const chunks = [];
+    res.on('data', (chunk) => chunks.push(chunk));
+    res.on('end', () => callback(null, Buffer.concat(chunks)));
+  });
+  assert.equal(pdf.body.subarray(0, 5).toString(), '%PDF-');
+  assert.equal((pdf.body.toString('latin1').match(/\/Type \/Page\b/g) || []).length, competitionProgramme(db, competition(), { published: true }).length, 'one page per division');
 });
 
 test('a competition can show its venue on a small Google map', async () => {

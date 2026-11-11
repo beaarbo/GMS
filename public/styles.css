@@ -362,6 +362,10 @@ td.nowrap { white-space: nowrap; }
 .stats a { color: var(--ink-2); text-decoration: none; padding: var(--space-1) var(--space-3); border-radius: 999px; }
 .stats a:hover { background: var(--neutral-soft); }
 .stats .current-filter { background: var(--chung-soft); color: var(--chung-dark); font-weight: 600; }
+/* The bout list and results header: page links, then the filters. */
+.programme-nav { padding: var(--space-3) var(--space-4); }
+.programme-nav .stats { margin: 0; }
+.programme-nav .stats + .stats { margin-top: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--line); }
 .card > .stats:has(a) { gap: var(--space-1); margin-bottom: var(--space-4); }
 
 /* Brackets and results */

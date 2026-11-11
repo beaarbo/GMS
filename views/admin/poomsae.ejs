@@ -38,7 +38,7 @@
         <% } %>
       <% }) %>
     <% } %>
-    <% if (competition.poomsae_published_at || competition.poomsae_brackets_published_at) { %><a class="btn secondary" href="/competitions/<%= competition.id %>/poomsae">Public page</a><% } %>
+    <% if (competition.poomsae_published_at || competition.poomsae_brackets_published_at) { %><a class="btn secondary" href="/competitions/<%= competition.id %>/bouts?event=poomsae">Public page</a><% } %>
     <% if (isAdmin && closed && drawable > 0) { %>
       <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/draw">
         <input type="hidden" name="_csrf" value="<%= csrf %>">

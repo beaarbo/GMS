@@ -1,5 +1,5 @@
 <%# One kyorugi division of a published bout list. Expects division and highlightClubId. %>
-<section class="card">
+<section class="card"<%- locals.anchor ? ` id="${anchor}"` : '' %>>
   <div class="division-head">
     <h2><%= division.title %></h2>
     <p class="stats">
