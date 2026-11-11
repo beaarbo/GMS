@@ -131,6 +131,10 @@ While a bout list exists, approvals can't change and registration can't reopen. 
 
 On small screens the menu folds behind a **Menu** button, so the pinned top bar stays short. Without JavaScript the full menu shows instead.
 
+## Dark theme
+
+The site follows the device's light or dark setting. **Theme** at the end of the menu switches between **Auto** (follow the device), **Dark** and **Light**, and each browser remembers its choice. Court screens always stay dark, and printed pages are always light.
+
 ## Deleting things
 
 - **Competitions:** an empty draft has a **Delete** button on the admin **Competitions** page. A competition with entries can be deleted once registration is closed: **Delete** opens a page listing what will go (registrations, bouts, results, files), and you type its name to confirm. A backup is made first, so it can be restored. Athletes stay with their clubs.

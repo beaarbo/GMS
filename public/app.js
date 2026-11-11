@@ -22,6 +22,34 @@
   });
 }());
 
+// The theme button cycles Auto (follow the device), Dark and Light, and remembers
+// the choice for public/theme.js to apply before the next page draws.
+(function themeToggle() {
+  const button = document.querySelector('.theme-toggle');
+  if (!button) return;
+  const order = ['auto', 'dark', 'light'];
+  const names = { auto: 'Auto', dark: 'Dark', light: 'Light' };
+  const current = () => document.documentElement.dataset.theme || 'auto';
+  const show = () => {
+    button.textContent = `Theme: ${names[current()]}`;
+    button.setAttribute('aria-label', `Theme: ${names[current()]}. Change theme`);
+  };
+  button.hidden = false;
+  show();
+  button.addEventListener('click', () => {
+    const next = order[(order.indexOf(current()) + 1) % order.length];
+    if (next === 'auto') delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = next;
+    try {
+      if (next === 'auto') window.localStorage.removeItem('theme');
+      else window.localStorage.setItem('theme', next);
+    } catch (error) {
+      // Storage blocked: the choice lasts for this page only.
+    }
+    show();
+  });
+}());
+
 // The sticky top bar's real height, so jumps to a row (#reg-12) stop below it.
 // The bar grows when its menu wraps, so this follows resizes. CSS has a fallback.
 (function trackTopbarHeight() {

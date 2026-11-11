@@ -24,6 +24,18 @@
   --warn: #b54708;
   --warn-soft: #fffaeb;
   --neutral-soft: #f2f4f7;
+  /* Backgrounds under white text (buttons, corner panels), kept apart from the
+     text colours above so the dark theme can make text lighter and fills deeper. */
+  --chung-fill: #1d4ed8;
+  --chung-fill-hover: #1e40af;
+  --hong-fill: #d92d20;
+  --ok-fill: #067647;
+  --ok-fill-hover: #05603a;
+  --chung-line: #c7d7fe;
+  --hong-line: #fecdca;
+  --ok-line: #abefc6;
+  --danger-line: #fda29b;
+  --line-hover: #98a2b3;
 
   /* Type */
   --font: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Roboto, Arial, sans-serif;
@@ -93,7 +105,7 @@ html { scroll-padding-top: calc(var(--topbar-height, 72px) + var(--space-3)); }
   z-index: 50;
   box-shadow: 0 1px 3px rgba(16, 24, 40, 0.06);
 }
-.corner-stripe { height: 4px; background: linear-gradient(90deg, var(--hong) 50%, var(--chung) 50%); }
+.corner-stripe { height: 4px; background: linear-gradient(90deg, var(--hong-fill) 50%, var(--chung-fill) 50%); }
 
 .topbar-inner, main, .footer {
   max-width: var(--content-width);
@@ -125,7 +137,7 @@ html { scroll-padding-top: calc(var(--topbar-height, 72px) + var(--space-3)); }
   width: 26px;
   height: 26px;
   border-radius: var(--radius-sm);
-  background: linear-gradient(135deg, var(--hong) 50%, var(--chung) 50%);
+  background: linear-gradient(135deg, var(--hong-fill) 50%, var(--chung-fill) 50%);
   flex: none;
 }
 
@@ -228,9 +240,9 @@ fieldset.card { min-width: 0; }
   gap: var(--space-2);
   min-height: var(--control-height);
   padding: 0 var(--space-4);
-  border: 1px solid var(--chung);
+  border: 1px solid var(--chung-fill);
   border-radius: var(--radius);
-  background: var(--chung);
+  background: var(--chung-fill);
   color: #fff;
   font: inherit;
   font-size: var(--text-sm);
@@ -242,13 +254,13 @@ fieldset.card { min-width: 0; }
   box-shadow: var(--shadow);
   transition: background-color 0.12s, border-color 0.12s, color 0.12s;
 }
-.btn:hover { background: var(--chung-dark); border-color: var(--chung-dark); color: #fff; }
+.btn:hover { background: var(--chung-fill-hover); border-color: var(--chung-fill-hover); color: #fff; }
 .btn.secondary { background: var(--surface); border-color: var(--line-strong); color: var(--ink-2); }
 .btn.secondary:hover { background: var(--surface-2); color: var(--ink); }
-.btn.approve { background: var(--ok); border-color: var(--ok); color: #fff; }
-.btn.approve:hover { background: var(--ok-dark); border-color: var(--ok-dark); }
-.btn.danger { background: var(--surface); border-color: #fda29b; color: var(--hong-dark); }
-.btn.danger:hover { background: var(--hong); border-color: var(--hong); color: #fff; }
+.btn.approve { background: var(--ok-fill); border-color: var(--ok-fill); color: #fff; }
+.btn.approve:hover { background: var(--ok-fill-hover); border-color: var(--ok-fill-hover); }
+.btn.danger { background: var(--surface); border-color: var(--danger-line); color: var(--hong-dark); }
+.btn.danger:hover { background: var(--hong-fill); border-color: var(--hong-fill); color: #fff; }
 .btn.small { min-height: var(--control-height-sm); padding: 0 var(--space-3); font-size: var(--text-sm); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -275,7 +287,7 @@ input, select, textarea {
   transition: border-color 0.12s, box-shadow 0.12s;
 }
 textarea { min-height: 96px; resize: vertical; }
-input:hover, select:hover, textarea:hover { border-color: #98a2b3; }
+input:hover, select:hover, textarea:hover { border-color: var(--line-hover); }
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--chung); box-shadow: var(--focus); }
 input:disabled, select:disabled, textarea:disabled { background: var(--neutral-soft); color: var(--muted); cursor: not-allowed; }
 input[type="checkbox"], input[type="radio"] {
@@ -304,9 +316,9 @@ input[type="file"] { padding: var(--space-2); background: var(--surface-2); }
   border-left-width: 4px;
   font-size: var(--text-sm);
 }
-.notice.success { background: var(--ok-soft); color: var(--ok-dark); border-color: #abefc6; border-left-color: var(--ok); }
-.notice.error { background: var(--hong-soft); color: var(--hong-dark); border-color: #fecdca; border-left-color: var(--hong); }
-.notice.info { background: var(--chung-soft); color: var(--chung-dark); border-color: #c7d7fe; border-left-color: var(--chung); }
+.notice.success { background: var(--ok-soft); color: var(--ok-dark); border-color: var(--ok-line); border-left-color: var(--ok); }
+.notice.error { background: var(--hong-soft); color: var(--hong-dark); border-color: var(--hong-line); border-left-color: var(--hong); }
+.notice.info { background: var(--chung-soft); color: var(--chung-dark); border-color: var(--chung-line); border-left-color: var(--chung); }
 .notice ul { margin: 0; padding-left: var(--space-4); }
 .notice a { color: inherit; font-weight: 600; }
 .mail-error { font-family: ui-monospace, Consolas, monospace; font-size: var(--text-xs); overflow-wrap: anywhere; margin: 0; }
@@ -378,7 +390,7 @@ td.nowrap { white-space: nowrap; }
 .bracket .number { font-size: 10px; font-weight: 700; }
 .bracket .winner { font-size: 8px; font-weight: 700; fill: var(--ok); }
 .bracket .own { fill: var(--chung); }
-.own-row td { background: var(--chung-soft, rgba(37, 99, 235, 0.08)); }
+.own-row td { background: var(--chung-soft); }
 .own-row td strong { color: var(--chung); }
 .own-text { color: var(--chung); font-weight: 600; }
 /* A competition's location: Google's map embed in a rounded frame. */
@@ -490,12 +502,14 @@ tr.row-attention td, tbody tr.row-attention:hover td { background: var(--warn-so
 .inline-form:first-child { margin-left: 0; }
 .score-input { width: 6em; min-height: var(--control-height-sm); padding: var(--space-1) var(--space-2); }
 .judge-inputs { display: inline-flex; flex-wrap: wrap; gap: var(--space-1); vertical-align: middle; }
+/* With several judges the score cell must wrap, or Save spills into the next column. */
+.inline-form:has(.judge-inputs) { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); white-space: normal; }
 .score-input.judge { width: 4.2em; }
 .judge-total { margin: 0 var(--space-2); }
 
 /* Court screens: large type for a TV or tablet at the mat. */
 body.screen { background: #0b1220; color: #f8fafc; font-size: 1.25rem; min-height: 100vh; }
-.screen-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-4); padding: var(--space-5) var(--space-6); border-bottom: 4px solid; border-image: linear-gradient(90deg, var(--hong) 50%, var(--chung) 50%) 1; }
+.screen-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-4); padding: var(--space-5) var(--space-6); border-bottom: 4px solid; border-image: linear-gradient(90deg, var(--hong-fill) 50%, var(--chung-fill) 50%) 1; }
 .screen-court { font-size: 3rem; font-weight: 800; margin: 0; line-height: 1; }
 .screen-sub { color: #94a3b8; font-size: 1rem; margin: 0; }
 .screen-right { text-align: right; }
@@ -512,8 +526,8 @@ body.screen { background: #0b1220; color: #f8fafc; font-size: 1.25rem; min-heigh
 .screen-corner strong { font-size: 2.6rem; line-height: 1.1; }
 .screen-corner span { font-size: 1.2rem; opacity: 0.85; }
 .screen-corner .screen-corner-label { font-size: 0.9rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; }
-.screen-corner.blue { background: var(--chung); }
-.screen-corner.red { background: var(--hong); }
+.screen-corner.blue { background: var(--chung-fill); }
+.screen-corner.red { background: var(--hong-fill); }
 .screen-performer { background: #1e293b; }
 .screen-vs { align-self: center; font-size: 1.5rem; font-weight: 700; color: #94a3b8; }
 .screen-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: var(--space-5); }
@@ -549,7 +563,7 @@ a.stat-tile:hover { border-color: var(--chung); color: var(--ink); }
 
 /* Results by mat: a tablet page for one court, with buttons big enough to tap. */
 body.mat { background: var(--page); }
-.mat-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-4) var(--space-5); background: var(--surface); border-bottom: 4px solid; border-image: linear-gradient(90deg, var(--hong) 50%, var(--chung) 50%) 1; }
+.mat-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-4) var(--space-5); background: var(--surface); border-bottom: 4px solid; border-image: linear-gradient(90deg, var(--hong-fill) 50%, var(--chung-fill) 50%) 1; }
 .mat-head h1 { margin: 0; font-size: 2rem; }
 .mat-head .sub { margin: 0; }
 .mat-head .screen-status { justify-content: flex-start; margin: 0; }
@@ -563,8 +577,8 @@ body.mat { background: var(--page); }
 .mat-winner strong { font-size: 2rem; line-height: 1.15; }
 .mat-winner span { font-size: 1.1rem; opacity: 0.9; }
 .mat-winner .mat-corner { font-size: 0.9rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
-.mat-winner.blue { background: var(--chung); }
-.mat-winner.red { background: var(--hong); }
+.mat-winner.blue { background: var(--chung-fill); }
+.mat-winner.red { background: var(--hong-fill); }
 .mat-scores { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-3); margin-top: var(--space-3); }
 .mat-scores label { display: flex; flex-direction: column; gap: var(--space-1); margin: 0; font-weight: 600; }
 .mat-score { width: 6.5rem; min-height: 64px; font-size: 1.6rem; text-align: center; }
@@ -586,6 +600,82 @@ body.mat { background: var(--page); }
   .mat-winner strong { font-size: 1.6rem; }
 }
 
+/* Dark theme. The same tokens, darker. It follows the device's setting unless
+   the visitor picked light or dark from the menu (data-theme on <html>, set by
+   public/theme.js before the page draws). Keep the two blocks the same. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ink: #f2f4f7;
+  --ink-2: #d0d5dd;
+  --muted: #98a2b3;
+  --line: #2a3445;
+  --line-strong: #3a4659;
+  --line-hover: #5a6780;
+  --surface: #151c28;
+  --surface-2: #1a2231;
+  --page: #0d121b;
+  --chung: #7fa3ff;
+  --chung-dark: #a9c1ff;
+  --chung-soft: #1a2747;
+  --chung-line: #2f4677;
+  --hong: #ff8a80;
+  --hong-dark: #ffb4ab;
+  --hong-soft: #3a1d1d;
+  --hong-line: #6b2c2c;
+  --danger-line: #7a3232;
+  --ok: #47cd89;
+  --ok-dark: #75e0a7;
+  --ok-soft: #12301f;
+  --ok-line: #1f5a3b;
+  --warn: #fdb022;
+  --warn-soft: #33270d;
+  --neutral-soft: #222b3a;
+  --chung-fill: #2f62d6;
+  --chung-fill-hover: #2552bb;
+  --hong-fill: #c4261b;
+  --ok-fill: #127a4b;
+  --ok-fill-hover: #0f683f;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --focus: 0 0 0 3px rgba(127, 163, 255, 0.35);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --ink: #f2f4f7;
+    --ink-2: #d0d5dd;
+    --muted: #98a2b3;
+    --line: #2a3445;
+    --line-strong: #3a4659;
+    --line-hover: #5a6780;
+    --surface: #151c28;
+    --surface-2: #1a2231;
+    --page: #0d121b;
+    --chung: #7fa3ff;
+    --chung-dark: #a9c1ff;
+    --chung-soft: #1a2747;
+    --chung-line: #2f4677;
+    --hong: #ff8a80;
+    --hong-dark: #ffb4ab;
+    --hong-soft: #3a1d1d;
+    --hong-line: #6b2c2c;
+    --danger-line: #7a3232;
+    --ok: #47cd89;
+    --ok-dark: #75e0a7;
+    --ok-soft: #12301f;
+    --ok-line: #1f5a3b;
+    --warn: #fdb022;
+    --warn-soft: #33270d;
+    --neutral-soft: #222b3a;
+    --chung-fill: #2f62d6;
+    --chung-fill-hover: #2552bb;
+    --hong-fill: #c4261b;
+    --ok-fill: #127a4b;
+    --ok-fill-hover: #0f683f;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --focus: 0 0 0 3px rgba(127, 163, 255, 0.35);
+  }
+}
+
 /* Small screens */
 
 @media (max-width: 640px) {
@@ -601,6 +691,13 @@ body.mat { background: var(--page); }
 /* Print */
 
 @media print {
+  /* Paper is always light, whatever the screen theme. */
+  :root[data-theme], :root:not([data-theme]) {
+    color-scheme: light;
+    --ink: #101828; --ink-2: #344054; --muted: #667085; --line: #e4e7ec; --line-strong: #d0d5dd;
+    --surface: #ffffff; --surface-2: #f9fafb; --page: #ffffff;
+    --chung: #1d4ed8; --chung-dark: #1e40af; --hong: #d92d20; --hong-dark: #b42318; --ok: #067647; --ok-dark: #05603a;
+  }
   .topbar, .footer, .actions, .breadcrumb { display: none; }
   body { background: #fff; }
   .card { break-inside: avoid; border-color: #999; box-shadow: none; }

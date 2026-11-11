@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title><%= title %> · Game Management System</title>
+  <script src="/theme.js"></script>
   <link rel="stylesheet" href="/styles.css">
   <script src="/app.js" defer></script>
 </head>
@@ -56,6 +57,8 @@
         <%- link('/login', 'Log in') %>
         <%- link('/register', 'Coach sign up') %>
       <% } %>
+      <%# Shown by public/app.js. Without JavaScript the device's light or dark setting applies. %>
+      <button class="link-button theme-toggle" type="button" hidden>Theme: Auto</button>
     </nav>
   </div>
 </header>

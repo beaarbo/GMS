@@ -46,6 +46,7 @@ Express with server-rendered EJS and SQLite (better-sqlite3).
 
 - Every form needs a hidden `_csrf` field.
 - The CSP blocks inline scripts and styles. Put JS in `public/app.js` and CSS in `public/styles.css`.
+- Colours come from the tokens in `:root` in `public/styles.css`; never hard-code one in a rule, or the dark theme misses it. The dark theme redefines the tokens twice (for `data-theme="dark"` and for the device setting), so change both blocks together, and the print block resets them to light. `--chung`, `--hong` and `--ok` are text and line colours; backgrounds under white text use the `-fill` tokens. `public/theme.js` (loaded before the stylesheet) applies a saved choice so the page doesn't flash. Court screens are always dark.
 - Club routes must scope queries by `req.user.club_id`, so clubs can't reach each other's data. A coach has no `club_id` until an admin approves them, and fighters belong to the club, not the coach.
 - Core flows must work without JavaScript. `public/app.js` is only an enhancement.
 
