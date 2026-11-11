@@ -14,13 +14,16 @@ const { sendAttachment } = require('../documents');
 const { notFound } = require('./helpers');
 
 const router = express.Router();
+const HOME_NEWS = 5;
 
 router.get('/', (req, res) => {
   const { db } = req.app.locals;
   const competitions = db
     .prepare("SELECT * FROM competitions WHERE status IN ('open', 'closed') ORDER BY status = 'closed', event_date")
     .all();
-  res.render('home', { title: 'Competitions', competitions });
+  // The latest news below the competitions; the News page keeps the rest.
+  const news = listNews(db, { signedIn: Boolean(req.user), limit: HOME_NEWS + 1 });
+  res.render('home', { title: 'Competitions', competitions, news: news.slice(0, HOME_NEWS), moreNews: news.length > HOME_NEWS });
 });
 
 // Members-only posts look like they don't exist to visitors.

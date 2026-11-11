@@ -62,7 +62,14 @@ test('admins post news; visitors see only public posts', async () => {
   const list = await visitor.get('/news');
   assert.match(list.text, /Weigh-in moved/);
   assert.doesNotMatch(list.text, /Coaches meeting/);
-  assert.doesNotMatch((await visitor.get('/')).text, /Weigh-in moved/, 'the Competitions page has no news');
+  // The front page shows competitions, then the public news below them.
+  const front = (await visitor.get('/')).text;
+  assert.ok(front.indexOf('Taekwondo competitions') < front.indexOf('Weigh-in moved'), 'news comes after the competitions');
+  assert.doesNotMatch(front, /Coaches meeting/);
+  // Visitors get a Log in button rather than the menu, and the login page switches to sign-up.
+  assert.match(front, /class="btn small topbar-login" href="\/login"/);
+  assert.doesNotMatch(front, /id="main-nav"/);
+  assert.match((await visitor.get('/login')).text, /class="auth-tabs"[\s\S]*href="\/register"/);
   assert.equal((await visitor.get(`/news/${membersId}`)).status, 404);
 
   const page = await visitor.get(`/news/${publicId}`);

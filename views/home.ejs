@@ -1,17 +1,33 @@
 <%- include('partials/top') %>
-<div class="page-head">
-  <div>
-    <h1>Taekwondo competitions</h1>
-    <p class="sub">Kyorugi (sparring) events open for club registration.</p>
+<%# The front page: competitions first, then the latest news. %>
+<section class="section">
+  <div class="page-head">
+    <div>
+      <h1>Taekwondo competitions</h1>
+      <p class="sub">Kyorugi and poomsae events open for club registration.</p>
+    </div>
   </div>
-  <% if (!user && site.coachSignup) { %><a class="btn" href="/register">Create a coach account</a><% } %>
-</div>
 
-<% if (competitions.length === 0) { %>
-  <div class="card"><p class="empty">No competitions have been posted yet. Check back soon.</p></div>
-<% } else { %>
-  <div class="card-grid">
-    <% competitions.forEach((c) => { %><%- include('partials/competition_card', { c }) %><% }) %>
+  <% if (competitions.length === 0) { %>
+    <div class="card"><p class="empty">No competitions have been posted yet. Check back soon.</p></div>
+  <% } else { %>
+    <div class="card-grid">
+      <% competitions.forEach((c) => { %><%- include('partials/competition_card', { c }) %><% }) %>
+    </div>
+  <% } %>
+</section>
+
+<section class="section" id="news">
+  <div class="section-head">
+    <h2>News</h2>
+    <div class="actions">
+      <% if (moreNews) { %><a href="/news">All news</a><% } %>
+      <% if (user && user.role === 'admin') { %><a href="/admin/news">Manage posts</a><% } %>
+    </div>
   </div>
-<% } %>
+  <% if (news.length === 0) { %>
+    <div class="card"><p class="empty">No news yet. Check back soon.</p></div>
+  <% } %>
+  <% news.forEach((post) => { %><%- include('partials/news_card', { post }) %><% }) %>
+</section>
 <%- include('partials/bottom') %>

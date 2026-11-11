@@ -451,6 +451,12 @@ tbody tr.result-row-done:hover td { background: var(--ok-soft); }
 .theme-swatch-auto { background: linear-gradient(90deg, var(--swatch-light) 50%, var(--swatch-dark) 50%); }
 @media (max-width: 420px) { .theme-choice { grid-template-columns: 1fr; } .theme-option { flex-direction: row; align-items: center; } .theme-swatch { width: 56px; height: 36px; flex: none; } }
 
+/* Log in and Sign up, side by side at the top of both forms. */
+.auth-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-1); padding: var(--space-1); margin-bottom: var(--space-5); background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); }
+.auth-tabs a { display: flex; align-items: center; justify-content: center; min-height: var(--control-height-sm); border-radius: var(--radius-sm); color: var(--ink-2); font-weight: 600; text-decoration: none; }
+.auth-tabs a:hover { color: var(--ink); background: var(--neutral-soft); }
+.auth-tabs a[aria-current="page"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+
 /* Buttons set their own display, which would otherwise beat the hidden attribute. */
 [hidden] { display: none !important; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

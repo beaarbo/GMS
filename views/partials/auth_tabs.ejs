@@ -1,0 +1,7 @@
+<%# Switches between logging in and signing up. Pass active: 'login' or 'register'. Without coach sign-up there's nothing to switch to. %>
+<% if (site.coachSignup) { %>
+  <nav class="auth-tabs" aria-label="Log in or sign up">
+    <a href="/login"<%- active === 'login' ? ' aria-current="page"' : '' %>>Log in</a>
+    <a href="/register"<%- active === 'register' ? ' aria-current="page"' : '' %>>Sign up</a>
+  </nav>
+<% } %>

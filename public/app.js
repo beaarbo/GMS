@@ -22,9 +22,8 @@
   });
 }());
 
-// Themes: Auto (follow the device), Dark and Light, remembered for
-// public/theme.js to apply before the next page draws. Visitors use the top-bar
-// button; logged-in people pick on My account, which also saves it to the account.
+// Themes: Auto (follow the device), Dark and Light, picked on My account and
+// remembered for public/theme.js to apply before the next page draws.
 function setTheme(next) {
   if (next === 'auto') delete document.documentElement.dataset.theme;
   else document.documentElement.dataset.theme = next;
@@ -35,24 +34,6 @@ function setTheme(next) {
     // Storage blocked: the choice lasts for this page only.
   }
 }
-
-(function themeToggle() {
-  const button = document.querySelector('.theme-toggle');
-  if (!button) return;
-  const order = ['auto', 'dark', 'light'];
-  const names = { auto: 'Auto', dark: 'Dark', light: 'Light' };
-  const current = () => document.documentElement.dataset.theme || 'auto';
-  const show = () => {
-    button.textContent = `Theme: ${names[current()]}`;
-    button.setAttribute('aria-label', `Theme: ${names[current()]}. Change theme`);
-  };
-  button.hidden = false;
-  show();
-  button.addEventListener('click', () => {
-    setTheme(order[(order.indexOf(current()) + 1) % order.length]);
-    show();
-  });
-}());
 
 // My account's theme choice applies and saves as soon as it's picked. Without
 // JavaScript its Save button posts the form instead.

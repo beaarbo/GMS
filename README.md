@@ -129,11 +129,13 @@ While a bout list exists, approvals can't change and registration can't reopen. 
 
 ## Phones
 
-On small screens the menu folds behind a **Menu** button, so the pinned top bar stays short. Without JavaScript the full menu shows instead.
+Visitors without an account see one page: the competitions, with the latest five public news posts below them (**All news** opens the rest). Their top bar has just a **Log in** button, and the login page has **Log in** and **Sign up** tabs (Sign up only while coach sign-up is on in Settings).
+
+Logged in, on small screens the menu folds behind a **Menu** button, so the pinned top bar stays short. Without JavaScript the full menu shows instead.
 
 ## Dark theme
 
-The site follows the device's light or dark setting. Visitors switch between **Auto** (follow the device), **Dark** and **Light** with **Theme** at the end of the menu, and each browser remembers it. Logged-in people choose on **My account → Theme** instead; it applies at once and is kept with the account, so every device follows. Court screens always stay dark, and printed pages are always light.
+The site follows the device's light or dark setting. Logged-in people can choose **Auto** (follow the device), **Light** or **Dark** on **My account → Theme**; it applies at once and is kept with the account, so every device follows, and the browser keeps using it after logging out. Court screens always stay dark, and printed pages are always light.
 
 ## Settings
 
