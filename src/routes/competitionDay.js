@@ -25,8 +25,7 @@ const {
   clearPoomsaeOrder,
   poomsaeBoutList,
   poomsaeCourtQueue,
-  judgeLinks,
-  resetJudgeLinks,
+  submitJudgeMark,
   drawPoomsaeBracket,
   deletePoomsaeBracket,
   recordPoomsaeBout,
@@ -339,18 +338,62 @@ router.get('/competitions/:id(\\d+)/poomsae/mat/:day(\\d+)/:court(\\d+)', (req, 
     last,
     total: queue.items.length,
     marks: loadJudgeMarks(db, req.competition.id),
-    // Each judge's private link for this court and day, for their phone.
-    judgeLinks: judgeLinks(db, req.competition, day, court).map((l) => ({ judge: l.judge, url: `${req.app.locals.notify.publicUrl}/judge/${l.token}` })),
   });
 });
 
-// New judges' links for one court and day: the old ones stop working.
-router.post('/competitions/:id(\\d+)/poomsae/mat/:day(\\d+)/:court(\\d+)/judge-links/reset', (req, res) => {
-  const { day, court } = req.params;
-  resetJudgeLinks(req.app.locals.db, req.competition.id, Number(day), Number(court));
-  req.logActivity('poomsae.judge_links', `Replaced the judges' links for poomsae court ${court}, day ${day}: ${req.competition.name}`, req.competition.id);
-  req.flash('success', 'New judges\' links made. The old ones no longer work, so send these to the judges.');
-  return res.redirect(`/admin/competitions/${req.competition.id}/poomsae/mat/${day}/${court}#judge-links`);
+// A poomsae judge's page, for a phone: an official (or admin) logs in, opens
+// their court and judge number, and scores each performer on now. The score is
+// saved once every judge has sent theirs. Only admins and officials get here.
+const judgePath = (competition, day, court, judge) => `/admin/competitions/${competition.id}/poomsae/judge/${day}/${court}/${judge}`;
+
+function judgeSeat(req, res, next) {
+  const seat = { day: Number(req.params.day), court: Number(req.params.court), judge: Number(req.params.judge) };
+  if (!hasPoomsae(req.competition) || req.competition.status !== 'closed') return notFound(res);
+  if (seat.judge < 1 || seat.judge > req.competition.poomsae_judges || seat.court < 1 || seat.court > req.competition.poomsae_courts) return notFound(res);
+  req.seat = seat;
+  return next();
+}
+
+router.get('/competitions/:id(\\d+)/poomsae/judge/:day(\\d+)/:court(\\d+)/:judge(\\d+)', judgeSeat, (req, res) => {
+  const { db } = req.app.locals;
+  const { day, court, judge } = req.seat;
+  const queue = poomsaeCourtQueue(db, req.competition, day, court);
+  const marks = loadJudgeMarks(db, req.competition.id);
+  const date = getEventDates(db, req.competition.id)[day - 1];
+  const current = queue.now && queue.now.kind === 'perform' ? marks.get(queue.now.id) || [] : [];
+  return res.render('judge', {
+    title: `Judge ${judge}`,
+    competition: req.competition,
+    judge,
+    day,
+    court,
+    dayLabel: date ? `Day ${day} · ${formatDay(date)}` : `Day ${day}`,
+    now: queue.now,
+    next: queue.next.filter((i) => i.kind === 'perform'),
+    mine: current[judge - 1] ?? null,
+    sent: current.filter((m) => m !== undefined).length,
+    path: judgePath(req.competition, day, court, judge),
+    events: `/screens/${req.competition.id}/poomsae/${day}/${court}/events`,
+    matPath: `/admin/competitions/${req.competition.id}/poomsae/mat/${day}/${court}`,
+  });
+});
+
+router.post('/competitions/:id(\\d+)/poomsae/judge/:day(\\d+)/:court(\\d+)/:judge(\\d+)', judgeSeat, (req, res) => {
+  const { db } = req.app.locals;
+  const { day, court, judge } = req.seat;
+  const parsed = parseScore(req.body.score);
+  const result = !parsed.ok ? parsed
+    : parsed.score === null ? { ok: false, error: 'Enter your score, such as 7.8.' }
+      : submitJudgeMark(db, req.competition, req.seat, req.body.entry, parsed.score);
+  if (!result.ok) req.flash('error', result.error);
+  else {
+    req.logActivity('poomsae.judge_mark', `Judge ${judge} (poomsae court ${court}, day ${day}) scored ${result.performer.name} (${result.performer.club})`, req.competition.id);
+    if (result.complete) {
+      req.logActivity('poomsae.scored', `Poomsae score ${formatScore(result.score)} for ${result.performer.name} (${result.performer.club}) from the judges`, req.competition.id);
+    }
+    req.flash('success', result.complete ? `Thank you. Every judge has scored ${result.performer.name}.` : `Your score for ${result.performer.name} is in. You can change it until every judge has scored.`);
+  }
+  return res.redirect(judgePath(req.competition, day, court, judge));
 });
 
 const poomsaePath = (competition, entryId = null, divisionKey = null) =>

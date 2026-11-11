@@ -319,7 +319,6 @@ function createApp({
   app.use('/admin', adminRoutes);
   app.use('/official', officialRoutes);
   app.use('/screens', screenRoutes);
-  app.use('/judge', require('./routes/judge'));
 
   app.use((req, res) => {
     res.status(404).render('error', { title: 'Page not found', message: 'That page does not exist.' });

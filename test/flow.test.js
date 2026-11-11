@@ -652,7 +652,7 @@ test('schedule migration clears old draws and keeps competitions', () => {
 
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM bouts').get().n, 0);
   assert.equal(db.prepare('SELECT bout_courts FROM competitions WHERE id = ?').get(compId).bout_courts, 2);
-  assert.equal(db.pragma('user_version', { simple: true }), 21);
+  assert.equal(db.pragma('user_version', { simple: true }), 22);
 });
 
 test('admin creates a club, a coach applies, and only approval unlocks athlete registration', async () => {
@@ -817,7 +817,7 @@ test('migrating old club accounts keeps logins and fighters and approves each co
   const clubColumns = db.pragma('table_info(clubs)').map((c) => c.name);
   assert.ok(!clubColumns.includes('coach_name'));
   assert.equal(db.pragma('foreign_key_check').length, 0);
-  assert.equal(db.pragma('user_version', { simple: true }), 21);
+  assert.equal(db.pragma('user_version', { simple: true }), 22);
 });
 
 test('a fighter alone in a division has no bout number', async () => {
@@ -991,7 +991,7 @@ test('migration turns a day count into consecutive dates', () => {
   const { id } = db.prepare('SELECT id FROM competitions').get();
   assert.deepEqual(getEventDates(db, id), ['2030-01-30', '2030-01-31', '2030-02-01']);
   assert.ok(!db.pragma('table_info(competitions)').some((c) => c.name === 'bout_days'));
-  assert.equal(db.pragma('user_version', { simple: true }), 21);
+  assert.equal(db.pragma('user_version', { simple: true }), 22);
 });
 
 const tokenIn = (message) => message.text.match(/reset-password\/([0-9a-f]{64})/)[1];
@@ -1236,7 +1236,7 @@ test('the results migration removes declared weights and keeps registrations', (
   db.pragma('user_version = 4');
   migrate(db);
   assert.ok(!db.pragma('table_info(registrations)').some((c) => c.name === 'declared_weight_kg'));
-  assert.equal(db.pragma('user_version', { simple: true }), 21);
+  assert.equal(db.pragma('user_version', { simple: true }), 22);
 });
 
 test('athletes need the right document before they can enter', async () => {
@@ -1853,7 +1853,7 @@ test('rebuilding the users table for officials keeps every linked row', async ()
   db.close();
 
   db = openDb(file);
-  assert.equal(db.pragma('user_version', { simple: true }), 21);
+  assert.equal(db.pragma('user_version', { simple: true }), 22);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM club_applications').get().n, 1);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM password_resets').get().n, 1);
   assert.equal(db.prepare('SELECT author_id FROM news_posts').get().author_id, coachId);
@@ -2337,7 +2337,7 @@ test('migrating to version 13 moves poomsae entries onto poomsae age groups', ()
   db.pragma('user_version = 12');
 
   migrate(db);
-  assert.equal(db.pragma('user_version', { simple: true }), 21);
+  assert.equal(db.pragma('user_version', { simple: true }), 22);
   const moved = db.prepare('SELECT a.name, e.status FROM poomsae_entries e JOIN poomsae_age_groups a ON a.id = e.age_group_id WHERE e.id = ?').get(entry);
   assert.deepEqual(moved, { name: 'U40', status: 'approved' });
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM poomsae_members').get().n, 1);
@@ -2859,7 +2859,7 @@ test('kyorugi results record how a bout was won, and a bout with both athletes o
   assert.deepEqual([bout(2, 0).winner_registration_id, bout(2, 0).win_type], [a, 'PTF']);
 });
 
-test('poomsae judges score from their phones with private links, and the score saves once all have', async () => {
+test('poomsae judges score from their phones by logging in as officials, and the score saves once all have', async () => {
   const { app, db } = await setup();
   const compId = openCompetition(db, { name: 'Judge Cup', events: 'poomsae' });
   const club = await signUpClub(app, 'Tigers', 'tigers@test.test');
@@ -2877,25 +2877,33 @@ test('poomsae judges score from their phones with private links, and the score s
   const firstName = db.prepare('SELECT f.first_name FROM poomsae_members m JOIN fighters f ON f.id = m.fighter_id WHERE m.entry_id = ?').get(first).first_name;
   const score = () => db.prepare('SELECT score FROM poomsae_entries WHERE id = ?').get(first).score;
 
-  // The mat page lists one private link per judge.
+  // Each judge is an official with their own login; the mat page links to each judge number.
+  const phones = [];
+  for (const n of [1, 2, 3]) {
+    assert.ok(await createOfficialAccount(db, { full_name: `Judge ${n}`, email: `judge${n}@test.test`, password: PASSWORD }));
+    phones.push(await login(app, `judge${n}@test.test`));
+  }
   const mat = `${review}/mat/1/1`;
-  const links = [...(await admin.get(mat)).text.matchAll(/value="https:\/\/gms\.test(\/judge\/[\w-]+)"/g)].map((m) => m[1]);
-  assert.equal(links.length, 3);
-  const judge = (n) => request.agent(app);
-  const phones = [judge(1), judge(2), judge(3)];
-  const send = (n, value, entry = first) => post(phones[n - 1], links[n - 1], { entry: String(entry), score: value }, links[n - 1]);
+  const seat = (n) => `${review}/judge/1/1/${n}`;
+  assert.match((await phones[0].get(mat)).text, new RegExp(`href="${seat(3)}">Score as judge 3`));
+  const send = (n, value, entry = first) => post(phones[n - 1], seat(n), { entry: String(entry), score: value }, seat(n));
 
-  // A judge, with no account, sees the performer on now and sends a mark.
-  const phonePage = (await phones[0].get(links[0])).text;
+  // Without an official or admin login, there's no way in.
+  assert.equal((await request(app).get(seat(1))).headers.location, '/login');
+  assert.equal((await club.get(seat(1))).status, 403);
+  assert.equal((await phones[0].get(`${review}/judge/1/1/4`)).status, 404, 'only judges 1 to 3');
+
+  // A judge sees the performer on now and sends a mark.
+  const phonePage = (await phones[0].get(seat(1))).text;
   assert.match(phonePage, new RegExp(`<h2>${firstName} Judo</h2>`));
-  assert.match(phonePage, /Judge 1/);
+  assert.match(phonePage, new RegExp(`data-live-events="/screens/${compId}/poomsae/1/1/events"`));
   await send(1, '7.5');
   await send(2, '8.0');
   assert.equal(score(), null, 'not until every judge has scored');
   assert.match((await admin.get(mat)).text, /2 of 3 judges have scored from their phones/);
   assert.match((await admin.get(mat)).text, /name="judge_2"[^>]*value="8.00"/, 'the mat page shows their marks');
   await send(1, '7.8');
-  assert.match((await phones[0].get(links[0])).text, /value="7.80"[\s\S]*?Change score/, 'a judge can change their mark until all are in');
+  assert.match((await phones[0].get(seat(1))).text, /value="7.80"[\s\S]*?Change score/, 'a judge can change their mark until all are in');
   await send(3, 'eight');
   assert.equal(score(), null, 'a bad mark changes nothing');
   await send(3, '8.2');
@@ -2904,13 +2912,7 @@ test('poomsae judges score from their phones with private links, and the score s
   // A scored performer can't be changed from a phone, and the next one comes up.
   await send(2, '9');
   assert.equal(score(), 8);
-  assert.doesNotMatch((await phones[1].get(links[1])).text, new RegExp(`<h2>${firstName} Judo</h2>`));
-
-  // Links never reach the activity log; new links shut out the old ones.
-  const token = links[0].split('/').pop();
-  assert.ok(!db.prepare('SELECT 1 FROM activity_log WHERE summary LIKE ?').get(`%${token}%`));
-  assert.ok(db.prepare("SELECT 1 FROM activity_log WHERE action = 'poomsae.judge_mark'").get());
-  await post(admin, `${mat}/judge-links/reset`, {}, mat);
-  assert.equal((await phones[0].get(links[0])).status, 404);
-  assert.equal((await request(app).get('/judge/not-a-real-link-token-xx')).status, 404);
+  assert.doesNotMatch((await phones[1].get(seat(2))).text, new RegExp(`<h2>${firstName} Judo</h2>`));
+  // The activity log names the official who scored.
+  assert.ok(db.prepare("SELECT 1 FROM activity_log WHERE action = 'poomsae.judge_mark' AND actor LIKE '%Judge 3%'").get());
 });

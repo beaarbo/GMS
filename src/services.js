@@ -882,47 +882,21 @@ function competitionResults(db, competition, { published = false, event = null }
   return { divisions, table };
 }
 
-// The private scoring link of each judge on one poomsae court and day, made the
-// first time they're asked for. Returns [{ judge, token }] for judges 1 to N.
-function judgeLinks(db, competition, day, court) {
-  const insert = db.prepare('INSERT OR IGNORE INTO poomsae_judge_links (token, competition_id, day, court, judge) VALUES (?, ?, ?, ?, ?)');
-  for (let judge = 1; judge <= competition.poomsae_judges; judge += 1) {
-    insert.run(crypto.randomBytes(18).toString('base64url'), competition.id, day, court, judge);
-  }
-  return db
-    .prepare('SELECT judge, token FROM poomsae_judge_links WHERE competition_id = ? AND day = ? AND court = ? AND judge <= ? ORDER BY judge')
-    .all(competition.id, day, court, competition.poomsae_judges);
-}
-
-// New links for one court and day, so old ones stop working (a phone lost, say).
-function resetJudgeLinks(db, competitionId, day, court) {
-  db.prepare('DELETE FROM poomsae_judge_links WHERE competition_id = ? AND day = ? AND court = ?').run(competitionId, day, court);
-}
-
-// The link and its competition, or null.
-function findJudgeLink(db, token) {
-  if (typeof token !== 'string' || !/^[\w-]{20,40}$/.test(token)) return null;
-  const link = db.prepare('SELECT * FROM poomsae_judge_links WHERE token = ?').get(token);
-  if (!link) return null;
-  const competition = db.prepare('SELECT * FROM competitions WHERE id = ?').get(link.competition_id);
-  return competition && link.judge <= competition.poomsae_judges ? { link, competition } : null;
-}
-
-// One judge's mark for a performer on their court, from the judge's phone. It
-// can be changed until every judge has sent theirs; then the score is worked
-// out (judgesScore) and saved like one entered on the mat page.
-// Returns { ok, error?, complete, score, performer }.
-function submitJudgeMark(db, competition, link, entryId, mark) {
+// One judge's mark for a performer on their court, from the judge's phone.
+// seat is { day, court, judge }. The mark can be changed until every judge has
+// sent theirs; then the score is worked out (judgesScore) and saved like one
+// entered on the mat page. Returns { ok, error?, complete, score, performer }.
+function submitJudgeMark(db, competition, seat, entryId, mark) {
   if (competition.status !== 'closed') return { ok: false, error: 'Scoring opens once registration closes.' };
   const performer = poomsaeCourtItems(db, competition)
-    .find((i) => i.kind === 'perform' && i.id === Number(entryId) && i.day === link.day && i.court === link.court);
+    .find((i) => i.kind === 'perform' && i.id === Number(entryId) && i.day === seat.day && i.court === seat.court);
   if (!performer) return { ok: false, error: 'That performer is not on your court.' };
   if (performer.score !== null) return { ok: false, error: `${performer.name} already has a score. Ask the official on the mat to change it.` };
   return db.transaction(() => {
     db.prepare(
       `INSERT INTO poomsae_judge_scores (entry_id, judge, score) VALUES (?, ?, ?)
        ON CONFLICT(entry_id, judge) DO UPDATE SET score = excluded.score`
-    ).run(performer.id, link.judge, mark);
+    ).run(performer.id, seat.judge, mark);
     const marks = db.prepare('SELECT judge, score FROM poomsae_judge_scores WHERE entry_id = ? AND judge <= ? ORDER BY judge').all(performer.id, competition.poomsae_judges);
     if (marks.length < competition.poomsae_judges) return { ok: true, complete: false, performer };
     const all = marks.map((m) => m.score);
@@ -1983,9 +1957,6 @@ module.exports = {
   poomsaeCourtQueue,
   competitionResults,
   competitionProgramme,
-  judgeLinks,
-  resetJudgeLinks,
-  findJudgeLink,
   submitJudgeMark,
   drawPoomsaeBracket,
   deletePoomsaeBracket,

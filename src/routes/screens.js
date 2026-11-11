@@ -144,5 +144,3 @@ router.get('/:id(\\d+)/:day(\\d+)/:court(\\d+)/events', screenCompetition('kyoru
 router.get('/:id(\\d+)/poomsae/:day(\\d+)/:court(\\d+)/events', screenCompetition('poomsae'), changeStream);
 
 module.exports = router;
-// The judges' phone page (routes/judge.js) uses the same live stream.
-module.exports.changeStream = changeStream;

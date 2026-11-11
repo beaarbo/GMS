@@ -109,21 +109,15 @@
 
 
 </main>
-<%# Outside the live part, so it stays open while scores come in. %>
+<%# Outside the live part, so it doesn't jump while scores come in. %>
 <div class="mat-main mat-extra">
-  <details class="card division-edit judge-links" id="judge-links">
-    <summary>Judges' phone links</summary>
-    <p class="sub">Send each judge their own link. They open it on their phone, no account needed, and score each performer on this court. The score saves once all <%= judges %> have scored. Anyone with a link can score as that judge here, so keep them private.</p>
-    <ul class="judge-link-list">
-      <% judgeLinks.forEach((l) => { %>
-        <li><label>Judge <%= l.judge %> <input readonly value="<%= l.url %>" aria-label="Link for judge <%= l.judge %>"></label> <a class="btn secondary small" href="<%= l.url %>" target="_blank" rel="noopener">Open</a></li>
-      <% }) %>
-    </ul>
-    <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/mat/<%= day %>/<%= court %>/judge-links/reset" data-confirm="Make new links? The current ones stop working straight away.">
-      <input type="hidden" name="_csrf" value="<%= csrf %>">
-      <button class="btn danger small" type="submit">Make new links</button>
-    </form>
-  </details>
+  <section class="card" id="judges">
+    <h2>Judges on their phones</h2>
+    <p class="sub">Each judge logs in with an official account on their phone, opens this court and taps their judge number. They then score each performer on now, and the score saves once all <%= judges %> have scored.</p>
+    <div class="actions">
+      <% for (let j = 1; j <= judges; j += 1) { %><a class="btn secondary" href="/admin/competitions/<%= competition.id %>/poomsae/judge/<%= day %>/<%= court %>/<%= j %>">Score as judge <%= j %></a><% } %>
+    </div>
+  </section>
 </div>
 </body>
 </html>

@@ -9,13 +9,16 @@
   <script src="/app.js" defer></script>
 </head>
 <%# Updates live when the next performer comes up or the score is complete. %>
-<body class="mat" data-live-events="<%= path %>/events">
+<body class="mat" data-live-events="<%= events %>">
 <header class="mat-head">
   <div>
     <h1>Judge <%= judge %></h1>
     <p class="sub">Poomsae court <%= court %> · <%= dayLabel %> · <%= competition.name %></p>
   </div>
-  <span class="screen-status" id="screen-status" hidden></span>
+  <nav class="actions" aria-label="Court">
+    <span class="screen-status" id="screen-status" hidden></span>
+    <a class="btn secondary small" href="<%= matPath %>">Mat page</a>
+  </nav>
 </header>
 
 <main class="mat-main" data-live-part="main">

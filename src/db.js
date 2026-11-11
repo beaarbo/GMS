@@ -352,19 +352,6 @@ CREATE TABLE IF NOT EXISTS poomsae_divisions (
   PRIMARY KEY (competition_id, division_key)
 );
 
--- A private link for one poomsae judge on one poomsae court and day, so judges
--- can score from their own phones without an account. Anyone with the link can
--- score as that judge on that court, so the admin can replace it.
-CREATE TABLE IF NOT EXISTS poomsae_judge_links (
-  token TEXT PRIMARY KEY,
-  competition_id INTEGER NOT NULL REFERENCES competitions(id) ON DELETE CASCADE,
-  day INTEGER NOT NULL,
-  court INTEGER NOT NULL,
-  judge INTEGER NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  UNIQUE (competition_id, day, court, judge)
-);
-
 CREATE TABLE IF NOT EXISTS sessions (
   sid TEXT PRIMARY KEY,
   sess TEXT NOT NULL,
@@ -710,15 +697,23 @@ function migrateMapLocation(db) {
   })();
 }
 
-// Version 21: kyorugi results can record how a bout was won and its score, a
-// bout with both athletes out at the weigh-in becomes a no contest, and poomsae
-// judges get links to score from their phones. None of these exist yet.
+// Version 21: kyorugi results can record how a bout was won and its score, and
+// a bout with both athletes out at the weigh-in becomes a no contest. None yet.
 function migrateWinsAndJudgeLinks(db) {
   db.transaction(() => {
     addColumnIfMissing(db, 'bouts', 'win_type', 'TEXT');
     addColumnIfMissing(db, 'bouts', 'score', 'TEXT');
     addColumnIfMissing(db, 'bouts', 'no_contest', 'INTEGER NOT NULL DEFAULT 0');
     db.pragma('user_version = 21');
+  })();
+}
+
+// Version 22: poomsae judges score through official accounts, so the private
+// judges' links from version 21 go. The links table only ever held those links.
+function migrateDropJudgeLinks(db) {
+  db.transaction(() => {
+    db.exec('DROP TABLE IF EXISTS poomsae_judge_links');
+    db.pragma('user_version = 22');
   })();
 }
 
@@ -744,6 +739,7 @@ function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 19) migrateJudges(db);
   if (db.pragma('user_version', { simple: true }) < 20) migrateMapLocation(db);
   if (db.pragma('user_version', { simple: true }) < 21) migrateWinsAndJudgeLinks(db);
+  if (db.pragma('user_version', { simple: true }) < 22) migrateDropJudgeLinks(db);
 }
 
 // Safe on old databases: only tables that don't exist yet are created.
