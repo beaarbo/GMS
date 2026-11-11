@@ -8,7 +8,7 @@
   </div>
   <div class="actions">
     <% if (total > 0 && day && court) { %><a class="btn" href="/admin/competitions/<%= competition.id %>/mat/<%= day %>/<%= court %>">Open mat view</a><% } %>
-    <% if (total > 0) { %><a class="btn secondary" href="/screens/<%= competition.id %>">Court screens</a><a class="btn secondary" href="/competitions/<%= competition.id %>/results">Overall results</a><% } %>
+    <% if (total > 0) { %><a class="btn secondary" href="/screens/<%= competition.id %>">Court screens</a><a class="btn secondary" href="/competitions/<%= competition.id %>/results">Overall results</a><a class="btn secondary" href="/admin/competitions/<%= competition.id %>/results/export.xlsx">Download results (Excel)</a><% } %>
     <% if (isAdmin && done > 0) { %>
       <form method="post" action="/admin/competitions/<%= competition.id %>/results/clear-all" data-confirm="Clear every recorded result? This cannot be undone.">
         <input type="hidden" name="_csrf" value="<%= csrf %>">

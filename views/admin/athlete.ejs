@@ -1,0 +1,71 @@
+<%- include('../partials/top') %>
+<% const isAdmin = user.role === 'admin'; %>
+<p class="breadcrumb"><% if (isAdmin) { %><a href="/admin/competitions">Competitions</a><% } else { %><a href="/official">Competition day</a><% } %></p>
+<div class="page-head">
+  <div>
+    <h1><%= fighter.last_name %> <%= fighter.first_name %></h1>
+    <p class="sub"><%= fighter.club %> · <%= competition.name %></p>
+  </div>
+</div>
+
+<% if (registration) { %>
+  <section class="card">
+    <h2>Kyorugi</h2>
+    <p><%= registration.age_group %> · <%= GENDERS[registration.gender] %> · <%= registration.belt_group %> · <%= registration.weight_class %></p>
+    <% if (registration.status !== 'approved' || registration.withdrawn_at) { %>
+      <p class="empty"><%= registration.withdrawn_at ? 'Withdrawn from the draw.' : `Registration ${registration.status}.` %></p>
+    <% } else { %>
+      <p class="stats"><span>Weigh-in: <strong><%= weighText %></strong></span></p>
+      <div class="actions"><a class="btn" href="<%= weighInLink %>"><%= registration.weigh_status ? 'Open in the weigh-in' : 'Weigh in' %></a></div>
+    <% } %>
+    <% if (bouts.length > 0) { %>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Bout</th><th>When</th><th>Corner</th><th>Opponent</th><th>Result</th><th></th></tr></thead>
+          <tbody>
+            <% bouts.forEach((b) => { %>
+              <tr>
+                <td class="nowrap"><strong><%= b.number %></strong></td>
+                <td class="nowrap"><%= b.dayLabel %>, court <%= b.court %>, <%= b.time %></td>
+                <td><%= b.own === 'blue' ? 'Blue (chung)' : 'Red (hong)' %></td>
+                <td><%= b.opponent ? `${b.opponent.name} (${b.opponent.club})` : (b.own === 'blue' ? b.redPlaceholder : b.bluePlaceholder) || 'To be decided' %></td>
+                <td>
+                  <% if (b.noContest) { %>No contest
+                  <% } else if (b.winner) { %><%= b.winner.registrationId === registration.id ? 'Won' : 'Lost' %><%= b.walkover ? ' (walkover)' : '' %>
+                  <% } else { %>To come<% } %>
+                </td>
+                <td><a href="/admin/competitions/<%= competition.id %>/mat/<%= b.day %>/<%= b.court %>">Mat</a></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    <% } else if (registration.status === 'approved' && !registration.withdrawn_at) { %>
+      <p class="empty">No bouts yet: the bout list hasn't been drawn.</p>
+    <% } %>
+  </section>
+<% } %>
+
+<% if (entries.length > 0) { %>
+  <section class="card">
+    <h2>Poomsae</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Division</th><th>Athletes</th><th>Status</th><th>Performs</th><th>Score</th></tr></thead>
+        <tbody>
+          <% entries.forEach((e) => { %>
+            <tr>
+              <td><%= poomsaeTitle(e) %></td>
+              <td><%= e.names %></td>
+              <td><%= statusLabel(e.status) %></td>
+              <td class="nowrap"><%= e.perform_time ? `${e.perform_order}. at ${e.perform_time}` : '–' %></td>
+              <td><%= e.score === null ? '–' : formatScore(e.score) %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+    <div class="actions"><a class="btn secondary" href="/admin/competitions/<%= competition.id %>/poomsae">Poomsae scores</a></div>
+  </section>
+<% } %>
+<%- include('../partials/bottom') %>

@@ -38,13 +38,15 @@ const { hasPoomsae, parseScore, formatScore, poomsaeDivisionTitle, poomsaeMedalT
 const { notifyPoomsaeDecisions, notifyPoomsaePublished } = require('../notifications');
 const { writeBoutListPdf } = require('../boutlistPdf');
 const { computeMedals, WIN_TYPES, readBoutScore } = require('../bracket');
-const { clean, requireRole, notFound } = require('./helpers');
+const { clean, requireRole, notFound, wrap } = require('./helpers');
+const { weighInSheets, resultsSheets, sendXlsx, weighLabel } = require('../exports');
+const { REGISTRATION_SELECT } = require('../services');
 
 const router = express.Router();
 const staff = requireRole(['admin', 'official']);
 
 // Officials only reach competitions that are past registration.
-router.use('/competitions/:id(\\d+)/:page(weigh-in|results|mat|poomsae)', staff, (req, res, next) => {
+router.use('/competitions/:id(\\d+)/:page(weigh-in|results|mat|poomsae|athletes)', staff, (req, res, next) => {
   const competition = req.app.locals.db.prepare('SELECT * FROM competitions WHERE id = ?').get(req.params.id);
   if (!competition || (req.user.role === 'official' && competition.status !== 'closed')) return notFound(res);
   req.competition = competition;
@@ -64,6 +66,46 @@ function weighInPath(competition, filters, registrationId = null) {
   const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value)).toString();
   return `/admin/competitions/${competition.id}/weigh-in${query ? `?${query}` : ''}${registrationId ? `#reg-${registrationId}` : ''}`;
 }
+
+router.get('/competitions/:id(\\d+)/weigh-in/list.xlsx', wrap(async (req, res) => sendXlsx(res, `weigh-in-competition-${req.competition.id}.xlsx`, weighInSheets(req.app.locals.db, req.competition))));
+
+router.get('/competitions/:id(\\d+)/results/export.xlsx', wrap(async (req, res) => sendXlsx(res, `results-competition-${req.competition.id}.xlsx`, resultsSheets(req.app.locals.db, req.competition))));
+
+// What an athlete card's QR code opens: their weigh-in, bouts and poomsae
+// entries at this competition, with links to act on each.
+router.get('/competitions/:id(\\d+)/athletes/:fighterId(\\d+)', (req, res) => {
+  const { db } = req.app.locals;
+  const competition = req.competition;
+  const fighterId = Number(req.params.fighterId);
+  const registration = db.prepare(
+    `${REGISTRATION_SELECT.replace('FROM registrations r', ', ew.label AS entered_weight_class FROM registrations r')}
+     LEFT JOIN weight_classes ew ON ew.id = r.entered_weight_class_id
+     WHERE r.competition_id = ? AND r.fighter_id = ?`
+  ).get(competition.id, fighterId) || null;
+  const entries = listPoomsaeEntries(db, competition.id).filter((e) => e.athletes.some((a) => a.id === fighterId));
+  if (!registration && entries.length === 0) return notFound(res);
+  const fighter = db.prepare('SELECT f.first_name, f.last_name, c.name AS club FROM fighters f JOIN clubs c ON c.id = f.club_id WHERE f.id = ?').get(fighterId);
+  const eventDates = getEventDates(db, competition.id);
+  const bouts = registration
+    ? listBouts(db, competition.id)
+      .filter((b) => [b.blue, b.red].some((side) => side && side.registrationId === registration.id))
+      .map((b) => {
+        const own = b.blue && b.blue.registrationId === registration.id ? 'blue' : 'red';
+        return { ...b, own, opponent: b[own === 'blue' ? 'red' : 'blue'], dayLabel: eventDates[b.day - 1] ? formatDay(eventDates[b.day - 1]) : `Day ${b.day}` };
+      })
+    : [];
+  return res.render('admin/athlete', {
+    title: `${fighter.last_name} ${fighter.first_name}`,
+    competition,
+    fighter,
+    registration,
+    weighText: registration && registration.status === 'approved' ? weighLabel(registration) : null,
+    weighInLink: registration ? weighInPath(competition, { q: `${fighter.first_name} ${fighter.last_name}` }, registration.id) : null,
+    bouts,
+    entries,
+    poomsaeTitle: poomsaeDivisionTitle,
+  });
+});
 
 router.get('/competitions/:id(\\d+)/weigh-in', (req, res) => {
   const { db } = req.app.locals;

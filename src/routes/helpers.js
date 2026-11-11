@@ -14,6 +14,8 @@ function requireRole(role) {
   const allowed = Array.isArray(role) ? role : [role];
   return (req, res, next) => {
     if (!req.user) {
+      // After logging in they come back here, for example from a scanned athlete card.
+      if (req.method === 'GET') req.session.returnTo = req.originalUrl;
       req.flash('error', 'Please log in to continue.');
       return res.redirect('/login');
     }
@@ -41,6 +43,14 @@ function homeFor(user) {
   if (user.role === 'admin') return '/admin';
   if (user.role === 'official') return '/official';
   return user.club_id ? '/home' : '/coach';
+}
+
+// Where to go after logging in: the page that asked for it, if it's on this
+// site, else the account's home. Read once.
+function afterLogin(req, user) {
+  const target = req.session.returnTo;
+  delete req.session.returnTo;
+  return typeof target === 'string' && /^\/(?![/\\])/.test(target) ? target : homeFor(user);
 }
 
 function notFound(res) {
@@ -84,4 +94,4 @@ function readPoomsaeAges(body) {
     .map((g) => ({ ...g, min_age: g.minRaw === '' ? NaN : Number(g.minRaw), max_age: g.maxRaw === '' ? NaN : Number(g.maxRaw) }));
 }
 
-module.exports = { clean, toArray, requireRole, homeFor, passwordError, notFound, wrap, readSetup, readPoomsaeAges };
+module.exports = { clean, toArray, requireRole, homeFor, afterLogin, passwordError, notFound, wrap, readSetup, readPoomsaeAges };

@@ -9,7 +9,10 @@
       <p class="sub"><%= competition.name %> · <%= eventDatesText(competition) %></p>
     </div>
   </div>
-  <% if (isAdmin) { %><a class="btn secondary" href="/admin/competitions/<%= competition.id %>/bouts">Bout list</a><% } %>
+  <div class="actions">
+    <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/weigh-in/list.xlsx">Download list (Excel)</a>
+    <% if (isAdmin) { %><a class="btn secondary" href="/admin/competitions/<%= competition.id %>/bouts">Bout list</a><% } %>
+  </div>
 </div>
 
 <% if (competition.status !== 'closed') { %>

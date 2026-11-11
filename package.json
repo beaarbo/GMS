@@ -25,6 +25,7 @@
     "multer": "^2.5.0",
     "nodemailer": "^10.3.1",
     "pdfkit": "^0.20.2",
+    "qrcode": "^1.5.4",
     "read-excel-file": "^9.3.14",
     "write-excel-file": "^4.1.1"
   },

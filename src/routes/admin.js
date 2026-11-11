@@ -62,6 +62,8 @@ const { ACTIVITY_CATEGORIES, listActivity, countActivity, formatActivityTime } =
 const { notifyRegistrationDecisions, notifyBoutListPublished, notifyDivisionMerged, notifyAccountChange } = require('../notifications');
 const { layoutBracket, computeMedals } = require('../bracket');
 const { writeBoutListPdf } = require('../boutlistPdf');
+const { entriesSheets, sendXlsx } = require('../exports');
+const { cardAthletes, writeAthleteCards } = require('../athleteCards');
 const { clean, toArray, requireRole, notFound, wrap, passwordError, readSetup, readPoomsaeAges } = require('./helpers');
 const { resultsPath } = require('./competitionDay');
 const { createBackup, pruneBackups, listBackups } = require('../backups');
@@ -1083,6 +1085,23 @@ router.get('/competitions/:id(\\d+)/export.csv', (req, res) => {
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="competition-${req.competition.id}-approved.csv"`);
   res.send(`﻿${[header.map((h) => csvCell(h)).join(','), ...rows].join('\r\n')}`);
+});
+
+// Every entry, kyorugi and poomsae, with dates of birth for insurers and
+// federations. It holds minors' personal data, so each download is logged.
+router.get('/competitions/:id(\\d+)/entries.xlsx', wrap(async (req, res) => {
+  req.logActivity('competition.exported', `Downloaded every entry for ${req.competition.name}`, req.competition.id);
+  return sendXlsx(res, `entries-competition-${req.competition.id}.xlsx`, entriesSheets(req.app.locals.db, req.competition));
+}));
+
+// Cards to print for every approved athlete, or one club's (?club=id).
+router.get('/competitions/:id(\\d+)/cards.pdf', (req, res) => {
+  const { db, notify } = req.app.locals;
+  const clubId = /^\d+$/.test(clean(req.query.club, 12)) ? Number(req.query.club) : null;
+  const athletes = cardAthletes(db, req.competition, { clubId });
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="athlete-cards-competition-${req.competition.id}${clubId ? `-club-${clubId}` : ''}.pdf"`);
+  return writeAthleteCards(res, { competition: req.competition, athletes, publicUrl: notify.publicUrl });
 });
 
 router.get('/fighters/:id(\\d+)/document', (req, res) => {

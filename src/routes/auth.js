@@ -4,7 +4,7 @@ const rateLimit = require('express-rate-limit');
 const { createCoachAccount, createPasswordReset, findPasswordReset, completePasswordReset } = require('../services');
 const { sendPasswordReset } = require('../notifications');
 const { logActivity } = require('../activity');
-const { clean, wrap, homeFor, passwordError } = require('./helpers');
+const { clean, wrap, homeFor, afterLogin, passwordError } = require('./helpers');
 const { verifyCode, hashRecoveryCode } = require('../totp');
 
 // How long the code page waits after the password was right.
@@ -32,9 +32,11 @@ const authLimiter = rateLimit({
 });
 
 function startSession(req, userId, callback) {
+  const { returnTo } = req.session;
   req.session.regenerate((error) => {
     if (error) return callback(error);
     req.session.userId = userId;
+    if (returnTo) req.session.returnTo = returnTo;
     return req.session.save(callback);
   });
 }
@@ -58,13 +60,15 @@ router.post(
     }
     if (user.totp_secret) {
       // Not logged in yet: the code page finishes it.
+      const { returnTo } = req.session;
       return req.session.regenerate((error) => {
         if (error) return next(error);
         req.session.twoStep = { userId: user.id, at: Date.now() };
+        if (returnTo) req.session.returnTo = returnTo;
         return req.session.save((saveError) => (saveError ? next(saveError) : res.redirect('/login/code')));
       });
     }
-    return startSession(req, user.id, (error) => (error ? next(error) : res.redirect(homeFor(user))));
+    return startSession(req, user.id, (error) => (error ? next(error) : res.redirect(afterLogin(req, user))));
   })
 );
 
@@ -101,7 +105,7 @@ router.post('/login/code', authLimiter, (req, res, next) => {
     }
   }
   if (!ok) return res.status(401).render('login_code', { title: 'Two-step login', error: 'That code is not right. Use the newest code from your authenticator app.' });
-  return startSession(req, user.id, (error) => (error ? next(error) : res.redirect(homeFor(user))));
+  return startSession(req, user.id, (error) => (error ? next(error) : res.redirect(afterLogin(req, user))));
 });
 
 // Sign-up can be closed on the Settings page; admins then add coaches themselves.

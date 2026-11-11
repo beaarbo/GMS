@@ -153,6 +153,12 @@ Everyone can change their name, email, password and theme, and choose which emai
 
 **Two-step login** asks for a six-digit code from an authenticator app (Google Authenticator, Microsoft Authenticator, 1Password and others) after the password. Setting it up shows a key to type into the app, then ten one-time recovery codes, shown once. Someone who lost their phone and codes can ask an admin, who can turn it off for them on **Accounts**.
 
+## Downloads and athlete cards
+
+- **All entries (Excel)**, on a competition's Registrations page: every kyorugi registration and poomsae entry with club, date of birth, age, belt, division, status and weigh-in result, for insurers and federations. Admin-only, and each download is logged, since it holds minors' details. **Export approved (CSV)** stays for the approved kyorugi list.
+- **Download list (Excel)** on the Weigh-in page and **Download results (Excel)** on the Results page (medallists and the club medal table), for admins and officials.
+- **Athlete cards (PDF)**, on the Registrations page: ten cards to an A4 page, one per approved athlete, with their name, club, divisions and a QR code. Add `?club=<id>` to the address for one club's cards. Scanning a code opens the athlete's page for logged-in admins and officials (after logging in if needed): their weigh-in result with a button that opens them in the weigh-in, their bouts with court, time, opponent and result, and their poomsae entries. The code holds only a link, no personal data, and visitors who scan it get the login page.
+
 ## Deleting things
 
 - **Competitions:** an empty draft has a **Delete** button on the admin **Competitions** page. A competition with entries can be deleted once registration is closed: **Delete** opens a page listing what will go (registrations, bouts, results, files), and you type its name to confirm. A backup is made first, so it can be restored. Athletes stay with their clubs.
