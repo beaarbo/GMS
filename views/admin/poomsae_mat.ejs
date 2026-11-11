@@ -38,11 +38,13 @@
         <%- back() %>
         <% if (judges === 1) { %>
           <label>Score <input class="mat-score" name="score" inputmode="decimal" autocomplete="off" required placeholder="7.85" aria-label="Score of <%= now.name %>"></label>
-        <% } else { %>
-          <% for (let j = 1; j <= judges; j += 1) { %><label>Judge <%= j %> <input class="mat-score" name="judge_<%= j %>" inputmode="decimal" autocomplete="off" required placeholder="7.8" aria-label="Judge <%= j %> score for <%= now.name %>"></label><% } %>
+        <% } else { const sent = marks.get(now.id) || []; %>
+          <% for (let j = 1; j <= judges; j += 1) { %><label>Judge <%= j %> <input class="mat-score" name="judge_<%= j %>" inputmode="decimal" autocomplete="off" required placeholder="7.8" value="<%= sent[j - 1] === undefined ? '' : formatScore(sent[j - 1]) %>" aria-label="Judge <%= j %> score for <%= now.name %>"></label><% } %>
         <% } %>
         <button class="btn" type="submit">Save score</button>
       </form>
+      <% const fromPhones = (marks.get(now.id) || []).filter((m) => m !== undefined).length; %>
+      <% if (fromPhones > 0) { %><p class="hint"><%= fromPhones %> of <%= judges %> judges have scored from their phones. The score saves by itself when all have, or save the boxes above now.</p><% } %>
     <% } else if (now) { %>
       <h2>Bout <%= now.number %> <span class="hint">· <%= now.time %> · <%= now.title %></span></h2>
       <p class="sub">Tap the winner. They move into their next bout.</p>
@@ -87,7 +89,7 @@
       <% if (!last) { %>
         <p class="empty">No results yet.</p>
       <% } else if (last.kind === 'perform') { const own = marks.get(last.id); %>
-        <p><strong><%= last.name %></strong> scored <strong><%= formatScore(last.score) %></strong><% if (own) { %> <span class="hint">(judges <%= own.map(formatScore).join(', ') %>)</span><% } %><br><span class="hint"><%= last.title %></span></p>
+        <p><strong><%= last.name %></strong> scored <strong><%= formatScore(last.score) %></strong><% if (own && own.length > 1) { %> <span class="hint">(judges <%= own.map(formatScore).join(', ') %>)</span><% } %><br><span class="hint"><%= last.title %></span></p>
         <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/<%= last.id %>/score" data-confirm="Clear the score of <%= last.name %>?">
           <%- back() %>
           <button class="btn danger" type="submit">Clear this score</button>
@@ -104,6 +106,24 @@
       <% } %>
     </section>
   </div>
+
+
 </main>
+<%# Outside the live part, so it stays open while scores come in. %>
+<div class="mat-main mat-extra">
+  <details class="card division-edit judge-links" id="judge-links">
+    <summary>Judges' phone links</summary>
+    <p class="sub">Send each judge their own link. They open it on their phone, no account needed, and score each performer on this court. The score saves once all <%= judges %> have scored. Anyone with a link can score as that judge here, so keep them private.</p>
+    <ul class="judge-link-list">
+      <% judgeLinks.forEach((l) => { %>
+        <li><label>Judge <%= l.judge %> <input readonly value="<%= l.url %>" aria-label="Link for judge <%= l.judge %>"></label> <a class="btn secondary small" href="<%= l.url %>" target="_blank" rel="noopener">Open</a></li>
+      <% }) %>
+    </ul>
+    <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/mat/<%= day %>/<%= court %>/judge-links/reset" data-confirm="Make new links? The current ones stop working straight away.">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <button class="btn danger small" type="submit">Make new links</button>
+    </form>
+  </details>
+</div>
 </body>
 </html>

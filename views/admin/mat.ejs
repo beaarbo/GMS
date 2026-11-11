@@ -35,6 +35,11 @@
       <p class="sub">Tap the winner. They move into their next bout.</p>
       <form method="post" action="/admin/competitions/<%= competition.id %>/results/<%= now.id %>" class="mat-choices">
         <%- back(now.id) %>
+        <div class="win-details">
+          <label>How <select name="win_type" aria-label="How bout <%= now.number %> was won"><option value="">Not recorded</option><% Object.entries(WIN_TYPES).forEach(([code, label]) => { %><option value="<%= code %>"><%= code %>: <%= label %></option><% }) %></select></label>
+          <label>Score <input name="score" inputmode="numeric" autocomplete="off" placeholder="2-1" maxlength="7" aria-label="Score of bout <%= now.number %>"></label>
+          <span class="hint">Optional. Choose these first, then tap the winner.</span>
+        </div>
         <button class="mat-winner blue" type="submit" name="winner" value="blue" aria-label="<%= now.blue.name %> wins bout <%= now.number %>">
           <span class="mat-corner">Blue wins</span>
           <strong><%= now.blue.name %></strong>
@@ -70,7 +75,7 @@
       <% if (!last) { %>
         <p class="empty">No results yet.</p>
       <% } else { %>
-        <p><strong><%= last.winner.name %></strong> won bout <%= last.number %><%= last.walkover ? ' by walkover' : '' %><br><span class="hint"><%= last.title %></span></p>
+        <p><strong><%= last.winner.name %></strong> won bout <%= last.number %><%= last.walkover ? ' by walkover' : '' %><% if (last.winType || last.score) { %> (<%= [last.winType, last.score].filter(Boolean).join(' ') %>)<% } %><br><span class="hint"><%= last.title %></span></p>
         <% if (last.walkover) { %>
           <p class="hint">Their opponent was out at the weigh-in. Undo that weigh-in to change it.</p>
         <% } else { %>

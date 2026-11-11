@@ -25,6 +25,8 @@ const {
   clearPoomsaeOrder,
   poomsaeBoutList,
   poomsaeCourtQueue,
+  judgeLinks,
+  resetJudgeLinks,
   drawPoomsaeBracket,
   deletePoomsaeBracket,
   recordPoomsaeBout,
@@ -36,7 +38,7 @@ const {
 const { hasPoomsae, parseScore, formatScore, poomsaeDivisionTitle, poomsaeMedalTable, POOMSAE_FORMATS, MAX_CUT, JUDGE_COUNTS, judgesScore } = require('../poomsae');
 const { notifyPoomsaeDecisions, notifyPoomsaePublished } = require('../notifications');
 const { writeBoutListPdf } = require('../boutlistPdf');
-const { computeMedals } = require('../bracket');
+const { computeMedals, WIN_TYPES, readBoutScore } = require('../bracket');
 const { clean, requireRole, notFound } = require('./helpers');
 
 const router = express.Router();
@@ -170,7 +172,7 @@ router.post('/competitions/:id(\\d+)/weigh-in/:regId(\\d+)', (req, res) => {
     case 'no_show':
     case 'disqualify':
       log(`${result.outcome === 'no_show' ? 'Marked' : 'Disqualified'} ${who}${result.outcome === 'no_show' ? ' as a no-show' : ''} at weigh-in`);
-      result.walkovers.forEach((id) => logWalkover(req, db, id));
+      result.walkovers.forEach((item) => logWalkover(req, db, item));
       req.flash('success', `${name} ${result.outcome === 'no_show' ? 'marked as a no-show' : 'disqualified'}. ${
         !result.drawn ? "They won't be drawn."
           : result.walkovers.length > 0 ? 'Their opponent gets a walkover.'
@@ -213,7 +215,7 @@ router.get('/competitions/:id(\\d+)/results', (req, res) => {
     court,
     days: uniqueBy('day', 'dayLabel'),
     courts: uniqueBy('court', 'court'),
-    done: bouts.filter((b) => b.winner).length,
+    done: bouts.filter((b) => b.winner || b.noContest).length,
     total: bouts.length,
     medals: computeMedals(divisions),
   });
@@ -234,7 +236,7 @@ function boutText(db, boutId) {
     .get(boutId);
   return {
     place: `Bout ${row.bout_number} (Day ${row.day}, Court ${row.court})`,
-    fighters: `${row.blue_first} ${row.blue_last} vs ${row.red_first} ${row.red_last}`,
+    fighters: `${row.blue_first ? `${row.blue_first} ${row.blue_last}` : 'no opponent'} vs ${row.red_first ? `${row.red_first} ${row.red_last}` : 'no opponent'}`,
     winner: row.first_name ? `${row.first_name} ${row.last_name}` : '',
   };
 }
@@ -246,20 +248,27 @@ router.post('/competitions/:id(\\d+)/results/:boutId(\\d+)', (req, res) => {
   const bout = db.prepare('SELECT walkover FROM bouts WHERE id = ? AND competition_id = ?').get(boutId, req.competition.id);
   const before = bout ? boutText(db, boutId) : null;
   // A walkover follows the weigh-in, so it changes only by undoing that weigh-in.
+  // How the bout was won, both optional: a World Taekwondo result code and a score.
+  const winType = WIN_TYPES[req.body.win_type] ? req.body.win_type : null;
+  const score = readBoutScore(req.body.score);
+  // A walkover follows the weigh-in, so it changes only by undoing that weigh-in.
   const result = bout && bout.walkover
     ? { ok: false, error: `${before.place} was a walkover after the weigh-in. Undo that athlete's weigh-in to change it.` }
     : clearing
       ? clearResult(db, req.competition.id, boutId)
-      : recordResult(db, req.competition.id, boutId, req.body.winner);
+      : !score.ok
+        ? score
+        : recordResult(db, req.competition.id, boutId, req.body.winner, { winType, score: score.score });
   if (!result.ok) req.flash('error', result.error);
   else if (clearing) {
     req.logActivity('result.cleared', `Undid the result of ${before.place}, ${before.fighters}. The winner had been ${before.winner}`, req.competition.id);
   } else {
     const after = boutText(db, boutId);
     const changedFrom = before.winner && before.winner !== after.winner ? `, changed from ${before.winner}` : '';
-    req.logActivity('result.recorded', `${after.winner} won ${after.place}, ${after.fighters}${changedFrom}`, req.competition.id);
+    const how = [winType, score.score].filter(Boolean).join(' ');
+    req.logActivity('result.recorded', `${after.winner} won ${after.place}${how ? ` (${how})` : ''}, ${after.fighters}${changedFrom}`, req.competition.id);
     // The winner may now meet someone who failed the weigh-in.
-    applyWalkovers(db, req.competition.id).forEach((id) => logWalkover(req, db, id));
+    applyWalkovers(db, req.competition.id).forEach((item) => logWalkover(req, db, item));
   }
   const fromMat = req.body.back === 'mat' && /^\d+$/.test(req.body.day || '') && /^\d+$/.test(req.body.court || '');
   return res.redirect(fromMat ? matPath(req.competition, req.body.day, req.body.court) : resultsPath(req.competition, req.body.day, req.body.court));
@@ -267,9 +276,14 @@ router.post('/competitions/:id(\\d+)/results/:boutId(\\d+)', (req, res) => {
 
 const matPath = (competition, day, court) => `/admin/competitions/${competition.id}/mat/${day}/${court}`;
 
-function logWalkover(req, db, boutId) {
-  const text = boutText(db, boutId);
-  req.logActivity('result.walkover', `${text.winner} won ${text.place} by walkover, ${text.fighters}`, req.competition.id);
+// item: { id, noContest } from applyWalkovers.
+function logWalkover(req, db, item) {
+  const text = boutText(db, item.id);
+  if (item.noContest) {
+    req.logActivity('result.no_contest', `${text.place} is a no contest: ${text.fighters} were both out at the weigh-in`, req.competition.id);
+  } else {
+    req.logActivity('result.walkover', `${text.winner} won ${text.place} by walkover, ${text.fighters}`, req.competition.id);
+  }
 }
 
 // Results by mat: one court on one day, for an official's tablet. The bout on now
@@ -281,7 +295,7 @@ router.get('/competitions/:id(\\d+)/mat/:day(\\d+)/:court(\\d+)', (req, res) => 
   const court = Number(req.params.court);
   const bouts = listBouts(db, req.competition.id).filter((b) => b.day === day && b.court === court);
   if (bouts.length === 0) return notFound(res);
-  const waiting = bouts.filter((b) => !b.winner);
+  const waiting = bouts.filter((b) => !b.winner && !b.noContest);
   const now = waiting.find((b) => b.blue && b.red) || null;
   // An earlier bout still waiting for its athletes is why nothing is on yet.
   const blockedBy = !now && waiting.length > 0 ? waiting[0] : null;
@@ -325,7 +339,18 @@ router.get('/competitions/:id(\\d+)/poomsae/mat/:day(\\d+)/:court(\\d+)', (req, 
     last,
     total: queue.items.length,
     marks: loadJudgeMarks(db, req.competition.id),
+    // Each judge's private link for this court and day, for their phone.
+    judgeLinks: judgeLinks(db, req.competition, day, court).map((l) => ({ judge: l.judge, url: `${req.app.locals.notify.publicUrl}/judge/${l.token}` })),
   });
+});
+
+// New judges' links for one court and day: the old ones stop working.
+router.post('/competitions/:id(\\d+)/poomsae/mat/:day(\\d+)/:court(\\d+)/judge-links/reset', (req, res) => {
+  const { day, court } = req.params;
+  resetJudgeLinks(req.app.locals.db, req.competition.id, Number(day), Number(court));
+  req.logActivity('poomsae.judge_links', `Replaced the judges' links for poomsae court ${court}, day ${day}: ${req.competition.name}`, req.competition.id);
+  req.flash('success', 'New judges\' links made. The old ones no longer work, so send these to the judges.');
+  return res.redirect(`/admin/competitions/${req.competition.id}/poomsae/mat/${day}/${court}#judge-links`);
 });
 
 const poomsaePath = (competition, entryId = null, divisionKey = null) =>

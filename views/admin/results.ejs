@@ -42,13 +42,13 @@
   </section>
 
   <section class="card">
-    <p class="sub">Click the winner. They move into their next bout automatically.</p>
+    <p class="sub">Click the winner. They move into their next bout automatically. Choosing how it was won and the score is optional.</p>
     <div class="table-wrap">
       <table>
         <thead><tr><th>Bout</th><th>When</th><th>Division</th><th>Athletes</th><th></th></tr></thead>
         <tbody>
           <% bouts.forEach((bout) => { %>
-            <tr class="<%= bout.winner ? 'result-row-done' : '' %>">
+            <tr class="<%= bout.winner || bout.noContest ? 'result-row-done' : '' %>">
               <td class="num"><strong><%= bout.number %></strong></td>
               <td class="nowrap">Day <%= bout.day %>, Court <%= bout.court %><br><span class="hint"><%= bout.time %></span></td>
               <td><%= bout.title %></td>
@@ -57,21 +57,28 @@
                   <input type="hidden" name="_csrf" value="<%= csrf %>">
                   <input type="hidden" name="day" value="<%= day %>">
                   <input type="hidden" name="court" value="<%= court %>">
+                  <% if (bout.noContest) { %><p><span class="badge closed">No contest</span> <span class="hint">Both athletes were out at the weigh-in.</span></p><% } %>
                   <% [['blue', bout.blue, bout.bluePlaceholder], ['red', bout.red, bout.redPlaceholder]].forEach(([color, fighter, placeholder]) => { %>
                     <% if (!fighter) { %>
                       <div class="hint"><%= placeholder %></div>
                     <% } else if (bout.winner) { %>
-                      <div><% if (bout.winner.registrationId === fighter.registrationId) { %><span class="badge approved"><%= bout.walkover ? 'Walkover' : 'Winner' %></span> <strong><%= fighter.name %></strong><% } else { %><%= fighter.name %><% } %> <span class="hint"><%= fighter.club %></span></div>
+                      <div><% if (bout.winner.registrationId === fighter.registrationId) { %><span class="badge approved"><%= bout.walkover ? 'Walkover' : 'Winner' %></span> <strong><%= fighter.name %></strong><% if (bout.winType || bout.score) { %> <span class="hint"><%= [bout.winType, bout.score].filter(Boolean).join(' ') %></span><% } %><% } else { %><%= fighter.name %><% } %> <span class="hint"><%= fighter.club %></span></div>
                     <% } else if (bout.blue && bout.red) { %>
                       <p><button class="btn secondary small winner-choice" type="submit" name="winner" value="<%= color %>" aria-label="<%= fighter.name %> wins bout <%= bout.number %>"><%= fighter.name %> <span class="hint"><%= fighter.club %></span></button></p>
                     <% } else { %>
                       <div><%= fighter.name %> <span class="hint"><%= fighter.club %></span></div>
                     <% } %>
                   <% }) %>
+                  <% if (!bout.winner && !bout.noContest && bout.blue && bout.red) { %>
+                    <div class="win-details">
+                      <label>How <select name="win_type" aria-label="How bout <%= bout.number %> was won"><option value="">Not recorded</option><% Object.entries(WIN_TYPES).forEach(([code, label]) => { %><option value="<%= code %>"><%= code %>: <%= label %></option><% }) %></select></label>
+                      <label>Score <input name="score" inputmode="numeric" autocomplete="off" placeholder="2-1" maxlength="7" aria-label="Score of bout <%= bout.number %>"></label>
+                    </div>
+                  <% } %>
                 </form>
               </td>
               <td>
-                <% if (bout.walkover) { %>
+                <% if (bout.walkover || bout.noContest) { %>
                   <span class="hint">After the weigh-in</span>
                 <% } else if (bout.winner) { %>
                   <form method="post" action="/admin/competitions/<%= competition.id %>/results/<%= bout.id %>">

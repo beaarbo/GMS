@@ -13,7 +13,7 @@ const {
 } = require('./divisions');
 const { buildBracket, roundsFromSlots, seededSlots, slotsAreValid, assignCourts, scheduleCourt, formatTime, layoutBracket, computeMedals } = require('./bracket');
 const {
-  placeEntry, POOMSAE_EVENTS, POOMSAE_GENDERS, DEFAULT_POOMSAE_AGE_GROUPS, poomsaeDivisionTitle, rankEntries, divisionMode, bracketEntrants, poomsaeMedalists, schedulePoomsae, hasKyorugi, hasPoomsae,
+  placeEntry, POOMSAE_EVENTS, POOMSAE_GENDERS, DEFAULT_POOMSAE_AGE_GROUPS, poomsaeDivisionTitle, rankEntries, divisionMode, bracketEntrants, poomsaeMedalists, schedulePoomsae, hasKyorugi, hasPoomsae, judgesScore,
 } = require('./poomsae');
 const { logActivity } = require('./activity');
 const { documentLabel, documentTypeFor } = require('./documents');
@@ -505,13 +505,17 @@ function recordPoomsaeScore(db, competition, entryId, score, marks = null) {
   return { ok: true };
 }
 
-// Each entry's judges' marks, by entry id, in judge order.
+// Each entry's judges' marks, by entry id: an array with judge N's mark at N - 1,
+// and gaps for judges who haven't scored yet (from their phones).
 function loadJudgeMarks(db, competitionId) {
   const marks = new Map();
   db.prepare(
-    `SELECT j.entry_id, j.score FROM poomsae_judge_scores j JOIN poomsae_entries e ON e.id = j.entry_id
+    `SELECT j.entry_id, j.judge, j.score FROM poomsae_judge_scores j JOIN poomsae_entries e ON e.id = j.entry_id
      WHERE e.competition_id = ? ORDER BY j.entry_id, j.judge`
-  ).all(competitionId).forEach((row) => marks.set(row.entry_id, [...(marks.get(row.entry_id) || []), row.score]));
+  ).all(competitionId).forEach((row) => {
+    if (!marks.has(row.entry_id)) marks.set(row.entry_id, []);
+    marks.get(row.entry_id)[row.judge - 1] = row.score;
+  });
   return marks;
 }
 
@@ -878,6 +882,56 @@ function competitionResults(db, competition, { published = false, event = null }
   return { divisions, table };
 }
 
+// The private scoring link of each judge on one poomsae court and day, made the
+// first time they're asked for. Returns [{ judge, token }] for judges 1 to N.
+function judgeLinks(db, competition, day, court) {
+  const insert = db.prepare('INSERT OR IGNORE INTO poomsae_judge_links (token, competition_id, day, court, judge) VALUES (?, ?, ?, ?, ?)');
+  for (let judge = 1; judge <= competition.poomsae_judges; judge += 1) {
+    insert.run(crypto.randomBytes(18).toString('base64url'), competition.id, day, court, judge);
+  }
+  return db
+    .prepare('SELECT judge, token FROM poomsae_judge_links WHERE competition_id = ? AND day = ? AND court = ? AND judge <= ? ORDER BY judge')
+    .all(competition.id, day, court, competition.poomsae_judges);
+}
+
+// New links for one court and day, so old ones stop working (a phone lost, say).
+function resetJudgeLinks(db, competitionId, day, court) {
+  db.prepare('DELETE FROM poomsae_judge_links WHERE competition_id = ? AND day = ? AND court = ?').run(competitionId, day, court);
+}
+
+// The link and its competition, or null.
+function findJudgeLink(db, token) {
+  if (typeof token !== 'string' || !/^[\w-]{20,40}$/.test(token)) return null;
+  const link = db.prepare('SELECT * FROM poomsae_judge_links WHERE token = ?').get(token);
+  if (!link) return null;
+  const competition = db.prepare('SELECT * FROM competitions WHERE id = ?').get(link.competition_id);
+  return competition && link.judge <= competition.poomsae_judges ? { link, competition } : null;
+}
+
+// One judge's mark for a performer on their court, from the judge's phone. It
+// can be changed until every judge has sent theirs; then the score is worked
+// out (judgesScore) and saved like one entered on the mat page.
+// Returns { ok, error?, complete, score, performer }.
+function submitJudgeMark(db, competition, link, entryId, mark) {
+  if (competition.status !== 'closed') return { ok: false, error: 'Scoring opens once registration closes.' };
+  const performer = poomsaeCourtItems(db, competition)
+    .find((i) => i.kind === 'perform' && i.id === Number(entryId) && i.day === link.day && i.court === link.court);
+  if (!performer) return { ok: false, error: 'That performer is not on your court.' };
+  if (performer.score !== null) return { ok: false, error: `${performer.name} already has a score. Ask the official on the mat to change it.` };
+  return db.transaction(() => {
+    db.prepare(
+      `INSERT INTO poomsae_judge_scores (entry_id, judge, score) VALUES (?, ?, ?)
+       ON CONFLICT(entry_id, judge) DO UPDATE SET score = excluded.score`
+    ).run(performer.id, link.judge, mark);
+    const marks = db.prepare('SELECT judge, score FROM poomsae_judge_scores WHERE entry_id = ? AND judge <= ? ORDER BY judge').all(performer.id, competition.poomsae_judges);
+    if (marks.length < competition.poomsae_judges) return { ok: true, complete: false, performer };
+    const all = marks.map((m) => m.score);
+    const score = judgesScore(all);
+    const saved = recordPoomsaeScore(db, competition, performer.id, score, all);
+    return saved.ok ? { ok: true, complete: true, score, performer } : saved;
+  })();
+}
+
 // Removes a division's performance list, while it has no scores.
 function clearPoomsaeOrder(db, competition, key) {
   return db.transaction(() => {
@@ -1210,9 +1264,26 @@ function recordWeighIn(db, competition, registrationId, { action, weightKg, weig
         const cleared = clearResult(db, competition.id, bout.id);
         if (!cleared.ok) throw Object.assign(new Error(cleared.error), { refusal: true });
       }
+      // A no contest they were in: the walkover it gave the next bout goes first.
+      const contests = db
+        .prepare('SELECT * FROM bouts WHERE competition_id = ? AND no_contest = 1 AND ? IN (blue_registration_id, red_registration_id) ORDER BY round DESC')
+        .all(competition.id, registration.id);
+      for (const bout of contests) {
+        const { next } = nextBoutOf(db, bout);
+        if (next && (next.no_contest || (next.winner_registration_id && !next.walkover))) {
+          throw Object.assign(new Error(`Bout ${next.bout_number} depends on this athlete's no contest.`), { refusal: true });
+        }
+        if (next && next.winner_registration_id) {
+          const cleared = clearResult(db, competition.id, next.id);
+          if (!cleared.ok) throw Object.assign(new Error(cleared.error), { refusal: true });
+        }
+        db.prepare('UPDATE bouts SET no_contest = 0 WHERE id = ?').run(bout.id);
+      }
       const enteredId = registration.entered_weight_class_id || registration.weight_class_id;
       save.run({ ...base, status: null, at: null, classId: enteredId, enteredId: null });
-      return { ok: true, outcome: 'reset', backTo: registration.entered_weight_class_id ? labelOf(enteredId) : null, walkoversUndone: lost.length };
+      // Their opponent in an undone no contest may still be out, so this athlete now gets the walkover.
+      const walkovers = drawn ? applyWalkovers(db, competition.id) : [];
+      return { ok: true, outcome: 'reset', backTo: registration.entered_weight_class_id ? labelOf(enteredId) : null, walkoversUndone: lost.length + contests.length, walkovers };
     })();
   }
 }
@@ -1525,6 +1596,9 @@ function loadBoutList(db, competitionId) {
       red,
       winner: [blue, red].find((s) => s && s.registrationId === winnerId) || null,
       walkover: row.walkover === 1,
+      winType: row.win_type,
+      score: row.score,
+      noContest: row.no_contest === 1,
     });
   });
 
@@ -1546,34 +1620,74 @@ function loadBoutList(db, competitionId) {
   });
 }
 
-// Gives a walkover in every bout where one side was a no-show or disqualified at
-// the weigh-in and the other wasn't, and repeats as winners move on, so an
-// athlete whose opponent comes from an earlier bout gets theirs once that bout
-// is decided. A bout with both sides out waits for the organiser. Returns bout ids.
+// Settles every bout a weigh-in decides. One side out (a no-show or
+// disqualified) gives the other a walkover. Both sides out makes the bout a
+// no contest, decided with nobody going through, and then the athlete waiting
+// in the next bout gets the walkover instead. It repeats as winners move on,
+// so a walkover also follows once an opponent from an earlier bout is known.
+// Returns what it settled: [{ id, noContest }].
 function applyWalkovers(db, competitionId) {
   const out = new Set(
     db.prepare("SELECT id FROM registrations WHERE competition_id = ? AND weigh_status IN ('no_show', 'disqualified')").all(competitionId).map((r) => r.id)
   );
-  const open = db.prepare(
-    `SELECT * FROM bouts WHERE competition_id = ? AND is_bye = 0 AND winner_registration_id IS NULL
-       AND blue_registration_id IS NOT NULL AND red_registration_id IS NOT NULL ORDER BY round, position`
-  );
-  const mark = db.prepare('UPDATE bouts SET walkover = 1 WHERE id = ?');
-  const given = [];
-  let more = out.size > 0;
+  const settled = [];
+  if (out.size === 0) return settled;
+  const win = db.prepare('UPDATE bouts SET winner_registration_id = ?, walkover = 1, win_type = NULL, score = NULL WHERE id = ?');
+  const noContest = db.prepare('UPDATE bouts SET no_contest = 1 WHERE id = ?');
+  // A walkover goes to someone who is now out too (weigh-ins happen one at a
+  // time): it becomes a no contest, unless a real result already depends on it.
+  // Walkovers it passed on to the next bout are taken back first.
+  const unwind = (bout) => {
+    const { next } = nextBoutOf(db, bout);
+    if (next && next.no_contest) return false;
+    if (next && next.winner_registration_id && (!next.walkover || !clearResult(db, competitionId, next.id).ok)) return false;
+    return clearResult(db, competitionId, bout.id).ok;
+  };
+  let more = true;
   while (more) {
     more = false;
-    open.all(competitionId).forEach((bout) => {
-      const blueOut = out.has(bout.blue_registration_id);
-      if (blueOut === out.has(bout.red_registration_id)) return;
-      if (recordResult(db, competitionId, bout.id, blueOut ? 'red' : 'blue').ok) {
-        mark.run(bout.id);
-        given.push(bout.id);
+    const stale = db
+      .prepare('SELECT * FROM bouts WHERE competition_id = ? AND walkover = 1 ORDER BY round DESC, position')
+      .all(competitionId)
+      .find((bout) => out.has(bout.winner_registration_id) && unwind(bout));
+    if (stale) {
+      noContest.run(stale.id);
+      settled.push({ id: stale.id, noContest: true });
+      more = true;
+      continue;
+    }
+    const bouts = db.prepare('SELECT * FROM bouts WHERE competition_id = ? ORDER BY round, position').all(competitionId);
+    const byPlace = new Map(bouts.map((b) => [`${divisionKey(b)}:${b.round}:${b.position}`, b]));
+    // 'in', 'out', or 'waiting' for an earlier bout. A side fed by a no contest is out.
+    const side = (bout, color, position) => {
+      const id = bout[`${color}_registration_id`];
+      if (id) return out.has(id) ? 'out' : 'in';
+      const feeder = bout.round > 1 && byPlace.get(`${divisionKey(bout)}:${bout.round - 1}:${position}`);
+      return feeder && feeder.no_contest ? 'out' : 'waiting';
+    };
+    for (const bout of bouts) {
+      if (bout.is_bye || bout.winner_registration_id || bout.no_contest) continue;
+      const blue = side(bout, 'blue', bout.position * 2);
+      const red = side(bout, 'red', bout.position * 2 + 1);
+      let winner = null;
+      if (blue === 'out' && red === 'out') {
+        noContest.run(bout.id);
+        settled.push({ id: bout.id, noContest: true });
         more = true;
-      }
-    });
+        break;
+      } else if (blue === 'out' && red === 'in') winner = bout.red_registration_id;
+      else if (red === 'out' && blue === 'in') winner = bout.blue_registration_id;
+      if (!winner) continue;
+      const { next, column } = nextBoutOf(db, bout);
+      if (next && (next.winner_registration_id || next.no_contest)) continue;
+      win.run(winner, bout.id);
+      if (next) db.prepare(`UPDATE bouts SET ${column} = ? WHERE id = ?`).run(winner, next.id);
+      settled.push({ id: bout.id, noContest: false });
+      more = true;
+      break;
+    }
   }
-  return given;
+  return settled;
 }
 
 function hasResults(db, competitionId) {
@@ -1594,7 +1708,8 @@ function nextBoutOf(db, bout) {
 
 // Records a winner and moves them into their next bout. Returns { ok, error? }.
 // A result can't change once the next bout has one, or that bout would be wrong.
-function recordResult(db, competitionId, boutId, side) {
+// details: { winType, score } (both optional, checked by the caller) for how it was won.
+function recordResult(db, competitionId, boutId, side, { winType = null, score = null } = {}) {
   return db.transaction(() => {
     const bout = db.prepare('SELECT * FROM bouts WHERE id = ? AND competition_id = ?').get(boutId, competitionId);
     if (!bout || bout.is_bye) return { ok: false, error: 'That bout was not found.' };
@@ -1604,11 +1719,12 @@ function recordResult(db, competitionId, boutId, side) {
     const winnerId = side === 'blue' ? bout.blue_registration_id : side === 'red' ? bout.red_registration_id : null;
     if (!winnerId) return { ok: false, error: 'Choose a winner.' };
 
+    if (bout.no_contest) return { ok: false, error: 'This bout is a no contest: both athletes were out at the weigh-in.' };
     const { next, column } = nextBoutOf(db, bout);
-    if (next && next.winner_registration_id) {
+    if (next && (next.winner_registration_id || next.no_contest)) {
       return { ok: false, error: `Clear the result of Bout ${next.bout_number} first, because it depends on this one.` };
     }
-    db.prepare('UPDATE bouts SET winner_registration_id = ? WHERE id = ?').run(winnerId, bout.id);
+    db.prepare('UPDATE bouts SET winner_registration_id = ?, win_type = ?, score = ? WHERE id = ?').run(winnerId, winType, score, bout.id);
     if (next) db.prepare(`UPDATE bouts SET ${column} = ? WHERE id = ?`).run(winnerId, next.id);
     return { ok: true };
   })();
@@ -1619,10 +1735,10 @@ function clearResult(db, competitionId, boutId) {
     const bout = db.prepare('SELECT * FROM bouts WHERE id = ? AND competition_id = ?').get(boutId, competitionId);
     if (!bout || !bout.winner_registration_id) return { ok: false, error: 'That bout has no result.' };
     const { next, column } = nextBoutOf(db, bout);
-    if (next && next.winner_registration_id) {
+    if (next && (next.winner_registration_id || next.no_contest)) {
       return { ok: false, error: `Clear the result of Bout ${next.bout_number} first, because it depends on this one.` };
     }
-    db.prepare('UPDATE bouts SET winner_registration_id = NULL, walkover = 0 WHERE id = ?').run(bout.id);
+    db.prepare('UPDATE bouts SET winner_registration_id = NULL, walkover = 0, win_type = NULL, score = NULL WHERE id = ?').run(bout.id);
     if (next) db.prepare(`UPDATE bouts SET ${column} = NULL WHERE id = ?`).run(next.id);
     return { ok: true };
   })();
@@ -1631,6 +1747,7 @@ function clearResult(db, competitionId, boutId) {
 // Clears from the last round back, so every fighter returns to where they started.
 function clearAllResults(db, competitionId) {
   db.transaction(() => {
+    db.prepare('UPDATE bouts SET no_contest = 0 WHERE competition_id = ?').run(competitionId);
     db.prepare('SELECT id FROM bouts WHERE competition_id = ? AND winner_registration_id IS NOT NULL ORDER BY round DESC')
       .all(competitionId)
       .forEach((bout) => clearResult(db, competitionId, bout.id));
@@ -1866,6 +1983,10 @@ module.exports = {
   poomsaeCourtQueue,
   competitionResults,
   competitionProgramme,
+  judgeLinks,
+  resetJudgeLinks,
+  findJudgeLink,
+  submitJudgeMark,
   drawPoomsaeBracket,
   deletePoomsaeBracket,
   recordPoomsaeBout,

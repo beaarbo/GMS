@@ -7,6 +7,7 @@ const session = require('express-session');
 const { BELTS, GENDERS, beltName, formatEventDates } = require('./divisions');
 const { EVENT_TYPES, POOMSAE_EVENTS, POOMSAE_GENDERS, POOMSAE_FORMATS, MAX_CUT, JUDGE_COUNTS, hasKyorugi, hasPoomsae, poomsaeDivisionTitle, formatScore, placeText } = require('./poomsae');
 const { mapEmbedUrl, mapOpenUrl } = require('./maps');
+const { WIN_TYPES } = require('./bracket');
 const { createMailer } = require('./mailer');
 const { logActivity } = require('./activity');
 const { createLiveUpdates } = require('./live');
@@ -216,6 +217,7 @@ function createApp({
       MAX_CUT,
       JUDGE_COUNTS,
       mapEmbedUrl,
+      WIN_TYPES,
       mapOpenUrl,
       hasKyorugi,
       hasPoomsae,
@@ -317,6 +319,7 @@ function createApp({
   app.use('/admin', adminRoutes);
   app.use('/official', officialRoutes);
   app.use('/screens', screenRoutes);
+  app.use('/judge', require('./routes/judge'));
 
   app.use((req, res) => {
     res.status(404).render('error', { title: 'Page not found', message: 'That page does not exist.' });

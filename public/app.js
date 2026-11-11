@@ -63,6 +63,17 @@
         return;
       }
       const page = new DOMParser().parseFromString(await response.text(), 'text/html');
+      // Someone is typing a score or choosing how a bout was won: try again shortly,
+      // rather than wipe what they've entered.
+      const changed = (field) => (field.tagName === 'SELECT'
+        ? [...field.options].some((option) => option.selected !== option.defaultSelected)
+        : field.value !== field.defaultValue);
+      const busy = [...document.querySelectorAll('[data-live-part] input, [data-live-part] select, [data-live-part] textarea')]
+        .some((field) => field.type !== 'hidden' && (field === document.activeElement || changed(field)));
+      if (busy) {
+        setTimeout(refresh, 3000);
+        return;
+      }
       document.querySelectorAll('[data-live-part]').forEach((part) => {
         const fresh = page.querySelector(`[data-live-part="${part.dataset.livePart}"]`);
         if (fresh) part.innerHTML = fresh.innerHTML;

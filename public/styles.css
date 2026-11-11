@@ -480,6 +480,12 @@ tr.row-attention td, tbody tr.row-attention:hover td { background: var(--warn-so
 .division-edit-row label { margin: 0; display: flex; flex-direction: column; gap: var(--space-1); }
 .division-edit-row select, .division-edit-row input { min-width: 200px; min-height: var(--control-height-sm); padding: var(--space-1) var(--space-2); }
 .inline-form { display: inline-block; margin-left: var(--space-2); }
+/* How a kyorugi bout was won, chosen beside the winner buttons. */
+.win-details { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); margin-top: var(--space-2); }
+.win-details label { display: flex; align-items: center; gap: var(--space-1); margin: 0; font-size: var(--text-sm); font-weight: 600; color: var(--ink-2); }
+.win-details select, .win-details input { width: auto; min-height: var(--control-height-sm); padding: var(--space-1) var(--space-2); }
+.win-details input { width: 5em; }
+.mat-choices .win-details { grid-column: 1 / -1; margin-top: 0; }
 /* Poomsae rows: score box and review controls sit on one line where they fit. */
 .inline-form:first-child { margin-left: 0; }
 .score-input { width: 6em; min-height: var(--control-height-sm); padding: var(--space-1) var(--space-2); }
@@ -563,6 +569,11 @@ body.mat { background: var(--page); }
 .mat-scores label { display: flex; flex-direction: column; gap: var(--space-1); margin: 0; font-weight: 600; }
 .mat-score { width: 6.5rem; min-height: 64px; font-size: 1.6rem; text-align: center; }
 .mat-scores .btn { min-height: 64px; padding: 0 var(--space-5); font-size: 1.1rem; }
+.judge-score { width: 9rem; min-height: 80px; font-size: 2.2rem; }
+.judge-link-list { list-style: none; margin: var(--space-3) 0; padding: 0; display: grid; gap: var(--space-2); }
+.judge-link-list li { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-2); }
+.judge-link-list label { display: flex; flex-direction: column; gap: var(--space-1); flex: 1 1 320px; margin: 0; font-weight: 600; }
+.mat-extra { padding-top: 0; }
 .mat-winner:hover, .mat-winner:focus-visible { filter: brightness(0.92); }
 .blue-text-dark { color: var(--chung-dark); font-weight: 600; }
 .red-text-dark { color: var(--hong-dark); font-weight: 600; }

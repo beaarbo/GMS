@@ -59,7 +59,7 @@
         <% recent.forEach((b) => { %>
           <li>
             <span class="screen-number"><%= b.number %></span>
-            <div><strong><%= b.winner.name %></strong> won<br><span class="screen-sub"><%= b.winner.club %> · <%= b.title %></span></div>
+            <div><strong><%= b.winner.name %></strong> won<%= b.walkover ? ' by walkover' : '' %><% if (b.winType || b.score) { %> <span class="screen-sub">(<%= [b.winType, b.score].filter(Boolean).join(' ') %>)</span><% } %><br><span class="screen-sub"><%= b.winner.club %> · <%= b.title %></span></div>
           </li>
         <% }) %>
       </ol>

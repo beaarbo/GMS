@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Judge <%= judge %> · Poomsae court <%= court %></title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<%# Updates live when the next performer comes up or the score is complete. %>
+<body class="mat" data-live-events="<%= path %>/events">
+<header class="mat-head">
+  <div>
+    <h1>Judge <%= judge %></h1>
+    <p class="sub">Poomsae court <%= court %> · <%= dayLabel %> · <%= competition.name %></p>
+  </div>
+  <span class="screen-status" id="screen-status" hidden></span>
+</header>
+
+<main class="mat-main" data-live-part="main">
+  <% flash.forEach((item) => { %>
+    <div class="notice <%= item.type %>" role="status"><%= item.text %></div>
+  <% }) %>
+
+  <section class="card mat-now">
+    <% if (now && now.kind === 'perform') { %>
+      <h2><%= now.name %></h2>
+      <p class="sub"><%= now.club %> · <%= now.title %> · <%= now.place %> of <%= now.of %></p>
+      <form method="post" action="<%= path %>" class="mat-scores">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <input type="hidden" name="entry" value="<%= now.id %>">
+        <label>Your score <input class="mat-score judge-score" name="score" inputmode="decimal" autocomplete="off" required placeholder="7.8" value="<%= mine === null ? '' : formatScore(mine) %>" aria-label="Your score for <%= now.name %>"></label>
+        <button class="btn" type="submit"><%= mine === null ? 'Send score' : 'Change score' %></button>
+      </form>
+      <p class="hint"><%= sent %> of <%= competition.poomsae_judges %> judges have scored.<%= mine !== null ? ' Waiting for the others.' : '' %></p>
+    <% } else if (now) { %>
+      <h2>A bracket bout is on</h2>
+      <p class="empty">Bout <%= now.number %> is decided on the mat, not by score. This page moves on by itself when the next performer is up.</p>
+    <% } else { %>
+      <h2>Nothing to score</h2>
+      <p class="empty">There's no performer on this court right now. This page updates by itself.</p>
+    <% } %>
+  </section>
+
+  <% if (next.length > 0) { %>
+    <section class="card">
+      <h2>Up next</h2>
+      <ol class="overview-list">
+        <% next.forEach((i) => { %><li><strong><%= i.name %></strong> · <%= i.time %><br><span class="hint"><%= i.club %> · <%= i.title %></span></li><% }) %>
+      </ol>
+    </section>
+  <% } %>
+</main>
+</body>
+</html>

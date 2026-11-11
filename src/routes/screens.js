@@ -46,7 +46,7 @@ router.get('/:id(\\d+)', screenCompetition('any'), (req, res) => {
     const key = `${item.day}:${kind}:${item.court}`;
     const entry = courts.get(key) || { kind, day: item.day, court: item.court, total: 0, done: 0 };
     entry.total += 1;
-    if (item.kind === 'perform' ? item.done : item.winner) entry.done += 1;
+    if (item.kind === 'perform' ? item.done : item.winner || item.noContest) entry.done += 1;
     courts.set(key, entry);
   };
   if (kyorugiVisible(req.user, competition)) listBouts(db, competition.id).forEach((b) => count('kyorugi', b));
@@ -67,7 +67,7 @@ router.get('/:id(\\d+)/:day(\\d+)/:court(\\d+)', screenCompetition('kyorugi'), (
   const court = Number(req.params.court);
   const bouts = listBouts(db, req.competition.id).filter((b) => b.day === day && b.court === court);
   if (bouts.length === 0) return notFound(res);
-  const waiting = bouts.filter((b) => !b.winner);
+  const waiting = bouts.filter((b) => !b.winner && !b.noContest);
   // On now: the first unfinished bout whose two athletes are known.
   const now = waiting.find((b) => b.blue && b.red) || null;
   const next = waiting.filter((b) => b !== now).slice(0, 3);
@@ -144,3 +144,5 @@ router.get('/:id(\\d+)/:day(\\d+)/:court(\\d+)/events', screenCompetition('kyoru
 router.get('/:id(\\d+)/poomsae/:day(\\d+)/:court(\\d+)/events', screenCompetition('poomsae'), changeStream);
 
 module.exports = router;
+// The judges' phone page (routes/judge.js) uses the same live stream.
+module.exports.changeStream = changeStream;

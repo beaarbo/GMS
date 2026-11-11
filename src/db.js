@@ -198,7 +198,12 @@ CREATE TABLE IF NOT EXISTS bouts (
   start_time TEXT,
   winner_registration_id INTEGER REFERENCES registrations(id),
   -- Won without a fight, because the other athlete failed or missed the weigh-in.
-  walkover INTEGER NOT NULL DEFAULT 0
+  walkover INTEGER NOT NULL DEFAULT 0,
+  -- How the bout was won (a WIN_TYPES code) and its score, such as "2-1". Optional.
+  win_type TEXT,
+  score TEXT,
+  -- Neither athlete could fight (both out at the weigh-in): decided with no winner.
+  no_contest INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_bouts_competition ON bouts(competition_id);
 
@@ -345,6 +350,19 @@ CREATE TABLE IF NOT EXISTS poomsae_divisions (
   list_day INTEGER,
   list_court INTEGER,
   PRIMARY KEY (competition_id, division_key)
+);
+
+-- A private link for one poomsae judge on one poomsae court and day, so judges
+-- can score from their own phones without an account. Anyone with the link can
+-- score as that judge on that court, so the admin can replace it.
+CREATE TABLE IF NOT EXISTS poomsae_judge_links (
+  token TEXT PRIMARY KEY,
+  competition_id INTEGER NOT NULL REFERENCES competitions(id) ON DELETE CASCADE,
+  day INTEGER NOT NULL,
+  court INTEGER NOT NULL,
+  judge INTEGER NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (competition_id, day, court, judge)
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -692,6 +710,18 @@ function migrateMapLocation(db) {
   })();
 }
 
+// Version 21: kyorugi results can record how a bout was won and its score, a
+// bout with both athletes out at the weigh-in becomes a no contest, and poomsae
+// judges get links to score from their phones. None of these exist yet.
+function migrateWinsAndJudgeLinks(db) {
+  db.transaction(() => {
+    addColumnIfMissing(db, 'bouts', 'win_type', 'TEXT');
+    addColumnIfMissing(db, 'bouts', 'score', 'TEXT');
+    addColumnIfMissing(db, 'bouts', 'no_contest', 'INTEGER NOT NULL DEFAULT 0');
+    db.pragma('user_version = 21');
+  })();
+}
+
 function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 1) migrateBelts(db);
   if (db.pragma('user_version', { simple: true }) < 2) migrateSchedule(db);
@@ -713,6 +743,7 @@ function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 18) migrateWalkovers(db);
   if (db.pragma('user_version', { simple: true }) < 19) migrateJudges(db);
   if (db.pragma('user_version', { simple: true }) < 20) migrateMapLocation(db);
+  if (db.pragma('user_version', { simple: true }) < 21) migrateWinsAndJudgeLinks(db);
 }
 
 // Safe on old databases: only tables that don't exist yet are created.

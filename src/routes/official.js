@@ -21,7 +21,7 @@ router.get('/', requireRole(['admin', 'official']), (req, res) => {
     )
     .all(weekAgo.toISOString().slice(0, 10))
     .map((c) => {
-      const bouts = db.prepare('SELECT COUNT(*) AS total, SUM(winner_registration_id IS NOT NULL) AS done FROM bouts WHERE competition_id = ? AND is_bye = 0').get(c.id);
+      const bouts = db.prepare('SELECT COUNT(*) AS total, SUM(winner_registration_id IS NOT NULL OR no_contest = 1) AS done FROM bouts WHERE competition_id = ? AND is_bye = 0').get(c.id);
       return { ...c, weighIn: weighInCounts(db, c.id), hasBouts: hasBoutList(db, c.id), bouts: { total: bouts.total, done: bouts.done || 0 } };
     });
   res.render('official/home', { title: 'Competition day', competitions });

@@ -652,7 +652,7 @@ test('schedule migration clears old draws and keeps competitions', () => {
 
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM bouts').get().n, 0);
   assert.equal(db.prepare('SELECT bout_courts FROM competitions WHERE id = ?').get(compId).bout_courts, 2);
-  assert.equal(db.pragma('user_version', { simple: true }), 20);
+  assert.equal(db.pragma('user_version', { simple: true }), 21);
 });
 
 test('admin creates a club, a coach applies, and only approval unlocks athlete registration', async () => {
@@ -817,7 +817,7 @@ test('migrating old club accounts keeps logins and fighters and approves each co
   const clubColumns = db.pragma('table_info(clubs)').map((c) => c.name);
   assert.ok(!clubColumns.includes('coach_name'));
   assert.equal(db.pragma('foreign_key_check').length, 0);
-  assert.equal(db.pragma('user_version', { simple: true }), 20);
+  assert.equal(db.pragma('user_version', { simple: true }), 21);
 });
 
 test('a fighter alone in a division has no bout number', async () => {
@@ -991,7 +991,7 @@ test('migration turns a day count into consecutive dates', () => {
   const { id } = db.prepare('SELECT id FROM competitions').get();
   assert.deepEqual(getEventDates(db, id), ['2030-01-30', '2030-01-31', '2030-02-01']);
   assert.ok(!db.pragma('table_info(competitions)').some((c) => c.name === 'bout_days'));
-  assert.equal(db.pragma('user_version', { simple: true }), 20);
+  assert.equal(db.pragma('user_version', { simple: true }), 21);
 });
 
 const tokenIn = (message) => message.text.match(/reset-password\/([0-9a-f]{64})/)[1];
@@ -1236,7 +1236,7 @@ test('the results migration removes declared weights and keeps registrations', (
   db.pragma('user_version = 4');
   migrate(db);
   assert.ok(!db.pragma('table_info(registrations)').some((c) => c.name === 'declared_weight_kg'));
-  assert.equal(db.pragma('user_version', { simple: true }), 20);
+  assert.equal(db.pragma('user_version', { simple: true }), 21);
 });
 
 test('athletes need the right document before they can enter', async () => {
@@ -1853,7 +1853,7 @@ test('rebuilding the users table for officials keeps every linked row', async ()
   db.close();
 
   db = openDb(file);
-  assert.equal(db.pragma('user_version', { simple: true }), 20);
+  assert.equal(db.pragma('user_version', { simple: true }), 21);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM club_applications').get().n, 1);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM password_resets').get().n, 1);
   assert.equal(db.prepare('SELECT author_id FROM news_posts').get().author_id, coachId);
@@ -2337,7 +2337,7 @@ test('migrating to version 13 moves poomsae entries onto poomsae age groups', ()
   db.pragma('user_version = 12');
 
   migrate(db);
-  assert.equal(db.pragma('user_version', { simple: true }), 20);
+  assert.equal(db.pragma('user_version', { simple: true }), 21);
   const moved = db.prepare('SELECT a.name, e.status FROM poomsae_entries e JOIN poomsae_age_groups a ON a.id = e.age_group_id WHERE e.id = ?').get(entry);
   assert.deepEqual(moved, { name: 'U40', status: 'approved' });
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM poomsae_members').get().n, 1);
@@ -2807,4 +2807,110 @@ test('a competition can show its venue on a small Google map', async () => {
   // Clearing the field removes the map.
   await post(admin, edit, fields(''), `${edit}/edit`);
   assert.equal(mapOf(), '');
+});
+
+test('kyorugi results record how a bout was won, and a bout with both athletes out is a no contest', async () => {
+  const { app, db } = await setup();
+  const { compId, admin } = await closedCompetitionWithFighters(db, app, [['T', 'Alpha'], ['D', 'Bravo'], ['T', 'Charlie'], ['D', 'Delta']]);
+  const bouts = `/admin/competitions/${compId}/bouts`;
+  const results = `/admin/competitions/${compId}/results`;
+  const weighIn = `/admin/competitions/${compId}/weigh-in`;
+  await post(admin, `${bouts}/generate`, {}, bouts);
+  const bout = (round, position) => db.prepare('SELECT * FROM bouts WHERE competition_id = ? AND round = ? AND position = ?').get(compId, round, position);
+  const record = (b, fields) => post(admin, `${results}/${b.id}`, fields, results);
+  const weigh = (id, fields) => post(admin, `${weighIn}/${id}`, fields, weighIn);
+
+  // How it was won: a result code and score, both optional; a bad score changes nothing.
+  assert.match((await admin.get(results)).text, /<option value="RSC">RSC: Referee stops contest<\/option>/);
+  await record(bout(1, 1), { winner: 'blue', win_type: 'RSC', score: '12' });
+  assert.equal(bout(1, 1).winner_registration_id, null);
+  await record(bout(1, 1), { winner: 'blue', win_type: 'RSC', score: '2 - 0' });
+  assert.deepEqual([bout(1, 1).win_type, bout(1, 1).score], ['RSC', '2-0']);
+  assert.match((await admin.get(results)).text, /Winner<\/span> <strong>[^<]+<\/strong> <span class="hint">RSC 2-0<\/span>/);
+  assert.ok(db.prepare("SELECT 1 FROM activity_log WHERE action = 'result.recorded' AND summary LIKE '%(RSC 2-0)%'").get());
+  await record(bout(1, 1), { action: 'clear' });
+  assert.deepEqual([bout(1, 1).win_type, bout(1, 1).score], [null, null], 'undo clears them');
+
+  // Both athletes of the first semifinal are out: a no contest, so nobody goes through from it.
+  const [a, b] = [bout(1, 0).blue_registration_id, bout(1, 0).red_registration_id];
+  await weigh(a, { action: 'no_show' });
+  await weigh(b, { action: 'no_show' });
+  assert.equal(bout(1, 0).no_contest, 1);
+  assert.equal(bout(1, 0).winner_registration_id, null);
+  assert.match((await admin.get(results)).text, /No contest<\/span>/);
+  assert.ok(db.prepare("SELECT 1 FROM activity_log WHERE action = 'result.no_contest'").get());
+  // The winner of the other semifinal gets the final by walkover once known.
+  await record(bout(1, 1), { winner: 'red' });
+  const winner = bout(1, 1).red_registration_id;
+  assert.deepEqual([bout(2, 0).winner_registration_id, bout(2, 0).walkover], [winner, 1]);
+  const medals = computeMedals(loadBoutList(db, compId)).divisions[0];
+  assert.deepEqual([medals.gold.registrationId, medals.silver, medals.bronze.map((m) => m.registrationId)], [winner, null, [bout(1, 1).blue_registration_id]]);
+  // The mat page has nothing waiting on court; no contest counts as done.
+  assert.match((await admin.get(results)).text, /3 of 3 bouts recorded/);
+
+  // Undoing one of them takes the no contest and the final's walkover back, and the other one out gives them a walkover.
+  await weigh(a, { action: 'reset' });
+  assert.equal(bout(1, 0).no_contest, 0);
+  assert.deepEqual([bout(1, 0).winner_registration_id, bout(1, 0).walkover], [a, 1]);
+  assert.equal(bout(2, 0).winner_registration_id, null);
+  assert.equal(bout(2, 0).walkover, 0);
+  // And then the final can be fought, with how it was won.
+  await record(bout(2, 0), { winner: bout(2, 0).blue_registration_id === a ? 'blue' : 'red', win_type: 'PTF', score: '2-1' });
+  assert.deepEqual([bout(2, 0).winner_registration_id, bout(2, 0).win_type], [a, 'PTF']);
+});
+
+test('poomsae judges score from their phones with private links, and the score saves once all have', async () => {
+  const { app, db } = await setup();
+  const compId = openCompetition(db, { name: 'Judge Cup', events: 'poomsae' });
+  const club = await signUpClub(app, 'Tigers', 'tigers@test.test');
+  const ids = [];
+  for (const first of ['Ana', 'Eve']) ids.push(String(await addFighter(club, { first_name: first, last_name: 'Judo', gender: 'F', date_of_birth: JUNIOR_DOB, belt_rank: '3' })));
+  const page = `/club/competitions/${compId}/poomsae`;
+  await post(club, `${page}/enter`, { event: 'individual', fighter_ids: ids }, page);
+  const admin = await login(app, 'admin@test.test');
+  const review = `/admin/competitions/${compId}/poomsae`;
+  await post(admin, `${review}/review`, { bulk: 'approve-pending' }, review);
+  db.prepare("UPDATE competitions SET status = 'closed' WHERE id = ?").run(compId);
+  await post(admin, `${review}/schedule`, { courts: '1', start: '09:00', minutes: '5', rest: '0', judges: '3' }, review);
+  await post(admin, `${review}/order`, { division: 'all' }, review);
+  const first = db.prepare('SELECT id FROM poomsae_entries WHERE perform_order = 1').get().id;
+  const firstName = db.prepare('SELECT f.first_name FROM poomsae_members m JOIN fighters f ON f.id = m.fighter_id WHERE m.entry_id = ?').get(first).first_name;
+  const score = () => db.prepare('SELECT score FROM poomsae_entries WHERE id = ?').get(first).score;
+
+  // The mat page lists one private link per judge.
+  const mat = `${review}/mat/1/1`;
+  const links = [...(await admin.get(mat)).text.matchAll(/value="https:\/\/gms\.test(\/judge\/[\w-]+)"/g)].map((m) => m[1]);
+  assert.equal(links.length, 3);
+  const judge = (n) => request.agent(app);
+  const phones = [judge(1), judge(2), judge(3)];
+  const send = (n, value, entry = first) => post(phones[n - 1], links[n - 1], { entry: String(entry), score: value }, links[n - 1]);
+
+  // A judge, with no account, sees the performer on now and sends a mark.
+  const phonePage = (await phones[0].get(links[0])).text;
+  assert.match(phonePage, new RegExp(`<h2>${firstName} Judo</h2>`));
+  assert.match(phonePage, /Judge 1/);
+  await send(1, '7.5');
+  await send(2, '8.0');
+  assert.equal(score(), null, 'not until every judge has scored');
+  assert.match((await admin.get(mat)).text, /2 of 3 judges have scored from their phones/);
+  assert.match((await admin.get(mat)).text, /name="judge_2"[^>]*value="8.00"/, 'the mat page shows their marks');
+  await send(1, '7.8');
+  assert.match((await phones[0].get(links[0])).text, /value="7.80"[\s\S]*?Change score/, 'a judge can change their mark until all are in');
+  await send(3, 'eight');
+  assert.equal(score(), null, 'a bad mark changes nothing');
+  await send(3, '8.2');
+  assert.equal(score(), 8, '7.8, 8.0 and 8.2 average to 8.0');
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM poomsae_judge_scores WHERE entry_id = ?').get(first).n, 3);
+  // A scored performer can't be changed from a phone, and the next one comes up.
+  await send(2, '9');
+  assert.equal(score(), 8);
+  assert.doesNotMatch((await phones[1].get(links[1])).text, new RegExp(`<h2>${firstName} Judo</h2>`));
+
+  // Links never reach the activity log; new links shut out the old ones.
+  const token = links[0].split('/').pop();
+  assert.ok(!db.prepare('SELECT 1 FROM activity_log WHERE summary LIKE ?').get(`%${token}%`));
+  assert.ok(db.prepare("SELECT 1 FROM activity_log WHERE action = 'poomsae.judge_mark'").get());
+  await post(admin, `${mat}/judge-links/reset`, {}, mat);
+  assert.equal((await phones[0].get(links[0])).status, 404);
+  assert.equal((await request(app).get('/judge/not-a-real-link-token-xx')).status, 404);
 });

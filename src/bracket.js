@@ -232,6 +232,9 @@ function layoutBracket(bouts, { slotHeight, top = 0 }) {
     if (bout.winner) {
       const endX = round === totalRounds ? END_X : columnX(round + 1);
       winners.push({ name: bout.walkover ? `W.O. ${bout.winner.name}` : bout.winner.name, clubId: bout.winner.clubId, x, endX, y });
+    } else if (bout.noContest) {
+      const endX = round === totalRounds ? END_X : columnX(round + 1);
+      winners.push({ name: 'No contest', clubId: null, x, endX, y });
     }
     return { y, fromX: x };
   };
@@ -264,6 +267,26 @@ function layoutBracket(bouts, { slotHeight, top = 0 }) {
   const final = build(totalRounds, 0);
   lines.push({ x1: final.fromX, y1: final.y, x2: END_X, y2: final.y });
   return { lines, fighters, labels, winners, note: null, height: top + size * slotHeight };
+}
+
+// How a kyorugi bout was won, by World Taekwondo's result codes.
+const WIN_TYPES = {
+  PTF: 'Points, final score',
+  PTG: 'Point gap',
+  GDP: 'Golden point',
+  SUP: 'Superiority decision',
+  RSC: 'Referee stops contest',
+  WDR: 'Withdrawal',
+  PUN: 'Punitive declaration',
+  DSQ: 'Disqualification',
+};
+
+// A bout score such as "2-1" (rounds won) or "12-8": two numbers, a dash or colon between.
+function readBoutScore(text) {
+  const value = String(text ?? '').trim();
+  if (value === '') return { ok: true, score: null };
+  const match = value.match(/^(\d{1,2})\s*[-–:]\s*(\d{1,2})$/);
+  return match ? { ok: true, score: `${match[1]}-${match[2]}` } : { ok: false, error: 'Enter the score as two numbers, such as 2-1.' };
 }
 
 function isLone(division) {
@@ -330,6 +353,7 @@ function clubAthleteSummary(divisions, clubId) {
 
       let status = 'Waiting for an earlier bout';
       if (medalists.unopposed) status = 'No opponent';
+      else if (real.some((b) => b.noContest)) status = 'No contest';
       else if (same(medalists.gold)) status = 'Gold';
       else if (same(medalists.silver)) status = 'Silver';
       else if (medalists.bronze.some(same)) status = 'Bronze';
@@ -363,6 +387,8 @@ module.exports = {
   splitByClub,
   computeMedals,
   divisionMedalists,
+  WIN_TYPES,
+  readBoutScore,
   clubAthleteSummary,
   LEFT_X,
 };
