@@ -376,6 +376,7 @@ td.nowrap { white-space: nowrap; }
 .bracket .own { fill: var(--chung); }
 .own-row td { background: var(--chung-soft, rgba(37, 99, 235, 0.08)); }
 .own-row td strong { color: var(--chung); }
+.own-text { color: var(--chung); font-weight: 600; }
 .medal-count { text-align: center; font-variant-numeric: tabular-nums; }
 .result-row-done td { background: var(--ok-soft); }
 tbody tr.result-row-done:hover td { background: var(--ok-soft); }
@@ -475,6 +476,9 @@ tr.row-attention td, tbody tr.row-attention:hover td { background: var(--warn-so
 /* Poomsae rows: score box and review controls sit on one line where they fit. */
 .inline-form:first-child { margin-left: 0; }
 .score-input { width: 6em; min-height: var(--control-height-sm); padding: var(--space-1) var(--space-2); }
+.judge-inputs { display: inline-flex; flex-wrap: wrap; gap: var(--space-1); vertical-align: middle; }
+.score-input.judge { width: 4.2em; }
+.judge-total { margin: 0 var(--space-2); }
 
 /* Court screens: large type for a TV or tablet at the mat. */
 body.screen { background: #0b1220; color: #f8fafc; font-size: 1.25rem; min-height: 100vh; }
@@ -497,6 +501,7 @@ body.screen { background: #0b1220; color: #f8fafc; font-size: 1.25rem; min-heigh
 .screen-corner .screen-corner-label { font-size: 0.9rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; }
 .screen-corner.blue { background: var(--chung); }
 .screen-corner.red { background: var(--hong); }
+.screen-performer { background: #1e293b; }
 .screen-vs { align-self: center; font-size: 1.5rem; font-weight: 700; color: #94a3b8; }
 .screen-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: var(--space-5); }
 .screen-list { list-style: none; margin: 0; padding: 0; }
@@ -547,6 +552,10 @@ body.mat { background: var(--page); }
 .mat-winner .mat-corner { font-size: 0.9rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
 .mat-winner.blue { background: var(--chung); }
 .mat-winner.red { background: var(--hong); }
+.mat-scores { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-3); margin-top: var(--space-3); }
+.mat-scores label { display: flex; flex-direction: column; gap: var(--space-1); margin: 0; font-weight: 600; }
+.mat-score { width: 6.5rem; min-height: 64px; font-size: 1.6rem; text-align: center; }
+.mat-scores .btn { min-height: 64px; padding: 0 var(--space-5); font-size: 1.1rem; }
 .mat-winner:hover, .mat-winner:focus-visible { filter: brightness(0.92); }
 .blue-text-dark { color: var(--chung-dark); font-weight: 600; }
 .red-text-dark { color: var(--hong-dark); font-weight: 600; }

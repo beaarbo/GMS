@@ -72,6 +72,8 @@ CREATE TABLE IF NOT EXISTS competitions (
   poomsae_start TEXT NOT NULL DEFAULT '09:00',
   poomsae_minutes INTEGER NOT NULL DEFAULT 5,
   poomsae_rest_minutes INTEGER NOT NULL DEFAULT 0,
+  -- Judges scoring each poomsae performance. One: the official enters the final score.
+  poomsae_judges INTEGER NOT NULL DEFAULT 1,
   -- When the poomsae performance lists, and separately the brackets, were published.
   poomsae_published_at TEXT,
   poomsae_brackets_published_at TEXT,
@@ -288,6 +290,14 @@ CREATE TABLE IF NOT EXISTS poomsae_entries (
   perform_time TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_poomsae_entries_competition ON poomsae_entries(competition_id);
+
+-- Each judge's mark for a poomsae entry. The entry's score is worked out from them.
+CREATE TABLE IF NOT EXISTS poomsae_judge_scores (
+  entry_id INTEGER NOT NULL REFERENCES poomsae_entries(id) ON DELETE CASCADE,
+  judge INTEGER NOT NULL,
+  score REAL NOT NULL,
+  PRIMARY KEY (entry_id, judge)
+);
 
 CREATE TABLE IF NOT EXISTS poomsae_members (
   entry_id INTEGER NOT NULL REFERENCES poomsae_entries(id) ON DELETE CASCADE,
@@ -663,6 +673,15 @@ function migrateWalkovers(db) {
   })();
 }
 
+// Version 19: poomsae can be scored by several judges. Existing competitions keep
+// one final score per performance; the judges' marks table is new.
+function migrateJudges(db) {
+  db.transaction(() => {
+    addColumnIfMissing(db, 'competitions', 'poomsae_judges', 'INTEGER NOT NULL DEFAULT 1');
+    db.pragma('user_version = 19');
+  })();
+}
+
 function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 1) migrateBelts(db);
   if (db.pragma('user_version', { simple: true }) < 2) migrateSchedule(db);
@@ -682,6 +701,7 @@ function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 16) migratePoomsaeOrder(db);
   if (db.pragma('user_version', { simple: true }) < 17) migratePoomsaeStages(db);
   if (db.pragma('user_version', { simple: true }) < 18) migrateWalkovers(db);
+  if (db.pragma('user_version', { simple: true }) < 19) migrateJudges(db);
 }
 
 // Safe on old databases: only tables that don't exist yet are created.

@@ -20,9 +20,10 @@
 
 <% if (competition.bouts_published_at || poomsaePublished) { %>
   <section class="card">
-    <h2>Bout lists</h2>
-    <p class="sub">Who competes when, on which court.</p>
+    <h2>Bout lists and results</h2>
+    <p class="sub">Who competes when, on which court, and who won.</p>
     <div class="actions">
+      <% if (hasResults) { %><a class="btn approve" href="/competitions/<%= competition.id %>/results">Results and medals</a><% } %>
       <% if (competition.bouts_published_at) { %><a class="btn" href="/competitions/<%= competition.id %>/bouts">Kyorugi bout list</a><a class="btn secondary" href="/competitions/<%= competition.id %>/bouts.pdf">Kyorugi PDF</a><% } %>
       <% if (poomsaePublished) { %><a class="btn" href="/competitions/<%= competition.id %>/poomsae">Poomsae order and brackets</a><a class="btn secondary" href="/competitions/<%= competition.id %>/poomsae.pdf">Poomsae PDF</a><% } %>
     </div>

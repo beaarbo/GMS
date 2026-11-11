@@ -1,7 +1,7 @@
 const express = require('express');
 const {
   loadDivisionSetup, listNews, getNews, getCompetitionLogo, listCompetitionFiles, getCompetitionFile,
-  loadBoutList, poomsaeBoutList, getEventDates,
+  loadBoutList, poomsaeBoutList, getEventDates, competitionResults,
 } = require('../services');
 const { formatEventDates } = require('../divisions');
 const { hasPoomsae } = require('../poomsae');
@@ -52,6 +52,7 @@ router.get('/competitions/:id(\\d+)', (req, res) => {
     setup: loadDivisionSetup(db, competition.id),
     files: listCompetitionFiles(db, competition.id),
     poomsaePublished: hasPoomsae(competition) && poomsaeBoutList(db, competition, { published: true }).length > 0,
+    hasResults: competitionResults(db, competition, { published: true }).divisions.length > 0,
   });
 });
 
@@ -61,6 +62,23 @@ function pdfHeaders(res, name, competition) {
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${name}-competition-${competition.id}.pdf"`);
 }
+
+// Final results: each division's medallists and one club medal table for both
+// events. Visitors and coaches see only published events; admins and officials see all.
+router.get('/competitions/:id(\\d+)/results', (req, res) => {
+  const competition = visibleCompetition(req);
+  if (!competition) return notFound(res);
+  const staff = Boolean(req.user && ['admin', 'official'].includes(req.user.role));
+  const results = competitionResults(req.app.locals.db, competition, { published: !staff });
+  if (!staff && results.divisions.length === 0) return notFound(res);
+  return res.render('results_public', {
+    title: `${competition.name}: results`,
+    competition,
+    ...results,
+    staff,
+    highlightClubId: (req.user && req.user.club_id) || null,
+  });
+});
 
 // The published kyorugi bout list, for anyone. A coach's own club is highlighted.
 function publishedKyorugi(req) {

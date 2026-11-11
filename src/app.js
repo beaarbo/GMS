@@ -5,7 +5,7 @@ const helmet = require('helmet');
 const multer = require('multer');
 const session = require('express-session');
 const { BELTS, GENDERS, beltName, formatEventDates } = require('./divisions');
-const { EVENT_TYPES, POOMSAE_EVENTS, POOMSAE_GENDERS, POOMSAE_FORMATS, MAX_CUT, hasKyorugi, hasPoomsae, poomsaeDivisionTitle, formatScore, placeText } = require('./poomsae');
+const { EVENT_TYPES, POOMSAE_EVENTS, POOMSAE_GENDERS, POOMSAE_FORMATS, MAX_CUT, JUDGE_COUNTS, hasKyorugi, hasPoomsae, poomsaeDivisionTitle, formatScore, placeText } = require('./poomsae');
 const { createMailer } = require('./mailer');
 const { logActivity } = require('./activity');
 const { createLiveUpdates } = require('./live');
@@ -211,6 +211,7 @@ function createApp({
       POOMSAE_GENDERS,
       POOMSAE_FORMATS,
       MAX_CUT,
+      JUDGE_COUNTS,
       hasKyorugi,
       hasPoomsae,
       poomsaeDivisionTitle,

@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <%# With JavaScript the page updates live as scores come in. Without it, it reloads itself. %>
+  <noscript><meta http-equiv="refresh" content="<%= refreshSeconds %>"></noscript>
+  <title>Poomsae court <%= court %> · <%= competition.name %></title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body class="screen" data-live-events="/screens/<%= competition.id %>/poomsae/<%= day %>/<%= court %>/events">
+<% const side = (bout, color) => { const f = bout[color]; return f ? { name: f.name, club: f.club } : { name: bout[`${color}Placeholder`] || 'To be decided', club: '' }; }; %>
+<header class="screen-head">
+  <div>
+    <p class="screen-court">Poomsae court <%= court %></p>
+    <p class="screen-sub"><%= competition.name %> · <%= dayLabel %></p>
+  </div>
+  <div class="screen-sub screen-right">
+    <span class="screen-status" id="screen-status" hidden></span>
+    <span data-live-part="progress"><%= done %> of <%= total %> done<br>Updated <%= updatedAt %></span>
+  </div>
+</header>
+
+<main class="screen-main" data-live-part="main">
+  <section class="screen-now">
+    <% if (now && now.kind === 'perform') { %>
+      <h1 class="screen-label">Now performing</h1>
+      <p class="screen-bout"><%= now.time %> · <%= now.title %> · <%= now.place %> of <%= now.of %></p>
+      <div class="screen-corner screen-performer"><strong><%= now.name %></strong><span><%= now.club %></span></div>
+    <% } else if (now) { const blue = side(now, 'blue'); const red = side(now, 'red'); %>
+      <h1 class="screen-label">Now competing</h1>
+      <p class="screen-bout">Bout <%= now.number %> · <%= now.time %> · <%= now.title %></p>
+      <div class="screen-versus">
+        <div class="screen-corner blue"><span class="screen-corner-label">Blue</span><strong><%= blue.name %></strong><span><%= blue.club %></span></div>
+        <div class="screen-vs">vs</div>
+        <div class="screen-corner red"><span class="screen-corner-label">Red</span><strong><%= red.name %></strong><span><%= red.club %></span></div>
+      </div>
+    <% } else if (next.length > 0 || blockedBy) { %>
+      <h1 class="screen-label">Now</h1>
+      <p class="screen-empty">Waiting for earlier results.</p>
+    <% } else { %>
+      <h1 class="screen-label">Now</h1>
+      <p class="screen-empty">Everything on this court is finished.</p>
+    <% } %>
+  </section>
+
+  <div class="screen-columns">
+    <section>
+      <h2 class="screen-label">Up next</h2>
+      <% if (next.length === 0) { %><p class="screen-empty">Nothing else on this court.</p><% } %>
+      <ol class="screen-list">
+        <% next.forEach((i) => { %>
+          <li>
+            <% if (i.kind === 'perform') { %>
+              <span class="screen-number"><%= i.place %></span>
+              <div><strong><%= i.name %></strong><br><span class="screen-sub"><%= i.time %> · <%= i.club %> · <%= i.title %></span></div>
+            <% } else { const blue = side(i, 'blue'); const red = side(i, 'red'); %>
+              <span class="screen-number"><%= i.number %></span>
+              <div><strong><span class="blue-text"><%= blue.name %></span> vs <span class="red-text"><%= red.name %></span></strong><br><span class="screen-sub"><%= i.time %> · <%= i.title %></span></div>
+            <% } %>
+          </li>
+        <% }) %>
+      </ol>
+    </section>
+    <section>
+      <h2 class="screen-label">Recent results</h2>
+      <% if (recent.length === 0) { %><p class="screen-empty">No results yet.</p><% } %>
+      <ol class="screen-list">
+        <% recent.forEach((i) => { %>
+          <li>
+            <% if (i.kind === 'perform') { %>
+              <span class="screen-number"><%= formatScore(i.score) %></span>
+              <div><strong><%= i.name %></strong><br><span class="screen-sub"><%= i.club %> · <%= i.title %></span></div>
+            <% } else { %>
+              <span class="screen-number"><%= i.number %></span>
+              <div><strong><%= i.winner.name %></strong> won<br><span class="screen-sub"><%= i.winner.club %> · <%= i.title %></span></div>
+            <% } %>
+          </li>
+        <% }) %>
+      </ol>
+    </section>
+  </div>
+</main>
+</body>
+</html>

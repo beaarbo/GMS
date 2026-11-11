@@ -11,9 +11,9 @@ const {
   parseWeightLimits,
   formatDay,
 } = require('./divisions');
-const { buildBracket, roundsFromSlots, seededSlots, slotsAreValid, assignCourts, scheduleCourt, formatTime, layoutBracket } = require('./bracket');
+const { buildBracket, roundsFromSlots, seededSlots, slotsAreValid, assignCourts, scheduleCourt, formatTime, layoutBracket, computeMedals } = require('./bracket');
 const {
-  placeEntry, POOMSAE_EVENTS, POOMSAE_GENDERS, DEFAULT_POOMSAE_AGE_GROUPS, poomsaeDivisionTitle, rankEntries, divisionMode, bracketEntrants, poomsaeMedalists, schedulePoomsae,
+  placeEntry, POOMSAE_EVENTS, POOMSAE_GENDERS, DEFAULT_POOMSAE_AGE_GROUPS, poomsaeDivisionTitle, rankEntries, divisionMode, bracketEntrants, poomsaeMedalists, schedulePoomsae, hasKyorugi, hasPoomsae,
 } = require('./poomsae');
 const { logActivity } = require('./activity');
 const { documentLabel, documentTypeFor } = require('./documents');
@@ -485,7 +485,8 @@ function reviewPoomsae(db, competitionId, entryId, decision, note = '') {
 
 // Records (or clears, with null) the score of an approved entry once registration has closed.
 // Scores count in a ranked division or a score round, never once its bracket is drawn.
-function recordPoomsaeScore(db, competition, entryId, score) {
+// With several judges, marks are each judge's score and score is worked out from them.
+function recordPoomsaeScore(db, competition, entryId, score, marks = null) {
   if (competition.status !== 'closed') return { ok: false, error: 'Scores can be recorded once registration closes.' };
   const entry = db.prepare("SELECT * FROM poomsae_entries WHERE id = ? AND competition_id = ? AND status = 'approved'").get(entryId, competition.id);
   if (!entry) return { ok: false, error: 'Only approved entries can be scored.' };
@@ -495,8 +496,23 @@ function recordPoomsaeScore(db, competition, entryId, score) {
     .prepare("SELECT COUNT(*) AS n FROM poomsae_entries WHERE competition_id = ? AND status = 'approved' AND event = ? AND gender = ? AND age_group_id = ? AND belt_group_id = ?")
     .get(competition.id, entry.event, entry.gender, entry.age_group_id, entry.belt_group_id);
   if (divisionMode(divisionRules(competition, loadPoomsaeSettings(db, competition.id).get(key)), n) === 'bracket') return { ok: false, error: 'This division goes straight to single elimination, so it has no scores.' };
-  db.prepare("UPDATE poomsae_entries SET score = ?, scored_at = CASE WHEN ? IS NULL THEN NULL ELSE datetime('now') END WHERE id = ?").run(score, score, entry.id);
+  db.transaction(() => {
+    db.prepare("UPDATE poomsae_entries SET score = ?, scored_at = CASE WHEN ? IS NULL THEN NULL ELSE datetime('now') END WHERE id = ?").run(score, score, entry.id);
+    db.prepare('DELETE FROM poomsae_judge_scores WHERE entry_id = ?').run(entry.id);
+    const insert = db.prepare('INSERT INTO poomsae_judge_scores (entry_id, judge, score) VALUES (?, ?, ?)');
+    if (score !== null && marks) marks.forEach((mark, i) => insert.run(entry.id, i + 1, mark));
+  })();
   return { ok: true };
+}
+
+// Each entry's judges' marks, by entry id, in judge order.
+function loadJudgeMarks(db, competitionId) {
+  const marks = new Map();
+  db.prepare(
+    `SELECT j.entry_id, j.score FROM poomsae_judge_scores j JOIN poomsae_entries e ON e.id = j.entry_id
+     WHERE e.competition_id = ? ORDER BY j.entry_id, j.judge`
+  ).all(competitionId).forEach((row) => marks.set(row.entry_id, [...(marks.get(row.entry_id) || []), row.score]));
+  return marks;
 }
 
 function hasPoomsaeScores(db, competitionId) {
@@ -760,6 +776,79 @@ function poomsaeBoutList(db, competition, { clubId = null, published = false } =
   return pages.filter((p) => show[p.kind]).sort((a, b) => (a.day || 99) - (b.day || 99) || (a.court || 99) - (b.court || 99) || String(a.start).localeCompare(String(b.start)));
 }
 
+// Everything on the poomsae courts, in time order: each performer of a
+// performance list, and each bracket bout (byes left out). done: scored, or a
+// winner recorded. published keeps only the stages coaches can see.
+function poomsaeCourtItems(db, competition, { published = false } = {}) {
+  const entries = listPoomsaeEntries(db, competition.id);
+  const divisions = poomsaeDivisions(entries, competition, loadPoomsaeBrackets(db, competition.id, entries), loadPoomsaeSettings(db, competition.id));
+  const showLists = !published || Boolean(competition.poomsae_published_at);
+  const showBrackets = !published || Boolean(competition.poomsae_brackets_published_at);
+  const items = [];
+  divisions.forEach((d) => {
+    if (showLists && d.listCourt) {
+      d.order.forEach((e) => items.push({
+        kind: 'perform', id: e.id, day: d.listDay, court: d.listCourt, time: e.perform_time || '', title: d.title,
+        name: e.names, club: e.club_name, score: e.score, done: e.score !== null, place: e.perform_order, of: d.order.length,
+      }));
+    }
+    if (showBrackets && d.bouts && d.court) {
+      d.bouts.filter((b) => !b.isBye).forEach((b) => items.push({ ...b, kind: 'bout', day: d.day, court: d.court, title: d.title, done: Boolean(b.winner) }));
+    }
+  });
+  return items.sort((a, b) => a.day - b.day || a.court - b.court || a.time.localeCompare(b.time) || (a.number || 0) - (b.number || 0));
+}
+
+// One poomsae court on one day: what's on now (the first unfinished item that
+// can start: a performer always can, a bout once both sides are known), what's
+// next, and what finished last.
+function poomsaeCourtQueue(db, competition, day, court, options = {}) {
+  const items = poomsaeCourtItems(db, competition, options).filter((i) => i.day === day && i.court === court);
+  const waiting = items.filter((i) => !i.done);
+  const now = waiting.find((i) => i.kind === 'perform' || (i.blue && i.red)) || null;
+  return {
+    items,
+    now,
+    blockedBy: !now && waiting.length > 0 ? waiting[0] : null,
+    next: waiting.filter((i) => i !== now).slice(0, 3),
+    recent: items.filter((i) => i.done).slice(-3).reverse(),
+    done: items.length - waiting.length,
+  };
+}
+
+// The competition's final results: every division with its medallists (gold
+// decided), and one club medal table for kyorugi and poomsae together.
+// published keeps only what visitors may see: the kyorugi bout list once
+// published, ranked poomsae once its order is published, poomsae brackets once
+// the brackets are. Medallists carry name, club and clubId only.
+function competitionResults(db, competition, { published = false } = {}) {
+  const divisions = [];
+  if (hasKyorugi(competition) && (!published || competition.bouts_published_at)) {
+    computeMedals(loadBoutList(db, competition.id)).divisions.forEach((d) => {
+      if (!d.gold) return;
+      const side = (f) => ({ name: f.name, club: f.club, clubId: f.clubId });
+      divisions.push({ event: 'Kyorugi', title: d.title, gold: [side(d.gold)], silver: d.silver ? [side(d.silver)] : [], bronze: d.bronze.map(side) });
+    });
+  }
+  if (hasPoomsae(competition)) {
+    const entries = listPoomsaeEntries(db, competition.id);
+    const byId = new Map(entries.map((e) => [e.id, { name: e.names, club: e.club_name, clubId: e.club_id }]));
+    poomsaeDivisions(entries, competition, loadPoomsaeBrackets(db, competition.id, entries), loadPoomsaeSettings(db, competition.id)).forEach((d) => {
+      const visible = d.mode === 'score' ? competition.poomsae_published_at : competition.poomsae_brackets_published_at;
+      if ((published && !visible) || d.medalists.gold.length === 0) return;
+      const people = (ids) => ids.map((id) => byId.get(id));
+      divisions.push({ event: 'Poomsae', title: d.title, gold: people(d.medalists.gold), silver: people(d.medalists.silver), bronze: people(d.medalists.bronze) });
+    });
+  }
+  const clubs = new Map();
+  divisions.forEach((d) => ['gold', 'silver', 'bronze'].forEach((medal) => d[medal].forEach((m) => {
+    if (!clubs.has(m.clubId)) clubs.set(m.clubId, { clubId: m.clubId, club: m.club, gold: 0, silver: 0, bronze: 0 });
+    clubs.get(m.clubId)[medal] += 1;
+  })));
+  const table = [...clubs.values()].sort((a, b) => b.gold - a.gold || b.silver - a.silver || b.bronze - a.bronze || a.club.localeCompare(b.club));
+  return { divisions, table };
+}
+
 // Removes a division's performance list, while it has no scores.
 function clearPoomsaeOrder(db, competition, key) {
   return db.transaction(() => {
@@ -774,10 +863,10 @@ function clearPoomsaeOrder(db, competition, key) {
 }
 
 // The poomsae courts and timings. Callers validate first. Reschedules every bracket.
-function savePoomsaeSchedule(db, competitionId, { courts, start, minutes, rest }) {
+function savePoomsaeSchedule(db, competitionId, { courts, start, minutes, rest, judges }) {
   db.transaction(() => {
-    db.prepare('UPDATE competitions SET poomsae_courts = ?, poomsae_start = ?, poomsae_minutes = ?, poomsae_rest_minutes = ? WHERE id = ?')
-      .run(courts, start, minutes, rest, competitionId);
+    db.prepare('UPDATE competitions SET poomsae_courts = ?, poomsae_start = ?, poomsae_minutes = ?, poomsae_rest_minutes = ?, poomsae_judges = ? WHERE id = ?')
+      .run(courts, start, minutes, rest, judges, competitionId);
     applyPoomsaeSchedule(db, competitionId);
   })();
 }
@@ -1735,6 +1824,7 @@ module.exports = {
   recordPoomsaeScore,
   hasPoomsaeScores,
   hasPoomsaeResults,
+  loadJudgeMarks,
   loadPoomsaeBrackets,
   loadPoomsaeSettings,
   savePoomsaeSchedule,
@@ -1743,6 +1833,9 @@ module.exports = {
   generatePoomsaeOrder,
   clearPoomsaeOrder,
   poomsaeBoutList,
+  poomsaeCourtItems,
+  poomsaeCourtQueue,
+  competitionResults,
   drawPoomsaeBracket,
   deletePoomsaeBracket,
   recordPoomsaeBout,

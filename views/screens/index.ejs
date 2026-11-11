@@ -1,5 +1,5 @@
 <%- include('../partials/top') %>
-<p class="breadcrumb"><% if (user.role === 'coach') { %><a href="/club/competitions/<%= competition.id %>/bouts">Bout list</a><% } else { %><a href="/admin/competitions/<%= competition.id %>/results">Results</a><% } %></p>
+<p class="breadcrumb"><% if (user.role === 'coach' && competition.bouts_published_at) { %><a href="/club/competitions/<%= competition.id %>/bouts">Bout list</a><% } else if (user.role === 'coach') { %><a href="/club/competitions/<%= competition.id %>/poomsae">Poomsae</a><% } else if (user.role === 'admin') { %><a href="/admin/competitions">Competitions</a><% } else { %><a href="/official">Competition day</a><% } %></p>
 <div class="page-head">
   <div class="title-row">
     <%- include('../partials/comp_logo', { competition, size: 'md' }) %>
@@ -11,19 +11,19 @@
 </div>
 
 <% if (days.length === 0) { %>
-  <div class="card"><p class="empty">There are no bouts yet.</p></div>
+  <div class="card"><p class="empty">There's nothing on the courts yet.</p></div>
 <% } %>
 <% days.forEach((d) => { %>
   <section class="section">
     <div class="section-head"><h2><%= d.label %></h2></div>
     <div class="card-grid">
-      <% d.courts.forEach((c) => { %>
+      <% d.courts.forEach((c) => { const poomsae = c.kind === 'poomsae'; %>
         <article class="card">
-          <h3 class="card-title">Court <%= c.court %></h3>
-          <p class="sub"><%= c.done %> of <%= c.total %> bouts finished</p>
+          <h3 class="card-title"><%= poomsae ? 'Poomsae court' : 'Court' %> <%= c.court %></h3>
+          <p class="sub"><%= c.done %> of <%= c.total %> <%= poomsae ? 'performances and bouts' : 'bouts' %> finished</p>
           <div class="actions">
-            <a class="btn" href="/screens/<%= competition.id %>/<%= c.day %>/<%= c.court %>">Open screen</a>
-            <% if (user.role !== 'coach') { %><a class="btn secondary" href="/admin/competitions/<%= competition.id %>/mat/<%= c.day %>/<%= c.court %>">Record results</a><% } %>
+            <a class="btn" href="/screens/<%= competition.id %>/<%= poomsae ? 'poomsae/' : '' %><%= c.day %>/<%= c.court %>">Open screen</a>
+            <% if (user.role !== 'coach') { %><a class="btn secondary" href="/admin/competitions/<%= competition.id %>/<%= poomsae ? 'poomsae/mat' : 'mat' %>/<%= c.day %>/<%= c.court %>">Record results</a><% } %>
           </div>
         </article>
       <% }) %>

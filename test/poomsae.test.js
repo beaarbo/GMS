@@ -111,3 +111,12 @@ test('brackets are timed in draw order on the court free soonest, keeping each e
   const pinned = schedulePoomsae([{ ...two('e', 40), day: 2 }, { key: 'f', day: null, bouts: [{ id: 50, round: 1, position: 0, isBye: true }] }], options);
   assert.deepEqual([pinned.places.get('e'), pinned.places.get('f')], [{ day: 2, court: 1 }, { day: 1, court: null }]);
 });
+
+const { judgesScore } = require('../src/poomsae');
+
+test('judges\' marks: five or more drop the highest and lowest, fewer are all averaged', () => {
+  assert.equal(judgesScore([7.8, 7.9, 8.0]), 7.9);
+  assert.equal(judgesScore([7.0, 7.8, 7.9, 8.0, 9.5]), 7.9, 'the 7.0 and 9.5 are dropped');
+  assert.equal(judgesScore([7.5, 7.6, 7.7, 7.8, 7.9, 8.0, 8.1]), 7.8);
+  assert.equal(judgesScore([7.81, 7.82, 7.84]), 7.823, 'three decimals');
+});

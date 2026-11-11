@@ -24,13 +24,16 @@ const {
   generatePoomsaeOrder,
   clearPoomsaeOrder,
   poomsaeBoutList,
+  poomsaeCourtQueue,
   drawPoomsaeBracket,
   deletePoomsaeBracket,
   recordPoomsaeBout,
   reviewPoomsae,
   recordPoomsaeScore,
+  hasPoomsaeScores,
+  loadJudgeMarks,
 } = require('../services');
-const { hasPoomsae, parseScore, formatScore, poomsaeDivisionTitle, poomsaeMedalTable, POOMSAE_FORMATS, MAX_CUT } = require('../poomsae');
+const { hasPoomsae, parseScore, formatScore, poomsaeDivisionTitle, poomsaeMedalTable, POOMSAE_FORMATS, MAX_CUT, JUDGE_COUNTS, judgesScore } = require('../poomsae');
 const { notifyPoomsaeDecisions, notifyPoomsaePublished } = require('../notifications');
 const { writeBoutListPdf } = require('../boutlistPdf');
 const { computeMedals } = require('../bracket');
@@ -300,6 +303,31 @@ router.get('/competitions/:id(\\d+)/mat/:day(\\d+)/:court(\\d+)', (req, res) => 
 
 // Poomsae: admins approve entries here while registration runs. Once it closes,
 // admins and officials record scores and bracket winners; admins draw brackets.
+// The poomsae mat page: one poomsae court on one day, for an official's tablet.
+// A performer gets score boxes (one per judge), a bout gets two winner buttons.
+// Both post to the usual score and bout routes with back=mat, so the same rules apply.
+router.get('/competitions/:id(\\d+)/poomsae/mat/:day(\\d+)/:court(\\d+)', (req, res) => {
+  const { db } = req.app.locals;
+  if (!hasPoomsae(req.competition) || req.competition.status !== 'closed') return notFound(res);
+  const day = Number(req.params.day);
+  const court = Number(req.params.court);
+  const queue = poomsaeCourtQueue(db, req.competition, day, court);
+  if (queue.items.length === 0) return notFound(res);
+  const date = getEventDates(db, req.competition.id)[day - 1];
+  const last = queue.recent[0] || null;
+  return res.render('admin/poomsae_mat', {
+    title: `Poomsae court ${court} results`,
+    competition: req.competition,
+    day,
+    court,
+    dayLabel: date ? `Day ${day} · ${formatDay(date)}` : `Day ${day}`,
+    ...queue,
+    last,
+    total: queue.items.length,
+    marks: loadJudgeMarks(db, req.competition.id),
+  });
+});
+
 const poomsaePath = (competition, entryId = null, divisionKey = null) =>
   `/admin/competitions/${competition.id}/poomsae${entryId ? `#entry-${entryId}` : divisionKey ? `#division-${divisionKey}` : ''}`;
 
@@ -320,8 +348,14 @@ router.post('/competitions/:id(\\d+)/poomsae/schedule', requireRole('admin'), (r
     start: clean(req.body.start, 5),
     minutes: number(req.body.minutes),
     rest: number(req.body.rest),
+    // Left out of the form: keep the current number of judges.
+    judges: req.body.judges === undefined ? req.competition.poomsae_judges : number(req.body.judges),
   };
   const errors = [];
+  if (!JUDGE_COUNTS.includes(values.judges)) errors.push('Choose 1, 3, 5 or 7 judges.');
+  else if (values.judges !== req.competition.poomsae_judges && hasPoomsaeScores(db, req.competition.id)) {
+    errors.push('Poomsae already has scores, so the number of judges stays as it is. Clear the scores to change it.');
+  }
   if (!(values.courts >= 1 && values.courts <= 20)) errors.push('Enter from 1 to 20 poomsae courts.');
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(values.start)) errors.push('Enter a valid start time.');
   if (!(values.minutes >= 1 && values.minutes <= 60)) errors.push('Enter from 1 to 60 minutes per bout.');
@@ -331,7 +365,7 @@ router.post('/competitions/:id(\\d+)/poomsae/schedule', requireRole('admin'), (r
     savePoomsaeSchedule(db, req.competition.id, values);
     req.logActivity(
       'poomsae.schedule',
-      `Set the poomsae schedule for ${req.competition.name}: ${values.courts} court${values.courts === 1 ? '' : 's'} from ${values.start}, ${values.minutes} minutes a bout, ${values.rest} minutes rest`,
+      `Set the poomsae schedule for ${req.competition.name}: ${values.courts} court${values.courts === 1 ? '' : 's'} from ${values.start}, ${values.minutes} minutes a bout, ${values.rest} minutes rest, ${values.judges} judge${values.judges === 1 ? '' : 's'}`,
       req.competition.id
     );
     req.flash('success', 'Poomsae schedule saved. Every bracket has been timed again.');
@@ -380,6 +414,7 @@ router.get('/competitions/:id(\\d+)/poomsae', (req, res) => {
     divisions,
     medals: poomsaeMedalTable(divisions),
     rejected: entries.filter((e) => e.status === 'rejected'),
+    marks: loadJudgeMarks(db, req.competition.id),
     pending: entries.filter((e) => e.status === 'pending').length,
     approved: entries.filter((e) => e.status === 'approved').length,
     closed: req.competition.status === 'closed',
@@ -518,7 +553,7 @@ router.post('/competitions/:id(\\d+)/poomsae/bouts/:boutId(\\d+)', (req, res) =>
     const winner = req.body.winner === 'blue' ? before.blue : before.red;
     req.logActivity('poomsae.bout_won', `${winner.name} won poomsae Bout ${bout.bout_number} in ${division.title}, ${before.blue.name} vs ${before.red.name}`, competition.id);
   }
-  return res.redirect(poomsaePath(competition, null, bout.division_key));
+  return res.redirect(poomsaeMatReturn(req) || poomsaePath(competition, null, bout.division_key));
 });
 
 router.post('/competitions/:id(\\d+)/poomsae/review', requireRole('admin'), (req, res) => {
@@ -558,18 +593,39 @@ router.post('/competitions/:id(\\d+)/poomsae/:entryId(\\d+)/score', (req, res) =
   const { db } = req.app.locals;
   const entry = getPoomsaeEntry(db, req.competition.id, req.params.entryId);
   if (!entry) return notFound(res);
-  const parsed = parseScore(req.body.score);
-  const result = parsed.ok ? recordPoomsaeScore(db, req.competition, entry.id, parsed.score) : parsed;
+  const parsed = readScore(req.body, req.competition.poomsae_judges);
+  const result = parsed.ok ? recordPoomsaeScore(db, req.competition, entry.id, parsed.score, parsed.marks) : parsed;
   if (!result.ok) {
     req.flash('error', `${entry.names}: ${result.error}`);
-  } else if (parsed.score !== entry.score) {
+  } else if (parsed.score !== entry.score || parsed.marks) {
     const was = entry.score === null ? '' : `, changed from ${formatScore(entry.score)}`;
+    const judges = parsed.marks ? ` (judges ${parsed.marks.map(formatScore).join(', ')})` : '';
     const summary = parsed.score === null
       ? `Cleared the poomsae score of ${entry.names} (${entry.club_name}), which was ${formatScore(entry.score)}`
-      : `Poomsae score ${formatScore(parsed.score)} for ${entry.names} (${entry.club_name}) in ${poomsaeDivisionTitle(entry)}${was}`;
+      : `Poomsae score ${formatScore(parsed.score)}${judges} for ${entry.names} (${entry.club_name}) in ${poomsaeDivisionTitle(entry)}${was}`;
     req.logActivity(parsed.score === null ? 'poomsae.score_cleared' : 'poomsae.scored', summary, req.competition.id);
   }
-  return res.redirect(poomsaePath(req.competition, entry.id));
+  return res.redirect(poomsaeMatReturn(req) || poomsaePath(req.competition, entry.id));
 });
+
+// One final score (judge_1 alone, or "score"), or one mark per judge. Every
+// judge's box must be filled, or all left blank to clear the score.
+function readScore(body, judges) {
+  if (judges === 1) return { ...parseScore(body.score ?? body.judge_1), marks: null };
+  const raw = Array.from({ length: judges }, (_, i) => String(body[`judge_${i + 1}`] ?? '').trim());
+  if (raw.every((value) => value === '')) return { ok: true, score: null, marks: null };
+  if (raw.some((value) => value === '')) return { ok: false, error: `Enter all ${judges} judges' scores, or clear them all.` };
+  const parsed = raw.map(parseScore);
+  const bad = parsed.find((p) => !p.ok);
+  if (bad) return bad;
+  const marks = parsed.map((p) => p.score);
+  return { ok: true, score: judgesScore(marks), marks };
+}
+
+// Where to go back to when a form came from the poomsae mat page.
+function poomsaeMatReturn(req) {
+  const ok = req.body.back === 'mat' && /^\d+$/.test(req.body.day || '') && /^\d+$/.test(req.body.court || '');
+  return ok ? `/admin/competitions/${req.competition.id}/poomsae/mat/${req.body.day}/${req.body.court}` : null;
+}
 
 module.exports = { router, resultsPath };

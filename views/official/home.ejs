@@ -32,7 +32,10 @@
               <span class="hint">Results open once the organiser draws the bout list.</span>
             <% } %>
           <% } %>
-          <% if (hasPoomsae(c)) { %><a class="btn" href="/admin/competitions/<%= c.id %>/poomsae">Poomsae scores</a><% } %>
+          <% if (hasPoomsae(c)) { %>
+            <a class="btn" href="/admin/competitions/<%= c.id %>/poomsae">Poomsae scores</a>
+            <% if (!c.hasBouts) { %><a class="btn secondary" href="/screens/<%= c.id %>">Court screens</a><% } %>
+          <% } %>
         </div>
       </article>
     <% }) %>

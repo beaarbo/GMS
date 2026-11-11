@@ -1,0 +1,59 @@
+<%- include('partials/top') %>
+<p class="breadcrumb"><a href="/competitions/<%= competition.id %>"><%= competition.name %></a></p>
+<div class="page-head">
+  <div>
+    <h1>Results</h1>
+    <p class="sub"><%= competition.name %> · <%= competition.venue %>, <%= eventDatesText(competition) %></p>
+  </div>
+</div>
+
+<% if (staff) { %><div class="notice info">You see every decided division. Visitors and coaches see only what you've published.</div><% } %>
+
+<section class="card">
+  <h2>Medal standings</h2>
+  <% if (table.length === 0) { %>
+    <p class="empty">No medals yet.</p>
+  <% } else { %>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Club</th><th class="medal-count">Gold</th><th class="medal-count">Silver</th><th class="medal-count">Bronze</th><th class="medal-count">Total</th></tr></thead>
+        <tbody>
+          <% table.forEach((row) => { %>
+            <tr<%- highlightClubId === row.clubId ? ' class="own-row"' : '' %>>
+              <td><span class="club-name"><%- include('partials/club_icon', { clubId: row.clubId, name: row.club, size: 'sm' }) %><strong><%= row.club %></strong></span></td>
+              <td class="medal-count"><%= row.gold %></td>
+              <td class="medal-count"><%= row.silver %></td>
+              <td class="medal-count"><%= row.bronze %></td>
+              <td class="medal-count"><strong><%= row.gold + row.silver + row.bronze %></strong></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+    <p class="hint">Kyorugi and poomsae together. In a bracket, both losing semifinalists get bronze; ranked poomsae gives 1st, 2nd and 3rd, shared on equal scores.</p>
+  <% } %>
+</section>
+
+<% ['Kyorugi', 'Poomsae'].forEach((event) => { const list = divisions.filter((d) => d.event === event); %>
+  <% if (list.length > 0) { %>
+    <section class="card">
+      <h2><%= event %></h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Division</th><th>Gold</th><th>Silver</th><th>Bronze</th></tr></thead>
+          <tbody>
+            <% list.forEach((d) => { %>
+              <tr>
+                <td><strong><%= d.title %></strong></td>
+                <% ['gold', 'silver', 'bronze'].forEach((medal) => { %>
+                  <td><% if (d[medal].length === 0) { %><span class="hint">–</span><% } %><% d[medal].forEach((m) => { %><div<%- highlightClubId === m.clubId ? ' class="own-text"' : '' %>><%= m.name %> <span class="hint"><%= m.club %></span></div><% }) %></td>
+                <% }) %>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  <% } %>
+<% }) %>
+<%- include('partials/bottom') %>

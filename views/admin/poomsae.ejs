@@ -20,6 +20,7 @@
       </form>
     <% } %>
     <% if (hasPages) { %><a class="btn secondary" href="/admin/competitions/<%= competition.id %>/poomsae.pdf">Download PDF</a><% } %>
+    <% if (hasPages && closed) { %><a class="btn secondary" href="/screens/<%= competition.id %>">Court screens</a><a class="btn secondary" href="/competitions/<%= competition.id %>/results">Overall results</a><% } %>
     <%# Each stage as on the kyorugi bout list: a badge once published, with a button to hide it again. %>
     <% if (isAdmin) { %>
       <% [['lists', 'performance order', 'Order', hasLists, competition.poomsae_published_at], ['brackets', 'brackets', 'Brackets', hasBrackets, competition.poomsae_brackets_published_at]].forEach(([stage, label, badge, ready, published]) => { %>
@@ -50,7 +51,11 @@
 <% if (!closed) { %>
   <div class="notice info">Scores and brackets open once registration closes. Until then, review the entries here.</div>
 <% } else if (competition.poomsae_format !== 'elimination') { %>
-  <p class="sub">Enter each final score, the judges' average, such as 7.85. Equal scores share a place. Clear a score to undo it.</p>
+  <% if (competition.poomsae_judges === 1) { %>
+    <p class="sub">Enter each final score, the judges' average, such as 7.85. Equal scores share a place. Clear a score to undo it.</p>
+  <% } else { %>
+    <p class="sub">Enter each of the <%= competition.poomsae_judges %> judges' scores, such as 7.8. <%= competition.poomsae_judges >= 5 ? 'The highest and lowest are dropped and the rest averaged.' : 'They are averaged.' %> Equal scores share a place. Clear every box to undo a score.</p>
+  <% } %>
 <% } %>
 
 <% if (isAdmin) { %>
@@ -63,6 +68,12 @@
       <div><label for="p-start">Start time</label><input id="p-start" name="start" type="time" value="<%= competition.poomsae_start %>" required></div>
       <div><label for="p-minutes">Minutes per bout</label><input id="p-minutes" name="minutes" type="number" min="1" max="60" value="<%= competition.poomsae_minutes %>" required></div>
       <div><label for="p-rest">Rest between bouts (min)</label><input id="p-rest" name="rest" type="number" min="0" max="120" value="<%= competition.poomsae_rest_minutes %>" required></div>
+      <div>
+        <label for="p-judges">Judges</label>
+        <select id="p-judges" name="judges">
+          <% JUDGE_COUNTS.forEach((n) => { %><option value="<%= n %>" <%= competition.poomsae_judges === n ? 'selected' : '' %>><%= n === 1 ? '1: enter the final score' : `${n} judges` %></option><% }) %>
+        </select>
+      </div>
       <div class="actions"><button class="btn secondary" type="submit">Save schedule</button></div>
     </form>
   </section>
@@ -109,7 +120,14 @@
                   <% if (scoring && e.status === 'approved') { %>
                     <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/<%= e.id %>/score" class="inline-form">
                       <input type="hidden" name="_csrf" value="<%= csrf %>">
-                      <input class="score-input" name="score" inputmode="decimal" autocomplete="off" value="<%= e.score === null ? '' : formatScore(e.score) %>" aria-label="Score of <%= e.names %>">
+                      <% if (competition.poomsae_judges === 1) { %>
+                        <input class="score-input" name="score" inputmode="decimal" autocomplete="off" value="<%= e.score === null ? '' : formatScore(e.score) %>" aria-label="Score of <%= e.names %>">
+                      <% } else { const own = marks.get(e.id) || []; %>
+                        <span class="judge-inputs">
+                          <% for (let j = 1; j <= competition.poomsae_judges; j += 1) { %><input class="score-input judge" name="judge_<%= j %>" inputmode="decimal" autocomplete="off" value="<%= own[j - 1] === undefined ? '' : formatScore(own[j - 1]) %>" placeholder="J<%= j %>" aria-label="Judge <%= j %> score for <%= e.names %>"><% } %>
+                        </span>
+                        <% if (e.score !== null) { %><strong class="judge-total"><%= formatScore(e.score) %></strong><% } %>
+                      <% } %>
                       <button class="btn secondary small" type="submit">Save</button>
                     </form>
                   <% } else if (e.score !== null) { %><%= formatScore(e.score) %><% } %>

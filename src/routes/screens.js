@@ -1,72 +1,109 @@
 // Court screens: a page per court and day for a TV or tablet at the mat, showing
-// the bout on now, what's next and recent results. Logged-in users only, because
-// they show athletes' names, and coaches only once the bout list is published.
+// what's on now, what's next and recent results, for kyorugi courts and poomsae
+// courts. Logged-in users only, because they show athletes' names; coaches only
+// see what has been published (the kyorugi bout list, each poomsae stage).
 const express = require('express');
-const { listBouts, getEventDates } = require('../services');
+const { listBouts, getEventDates, poomsaeCourtItems, poomsaeCourtQueue } = require('../services');
 const { formatDay } = require('../divisions');
+const { hasPoomsae } = require('../poomsae');
 const { notFound } = require('./helpers');
 
 const router = express.Router();
 const REFRESH_SECONDS = 15;
 
-function screenCompetition(req, res, next) {
-  if (!req.user) {
-    req.flash('error', 'Please log in to continue.');
-    return res.redirect('/login');
-  }
-  const competition = req.app.locals.db.prepare('SELECT * FROM competitions WHERE id = ?').get(req.params.id);
-  const staff = ['admin', 'official'].includes(req.user.role);
-  if (!competition || competition.status !== 'closed' || (!staff && !competition.bouts_published_at)) return notFound(res);
-  req.competition = competition;
-  return next();
+const isStaff = (user) => ['admin', 'official'].includes(user.role);
+const kyorugiVisible = (user, c) => isStaff(user) || Boolean(c.bouts_published_at);
+const poomsaeVisible = (user, c) => hasPoomsae(c) && (isStaff(user) || Boolean(c.poomsae_published_at || c.poomsae_brackets_published_at));
+
+// kind: 'any' for the screens list, or the event a screen belongs to.
+function screenCompetition(kind) {
+  return (req, res, next) => {
+    if (!req.user) {
+      req.flash('error', 'Please log in to continue.');
+      return res.redirect('/login');
+    }
+    const competition = req.app.locals.db.prepare('SELECT * FROM competitions WHERE id = ?').get(req.params.id);
+    const allowed = competition && competition.status === 'closed' && (
+      kind === 'kyorugi' ? kyorugiVisible(req.user, competition)
+        : kind === 'poomsae' ? poomsaeVisible(req.user, competition)
+          : kyorugiVisible(req.user, competition) || poomsaeVisible(req.user, competition)
+    );
+    if (!allowed) return notFound(res);
+    req.competition = competition;
+    return next();
+  };
 }
 
-const allBouts = listBouts;
+const dayLabelOf = (dates, day) => (dates[day - 1] ? `Day ${day} · ${formatDay(dates[day - 1])}` : `Day ${day}`);
+const updatedAt = () => new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
-router.get('/:id(\\d+)', screenCompetition, (req, res) => {
+router.get('/:id(\\d+)', screenCompetition('any'), (req, res) => {
   const { db } = req.app.locals;
-  const dates = getEventDates(db, req.competition.id);
+  const competition = req.competition;
+  const dates = getEventDates(db, competition.id);
   const courts = new Map();
-  allBouts(db, req.competition.id).forEach((b) => {
-    const key = `${b.day}:${b.court}`;
-    const entry = courts.get(key) || { day: b.day, court: b.court, total: 0, done: 0 };
+  const count = (kind, item) => {
+    const key = `${item.day}:${kind}:${item.court}`;
+    const entry = courts.get(key) || { kind, day: item.day, court: item.court, total: 0, done: 0 };
     entry.total += 1;
-    if (b.winner) entry.done += 1;
+    if (item.kind === 'perform' ? item.done : item.winner) entry.done += 1;
     courts.set(key, entry);
-  });
-  const days = [...new Set([...courts.values()].map((c) => c.day))].map((day) => ({
+  };
+  if (kyorugiVisible(req.user, competition)) listBouts(db, competition.id).forEach((b) => count('kyorugi', b));
+  if (poomsaeVisible(req.user, competition)) {
+    poomsaeCourtItems(db, competition, { published: !isStaff(req.user) }).forEach((item) => count('poomsae', item));
+  }
+  const days = [...new Set([...courts.values()].map((c) => c.day))].sort((a, b) => a - b).map((day) => ({
     day,
     label: dates[day - 1] ? `Day ${day} (${formatDay(dates[day - 1])})` : `Day ${day}`,
-    courts: [...courts.values()].filter((c) => c.day === day),
+    courts: [...courts.values()].filter((c) => c.day === day).sort((a, b) => a.kind.localeCompare(b.kind) || a.court - b.court),
   }));
-  res.render('screens/index', { title: 'Court screens', competition: req.competition, days });
+  res.render('screens/index', { title: 'Court screens', competition, days });
 });
 
-router.get('/:id(\\d+)/:day(\\d+)/:court(\\d+)', screenCompetition, (req, res) => {
+router.get('/:id(\\d+)/:day(\\d+)/:court(\\d+)', screenCompetition('kyorugi'), (req, res) => {
   const { db } = req.app.locals;
   const day = Number(req.params.day);
   const court = Number(req.params.court);
-  const bouts = allBouts(db, req.competition.id).filter((b) => b.day === day && b.court === court);
+  const bouts = listBouts(db, req.competition.id).filter((b) => b.day === day && b.court === court);
   if (bouts.length === 0) return notFound(res);
   const waiting = bouts.filter((b) => !b.winner);
   // On now: the first unfinished bout whose two athletes are known.
   const now = waiting.find((b) => b.blue && b.red) || null;
   const next = waiting.filter((b) => b !== now).slice(0, 3);
   const recent = bouts.filter((b) => b.winner).slice(-3).reverse();
-  const date = getEventDates(db, req.competition.id)[day - 1];
   res.render('screens/court', {
     title: `Court ${court}`,
     competition: req.competition,
     court,
     day,
-    dayLabel: date ? `Day ${day} · ${formatDay(date)}` : `Day ${day}`,
+    dayLabel: dayLabelOf(getEventDates(db, req.competition.id), day),
     now,
     next,
     recent,
     done: bouts.length - waiting.length,
     total: bouts.length,
     refreshSeconds: REFRESH_SECONDS,
-    updatedAt: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+    updatedAt: updatedAt(),
+  });
+});
+
+router.get('/:id(\\d+)/poomsae/:day(\\d+)/:court(\\d+)', screenCompetition('poomsae'), (req, res) => {
+  const { db } = req.app.locals;
+  const day = Number(req.params.day);
+  const court = Number(req.params.court);
+  const queue = poomsaeCourtQueue(db, req.competition, day, court, { published: !isStaff(req.user) });
+  if (queue.items.length === 0) return notFound(res);
+  res.render('screens/poomsae_court', {
+    title: `Poomsae court ${court}`,
+    competition: req.competition,
+    court,
+    day,
+    dayLabel: dayLabelOf(getEventDates(db, req.competition.id), day),
+    ...queue,
+    total: queue.items.length,
+    refreshSeconds: REFRESH_SECONDS,
+    updatedAt: updatedAt(),
   });
 });
 
@@ -76,7 +113,7 @@ const COALESCE_MS = 300;
 // A server-sent event stream for one court screen. It sends "change" whenever
 // the competition changes; the page then fetches its new content. Comments keep
 // the connection open through proxies, and the browser reconnects on its own.
-router.get('/:id(\\d+)/:day(\\d+)/:court(\\d+)/events', screenCompetition, (req, res) => {
+function changeStream(req, res) {
   const { live } = req.app.locals;
   res.writeHead(200, {
     'Content-Type': 'text/event-stream; charset=utf-8',
@@ -101,6 +138,9 @@ router.get('/:id(\\d+)/:day(\\d+)/:court(\\d+)/events', screenCompetition, (req,
     clearTimeout(pending);
     unsubscribe();
   });
-});
+}
+
+router.get('/:id(\\d+)/:day(\\d+)/:court(\\d+)/events', screenCompetition('kyorugi'), changeStream);
+router.get('/:id(\\d+)/poomsae/:day(\\d+)/:court(\\d+)/events', screenCompetition('poomsae'), changeStream);
 
 module.exports = router;

@@ -216,6 +216,18 @@ function parseScore(text) {
   return { ok: true, score: Number(value) };
 }
 
+// How many judges score each performance. One means the official enters the final score.
+const JUDGE_COUNTS = [1, 3, 5, 7];
+
+// The final score from the judges' marks: with five or more judges the highest
+// and lowest marks are dropped, as World Taekwondo does, then the rest are
+// averaged to three decimals.
+function judgesScore(marks) {
+  const sorted = [...marks].sort((a, b) => a - b);
+  const counted = sorted.length >= 5 ? sorted.slice(1, -1) : sorted;
+  return Math.round((counted.reduce((sum, m) => sum + m, 0) / counted.length) * 1000) / 1000;
+}
+
 // 7.85 → "7.85", 8 → "8.00", 7.855 → "7.855".
 function formatScore(score) {
   const long = score.toFixed(3);
@@ -262,6 +274,8 @@ module.exports = {
   hasPoomsae,
   placeEntry,
   poomsaeDivisionTitle,
+  JUDGE_COUNTS,
+  judgesScore,
   parseScore,
   formatScore,
   placeText,

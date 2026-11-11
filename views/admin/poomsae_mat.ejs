@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Poomsae court <%= court %> results · <%= competition.name %></title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<%# Updates live when a score or result is recorded elsewhere, using the poomsae court screen's stream. %>
+<body class="mat" data-live-events="/screens/<%= competition.id %>/poomsae/<%= day %>/<%= court %>/events">
+<% const back = () => `<input type="hidden" name="_csrf" value="${csrf}"><input type="hidden" name="back" value="mat"><input type="hidden" name="day" value="${day}"><input type="hidden" name="court" value="${court}">`; %>
+<% const judges = competition.poomsae_judges; %>
+<header class="mat-head">
+  <div>
+    <h1>Poomsae court <%= court %></h1>
+    <p class="sub"><%= competition.name %> · <%= dayLabel %></p>
+  </div>
+  <nav class="actions" aria-label="Court">
+    <span class="screen-status" id="screen-status" hidden></span>
+    <a class="btn secondary small" href="/admin/competitions/<%= competition.id %>/poomsae">All poomsae</a>
+    <a class="btn secondary small" href="/screens/<%= competition.id %>/poomsae/<%= day %>/<%= court %>">Court screen</a>
+    <% if (user.role !== 'admin') { %><a class="btn secondary small" href="/official">Competition day</a><% } %>
+  </nav>
+</header>
+
+<main class="mat-main" data-live-part="main">
+  <% flash.forEach((item) => { %>
+    <div class="notice <%= item.type %>" role="status"><%= item.text %></div>
+  <% }) %>
+  <p class="mat-progress"><%= done %> of <%= total %> done</p>
+
+  <section class="card mat-now">
+    <% if (now && now.kind === 'perform') { %>
+      <h2><%= now.name %> <span class="hint">· <%= now.time %> · <%= now.place %> of <%= now.of %> · <%= now.title %></span></h2>
+      <p class="sub"><%= now.club %>. <%= judges === 1 ? 'Enter the final score.' : `Enter each judge's score.${judges >= 5 ? ' The highest and lowest are dropped.' : ''}` %></p>
+      <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/<%= now.id %>/score" class="mat-scores">
+        <%- back() %>
+        <% if (judges === 1) { %>
+          <label>Score <input class="mat-score" name="score" inputmode="decimal" autocomplete="off" required placeholder="7.85" aria-label="Score of <%= now.name %>"></label>
+        <% } else { %>
+          <% for (let j = 1; j <= judges; j += 1) { %><label>Judge <%= j %> <input class="mat-score" name="judge_<%= j %>" inputmode="decimal" autocomplete="off" required placeholder="7.8" aria-label="Judge <%= j %> score for <%= now.name %>"></label><% } %>
+        <% } %>
+        <button class="btn" type="submit">Save score</button>
+      </form>
+    <% } else if (now) { %>
+      <h2>Bout <%= now.number %> <span class="hint">· <%= now.time %> · <%= now.title %></span></h2>
+      <p class="sub">Tap the winner. They move into their next bout.</p>
+      <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/bouts/<%= now.id %>" class="mat-choices">
+        <%- back() %>
+        <button class="mat-winner blue" type="submit" name="winner" value="blue" aria-label="<%= now.blue.name %> wins bout <%= now.number %>">
+          <span class="mat-corner">Blue wins</span>
+          <strong><%= now.blue.name %></strong>
+          <span><%= now.blue.club %></span>
+        </button>
+        <button class="mat-winner red" type="submit" name="winner" value="red" aria-label="<%= now.red.name %> wins bout <%= now.number %>">
+          <span class="mat-corner">Red wins</span>
+          <strong><%= now.red.name %></strong>
+          <span><%= now.red.club %></span>
+        </button>
+      </form>
+    <% } else if (blockedBy) { %>
+      <h2>Waiting</h2>
+      <p class="empty">Bout <%= blockedBy.number %> is waiting for an earlier result, probably on another court. This page updates when it's ready.</p>
+    <% } else { %>
+      <h2>All done</h2>
+      <p class="empty">Everything on this court is finished.</p>
+    <% } %>
+  </section>
+
+  <div class="overview-grid">
+    <section class="card">
+      <h2>Up next</h2>
+      <% if (next.length === 0) { %><p class="empty">Nothing else on this court.</p><% } %>
+      <ol class="overview-list">
+        <% next.forEach((i) => { %>
+          <% if (i.kind === 'perform') { %>
+            <li><strong><%= i.name %></strong> · <%= i.time %><br><span class="hint"><%= i.club %> · <%= i.title %></span></li>
+          <% } else { %>
+            <li><strong>Bout <%= i.number %></strong> · <%= i.time %><br><span class="blue-text-dark"><%= i.blue ? i.blue.name : i.bluePlaceholder %></span> vs <span class="red-text-dark"><%= i.red ? i.red.name : i.redPlaceholder %></span><div class="hint"><%= i.title %></div></li>
+          <% } %>
+        <% }) %>
+      </ol>
+    </section>
+    <section class="card">
+      <h2>Last result</h2>
+      <% if (!last) { %>
+        <p class="empty">No results yet.</p>
+      <% } else if (last.kind === 'perform') { const own = marks.get(last.id); %>
+        <p><strong><%= last.name %></strong> scored <strong><%= formatScore(last.score) %></strong><% if (own) { %> <span class="hint">(judges <%= own.map(formatScore).join(', ') %>)</span><% } %><br><span class="hint"><%= last.title %></span></p>
+        <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/<%= last.id %>/score" data-confirm="Clear the score of <%= last.name %>?">
+          <%- back() %>
+          <button class="btn danger" type="submit">Clear this score</button>
+        </form>
+        <p class="hint">A score can be changed until the division's bracket is drawn.</p>
+      <% } else { %>
+        <p><strong><%= last.winner.name %></strong> won bout <%= last.number %><br><span class="hint"><%= last.title %></span></p>
+        <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/bouts/<%= last.id %>" data-confirm="Undo the result of bout <%= last.number %>?">
+          <%- back() %>
+          <input type="hidden" name="action" value="clear">
+          <button class="btn danger" type="submit">Undo this result</button>
+        </form>
+        <p class="hint">It can only be undone while the next bout has no result.</p>
+      <% } %>
+    </section>
+  </div>
+</main>
+</body>
+</html>

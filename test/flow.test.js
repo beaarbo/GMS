@@ -23,6 +23,8 @@ const {
   createCoachAccount,
   createOfficialAccount,
   loadBoutList,
+  enterPoomsae,
+  competitionResults,
 } = require('../src/services');
 const { computeMedals } = require('../src/bracket');
 const { divisionOptions, findWeightClass } = require('../src/divisions');
@@ -649,7 +651,7 @@ test('schedule migration clears old draws and keeps competitions', () => {
 
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM bouts').get().n, 0);
   assert.equal(db.prepare('SELECT bout_courts FROM competitions WHERE id = ?').get(compId).bout_courts, 2);
-  assert.equal(db.pragma('user_version', { simple: true }), 18);
+  assert.equal(db.pragma('user_version', { simple: true }), 19);
 });
 
 test('admin creates a club, a coach applies, and only approval unlocks athlete registration', async () => {
@@ -814,7 +816,7 @@ test('migrating old club accounts keeps logins and fighters and approves each co
   const clubColumns = db.pragma('table_info(clubs)').map((c) => c.name);
   assert.ok(!clubColumns.includes('coach_name'));
   assert.equal(db.pragma('foreign_key_check').length, 0);
-  assert.equal(db.pragma('user_version', { simple: true }), 18);
+  assert.equal(db.pragma('user_version', { simple: true }), 19);
 });
 
 test('a fighter alone in a division has no bout number', async () => {
@@ -988,7 +990,7 @@ test('migration turns a day count into consecutive dates', () => {
   const { id } = db.prepare('SELECT id FROM competitions').get();
   assert.deepEqual(getEventDates(db, id), ['2030-01-30', '2030-01-31', '2030-02-01']);
   assert.ok(!db.pragma('table_info(competitions)').some((c) => c.name === 'bout_days'));
-  assert.equal(db.pragma('user_version', { simple: true }), 18);
+  assert.equal(db.pragma('user_version', { simple: true }), 19);
 });
 
 const tokenIn = (message) => message.text.match(/reset-password\/([0-9a-f]{64})/)[1];
@@ -1233,7 +1235,7 @@ test('the results migration removes declared weights and keeps registrations', (
   db.pragma('user_version = 4');
   migrate(db);
   assert.ok(!db.pragma('table_info(registrations)').some((c) => c.name === 'declared_weight_kg'));
-  assert.equal(db.pragma('user_version', { simple: true }), 18);
+  assert.equal(db.pragma('user_version', { simple: true }), 19);
 });
 
 test('athletes need the right document before they can enter', async () => {
@@ -1850,7 +1852,7 @@ test('rebuilding the users table for officials keeps every linked row', async ()
   db.close();
 
   db = openDb(file);
-  assert.equal(db.pragma('user_version', { simple: true }), 18);
+  assert.equal(db.pragma('user_version', { simple: true }), 19);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM club_applications').get().n, 1);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM password_resets').get().n, 1);
   assert.equal(db.prepare('SELECT author_id FROM news_posts').get().author_id, coachId);
@@ -2334,7 +2336,7 @@ test('migrating to version 13 moves poomsae entries onto poomsae age groups', ()
   db.pragma('user_version = 12');
 
   migrate(db);
-  assert.equal(db.pragma('user_version', { simple: true }), 18);
+  assert.equal(db.pragma('user_version', { simple: true }), 19);
   const moved = db.prepare('SELECT a.name, e.status FROM poomsae_entries e JOIN poomsae_age_groups a ON a.id = e.age_group_id WHERE e.id = ?').get(entry);
   assert.deepEqual(moved, { name: 'U40', status: 'approved' });
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM poomsae_members').get().n, 1);
@@ -2675,4 +2677,77 @@ test('the bout list can be drawn before the weigh-in, and athletes out at the we
   await result(final(), { winner: final().blue_registration_id === x ? 'blue' : 'red' });
   await weigh(y, { action: 'reset' });
   assert.equal(db.prepare('SELECT weigh_status FROM registrations WHERE id = ?').get(y).weigh_status, 'disqualified');
+});
+
+test('poomsae on court screens and the mat page, judges\' scores, and final results for both events', async () => {
+  const { app, db } = await setup();
+  const visitor = request(app);
+  const { compId, admin, club } = await closedCompetitionWithFighters(db, app, [['T', 'Alpha'], ['D', 'Bravo']]);
+  db.prepare("UPDATE competitions SET events = 'both' WHERE id = ?").run(compId);
+  const competition = () => db.prepare('SELECT * FROM competitions WHERE id = ?').get(compId);
+  const tigers = db.prepare("SELECT id FROM clubs WHERE name = 'Tigers'").get().id;
+  for (const first of ['Ana', 'Eve', 'Fay']) {
+    const id = await addFighter(club, { first_name: first, last_name: 'Form', gender: 'F', date_of_birth: JUNIOR_DOB, belt_rank: '3' });
+    assert.ok(enterPoomsae(db, competition(), tigers, 'individual', [db.prepare('SELECT * FROM fighters WHERE id = ?').get(id)]).ok);
+  }
+  db.prepare("UPDATE poomsae_entries SET status = 'approved'").run();
+  const review = `/admin/competitions/${compId}/poomsae`;
+  const score = (id) => db.prepare('SELECT score FROM poomsae_entries WHERE id = ?').get(id).score;
+  const performer = (place) => db.prepare(
+    `SELECT e.id, f.first_name FROM poomsae_entries e JOIN poomsae_members m ON m.entry_id = e.id JOIN fighters f ON f.id = m.fighter_id WHERE e.perform_order = ?`
+  ).get(place);
+
+  // Five judges: the highest and lowest marks are dropped.
+  await post(admin, `${review}/schedule`, { courts: '1', start: '10:00', minutes: '5', rest: '0', judges: '5' }, review);
+  assert.equal(competition().poomsae_judges, 5);
+  await post(admin, `${review}/order`, { division: 'all' }, review);
+  const mat = `${review}/mat/1/1`;
+  const matPage = (await admin.get(mat)).text;
+  assert.match(matPage, new RegExp(`${performer(1).first_name} Form[\\s\\S]*?name="judge_5"`), 'the first performer is on, with a box per judge');
+  const atMat = { back: 'mat', day: '1', court: '1' };
+  await post(admin, `${review}/${performer(1).id}/score`, { judge_1: '8', ...atMat }, mat);
+  assert.equal(score(performer(1).id), null, 'every judge must be entered');
+  const saved = await post(admin, `${review}/${performer(1).id}/score`, { judge_1: '7.0', judge_2: '7.8', judge_3: '7.9', judge_4: '8.0', judge_5: '9.5', ...atMat }, mat);
+  assert.equal(saved.headers.location, mat, 'back to the mat page');
+  assert.equal(score(performer(1).id), 7.9);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM poomsae_judge_scores WHERE entry_id = ?').get(performer(1).id).n, 5);
+  assert.match((await admin.get(mat)).text, new RegExp(`<h2>${performer(2).first_name} Form `), 'the next performer is on');
+  assert.match((await admin.get(mat)).text, /\(judges 7\.00, 7\.80, 7\.90, 8\.00, 9\.50\)/);
+  await post(admin, `${review}/schedule`, { courts: '1', start: '10:00', minutes: '5', rest: '0', judges: '3' }, review);
+  assert.equal(competition().poomsae_judges, 5, 'the judge count stays once there are scores');
+
+  // The poomsae court screen: staff straight away, coaches once the order is published.
+  const screen = `/screens/${compId}/poomsae/1/1`;
+  assert.match((await admin.get(screen)).text, new RegExp(`Now performing[\\s\\S]*?${performer(2).first_name} Form`));
+  assert.equal((await club.get(screen)).status, 404);
+  await post(admin, `${review}/publish`, { stage: 'lists' }, review);
+  assert.equal((await club.get(screen)).status, 200);
+  assert.match((await club.get(`/screens/${compId}`)).text, new RegExp(`href="/screens/${compId}/poomsae/1/1"`));
+  for (const [place, marks] of [[2, ['8.1', '8.2', '8.3', '8.4', '8.5']], [3, ['6', '6', '6', '6', '6']]]) {
+    await post(admin, `${review}/${performer(place).id}/score`, { ...Object.fromEntries(marks.map((m, i) => [`judge_${i + 1}`, m])), ...atMat }, mat);
+  }
+  assert.match((await admin.get(mat)).text, /Everything on this court is finished/);
+
+  // Kyorugi: a result, unpublished for now.
+  const bouts = `/admin/competitions/${compId}/bouts`;
+  await post(admin, `${bouts}/generate`, {}, bouts);
+  const bout = db.prepare('SELECT * FROM bouts WHERE competition_id = ? AND is_bye = 0').get(compId);
+  await post(admin, `/admin/competitions/${compId}/results/${bout.id}`, { winner: 'blue' }, `/admin/competitions/${compId}/results`);
+
+  // Final results: visitors see only published events; admins see everything.
+  const results = `/competitions/${compId}/results`;
+  let text = (await visitor.get(results)).text;
+  assert.match(text, new RegExp(`${performer(2).first_name} Form`));
+  assert.doesNotMatch(text, /KYORUGI/);
+  assert.match((await admin.get(results)).text, /KYORUGI/);
+  assert.match((await visitor.get(`/competitions/${compId}`)).text, new RegExp(`href="${results}">Results and medals`));
+  await post(admin, `${bouts}/publish`, {}, bouts);
+  text = (await visitor.get(results)).text;
+  assert.match(text, /KYORUGI/);
+  // One table for both: Tigers have three poomsae medals, and one of the clubs a kyorugi gold.
+  const table = competitionResults(db, competition(), { published: true }).table;
+  const total = (club) => { const row = table.find((r) => r.club === club) || { gold: 0, silver: 0, bronze: 0 }; return row.gold + row.silver + row.bronze; };
+  assert.equal(total('Tigers') + total('Dragons'), 5);
+  assert.ok(total('Tigers') >= 3);
+  assert.equal(table.reduce((n, r) => n + r.gold, 0), 2, 'one gold per event division');
 });
