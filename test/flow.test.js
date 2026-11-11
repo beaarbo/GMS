@@ -2583,6 +2583,8 @@ test('published bout lists are public: kyorugi, and poomsae order and brackets a
   const review = `/admin/competitions/${formsId}/poomsae`;
   await post(admin, `${review}/review`, { bulk: 'approve-pending' }, review);
   db.prepare("UPDATE competitions SET status = 'closed' WHERE id = ?").run(formsId);
+  // Two poomsae courts: the score round takes court 1, so its bracket lands on court 2.
+  await post(admin, `${review}/schedule`, { courts: '2', start: '09:00', minutes: '5', rest: '0' }, review);
   await post(admin, `${review}/order`, { division: 'all' }, review);
   const publicPage = `/competitions/${formsId}/poomsae`;
   assert.equal((await visitor.get(publicPage)).status, 404, 'nothing until published');
@@ -2601,6 +2603,8 @@ test('published bout lists are public: kyorugi, and poomsae order and brackets a
   for (const [i, entry] of entries.entries()) await post(admin, `${review}/${entry.id}/score`, { score: String(8 - i) }, review);
   const e = db.prepare('SELECT event, gender, age_group_id, belt_group_id FROM poomsae_entries WHERE id = ?').get(entries[0].id);
   await post(admin, `${review}/draw`, { division: [e.event, e.gender, e.age_group_id, e.belt_group_id].join('-') }, review);
+  // The admin page shows where each part runs: the list in the header, the bracket above it.
+  assert.match((await admin.get(review)).text, /Poomsae court: <strong>1<\/strong>[\s\S]*?<h3>Bracket<\/h3>\s*<p class="stats">[\s\S]*?Poomsae court: <strong>2<\/strong>/);
   assert.doesNotMatch((await visitor.get(publicPage)).text, /<svg class="bracket"/);
   assert.match((await admin.get(review)).text, /Publish brackets/);
   await post(admin, `${review}/publish`, { stage: 'brackets' }, review);

@@ -176,6 +176,8 @@
     <% if (d.mode !== 'score' && closed) { %>
       <h3>Bracket</h3>
       <% if (d.bouts) { %>
+        <%# A score round's bracket can run on another day or court than its list. %>
+        <% if (d.court) { %><p class="stats"><span>Day: <strong><%= dayName(d.day) %></strong></span><span>Poomsae court: <strong><%= d.court %></strong></span></p><% } %>
         <%- include('../partials/bracket', { division: d, highlightClubId: null }) %>
         <% const played = d.bouts.filter((b) => !b.isBye); %>
         <% if (played.length > 0) { %>

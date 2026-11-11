@@ -717,16 +717,16 @@ function generatePoomsaeOrder(db, competition, key, rng = secureRandom) {
   })();
 }
 
-// The poomsae "bout list": each performance order and bracket as its own page,
-// in running order (day, court, start). clubId keeps only divisions where that
-// club has an entry; published keeps only the stages published so far (lists,
-// brackets). Pages carry what the PDF and web page both draw.
 // Titled like the kyorugi bout list: "POOMSAE INDIVIDUAL BLACK BELT, Junior (U18), Female".
 function boutListTitle(d) {
   const e = d.entries[0];
   return `POOMSAE ${POOMSAE_EVENTS[e.event].label.toUpperCase()} ${e.belt_group.toUpperCase()}, ${e.age_group}, ${POOMSAE_GENDERS[e.gender]}`;
 }
 
+// The poomsae "bout list": each performance order and bracket as its own page,
+// in running order (day, court, start). clubId keeps only divisions where that
+// club has an entry; published keeps only the stages published so far (lists,
+// brackets). Pages carry what the PDF and web page both draw.
 function poomsaeBoutList(db, competition, { clubId = null, published = false } = {}) {
   const show = published
     ? { list: Boolean(competition.poomsae_published_at), bracket: Boolean(competition.poomsae_brackets_published_at) }
