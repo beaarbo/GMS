@@ -6,175 +6,212 @@
   </div>
 </div>
 
-<div class="account-grid">
-  <section class="card">
-    <h2>Details</h2>
-    <% if (errors.details) { %><div class="notice error" role="alert"><%= errors.details %></div><% } %>
-    <form method="post" action="/account/details">
-      <input type="hidden" name="_csrf" value="<%= csrf %>">
-      <div class="field">
-        <label for="full_name">Name</label>
-        <input id="full_name" name="full_name" value="<%= values.full_name ?? account.full_name %>" autocomplete="name" required>
-      </div>
-      <div class="field">
-        <label for="phone">Contact number<%= account.role === 'admin' ? '' : '' %></label>
-        <input id="phone" name="phone" type="tel" value="<%= values.phone ?? account.phone %>" autocomplete="tel" <%= account.role === 'coach' ? 'required' : '' %>>
-      </div>
-      <button class="btn" type="submit">Save details</button>
-    </form>
+<%# One settings row per topic: its title and a short note, then the form. %>
+<div class="settings-page">
+  <section class="settings-row" id="details">
+    <div class="settings-label">
+      <h2>Details</h2>
+      <p class="hint">Your name and number, for the organisers.</p>
+    </div>
+    <div class="settings-body">
+      <% if (errors.details) { %><div class="notice error" role="alert"><%= errors.details %></div><% } %>
+      <form method="post" action="/account/details">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <div class="field">
+          <label for="full_name">Name</label>
+          <input id="full_name" name="full_name" value="<%= values.full_name ?? account.full_name %>" autocomplete="name" required>
+        </div>
+        <div class="field">
+          <label for="phone">Contact number</label>
+          <input id="phone" name="phone" type="tel" value="<%= values.phone ?? account.phone %>" autocomplete="tel" <%= account.role === 'coach' ? 'required' : '' %>>
+        </div>
+        <button class="btn" type="submit">Save details</button>
+      </form>
+    </div>
   </section>
 
-  <section class="card">
-    <h2>Email</h2>
-    <% if (errors.email) { %><div class="notice error" role="alert"><%= errors.email %></div><% } %>
-    <form method="post" action="/account/email">
-      <input type="hidden" name="_csrf" value="<%= csrf %>">
-      <div class="field">
-        <label for="email">New email</label>
-        <input id="email" name="email" type="email" value="<%= values.email || '' %>" autocomplete="email" required>
-        <p class="hint">You'll log in with this. We'll let your current address know about the change.</p>
-      </div>
-      <div class="field">
-        <label for="email_password">Current password</label>
-        <input id="email_password" name="current_password" type="password" autocomplete="current-password" required>
-      </div>
-      <button class="btn" type="submit">Change email</button>
-    </form>
+  <section class="settings-row" id="appearance">
+    <div class="settings-label">
+      <h2>Theme</h2>
+      <p class="hint">Kept with your account, so every device you log in on uses it.</p>
+    </div>
+    <div class="settings-body">
+      <form method="post" action="/account/theme" data-theme-form>
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <fieldset class="theme-choice">
+          <legend class="visually-hidden">Theme</legend>
+          <% [['auto', 'Auto', 'Follows the device'], ['light', 'Light', 'Always light'], ['dark', 'Dark', 'Always dark']].forEach(([value, label, note]) => { %>
+            <label class="theme-option">
+              <input type="radio" name="theme" value="<%= value %>" <%= account.theme === value ? 'checked' : '' %>>
+              <span class="theme-swatch theme-swatch-<%= value %>" aria-hidden="true"></span>
+              <span><strong><%= label %></strong><span class="hint"><%= note %></span></span>
+            </label>
+          <% }) %>
+        </fieldset>
+        <%# With JavaScript the theme changes as soon as it's picked (public/app.js). %>
+        <button class="btn" type="submit" data-theme-save>Save theme</button>
+      </form>
+    </div>
   </section>
 
-  <section class="card">
-    <h2>Password</h2>
-    <% if (errors.password) { %><div class="notice error" role="alert"><%= errors.password %></div><% } %>
-    <form method="post" action="/account/password">
-      <input type="hidden" name="_csrf" value="<%= csrf %>">
-      <div class="field">
-        <label for="current_password">Current password</label>
-        <input id="current_password" name="current_password" type="password" autocomplete="current-password" required>
-      </div>
-      <div class="field">
-        <label for="new_password">New password <span class="hint">(at least 10 characters)</span></label>
-        <input id="new_password" name="new_password" type="password" autocomplete="new-password" minlength="10" maxlength="72" required>
-      </div>
-      <div class="field">
-        <label for="confirm_password">Repeat new password</label>
-        <input id="confirm_password" name="confirm_password" type="password" autocomplete="new-password" minlength="10" maxlength="72" required>
-      </div>
-      <p class="hint">Changing it logs you out on any other devices.</p>
-      <button class="btn" type="submit">Change password</button>
-    </form>
+  <section class="settings-row" id="email">
+    <div class="settings-label">
+      <h2>Email</h2>
+      <p class="hint">You log in with <strong><%= account.email %></strong>. We'll let that address know if it changes.</p>
+    </div>
+    <div class="settings-body">
+      <% if (errors.email) { %><div class="notice error" role="alert"><%= errors.email %></div><% } %>
+      <form method="post" action="/account/email">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <div class="field">
+          <label for="email">New email</label>
+          <input id="email" name="email" type="email" value="<%= values.email || '' %>" autocomplete="email" required>
+        </div>
+        <div class="field">
+          <label for="email_password">Current password</label>
+          <input id="email_password" name="current_password" type="password" autocomplete="current-password" required>
+        </div>
+        <button class="btn" type="submit">Change email</button>
+      </form>
+    </div>
   </section>
 
-  <section class="card" id="appearance">
-    <h2>Appearance</h2>
-    <form method="post" action="/account/theme">
-      <input type="hidden" name="_csrf" value="<%= csrf %>">
-      <div class="field">
-        <label for="theme">Theme</label>
-        <select id="theme" name="theme">
-          <% [['auto', 'Auto (follow the device)'], ['dark', 'Dark'], ['light', 'Light']].forEach(([value, label]) => { %><option value="<%= value %>" <%= account.theme === value ? 'selected' : '' %>><%= label %></option><% }) %>
-        </select>
-        <p class="hint">Kept with your account, so every device you log in on uses it.</p>
-      </div>
-      <button class="btn" type="submit">Save theme</button>
-    </form>
+  <section class="settings-row" id="password">
+    <div class="settings-label">
+      <h2>Password</h2>
+      <p class="hint">At least 10 characters. Changing it logs you out on any other devices.</p>
+    </div>
+    <div class="settings-body">
+      <% if (errors.password) { %><div class="notice error" role="alert"><%= errors.password %></div><% } %>
+      <form method="post" action="/account/password">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <div class="field">
+          <label for="current_password">Current password</label>
+          <input id="current_password" name="current_password" type="password" autocomplete="current-password" required>
+        </div>
+        <div class="field">
+          <label for="new_password">New password</label>
+          <input id="new_password" name="new_password" type="password" autocomplete="new-password" minlength="10" maxlength="72" required>
+        </div>
+        <div class="field">
+          <label for="confirm_password">Repeat new password</label>
+          <input id="confirm_password" name="confirm_password" type="password" autocomplete="new-password" minlength="10" maxlength="72" required>
+        </div>
+        <button class="btn" type="submit">Change password</button>
+      </form>
+    </div>
+  </section>
+
+  <section class="settings-row" id="two-step">
+    <div class="settings-label">
+      <h2>Two-step login</h2>
+      <p class="hint">A code from your phone as well as your password, so a stolen password alone can't get in.</p>
+    </div>
+    <div class="settings-body">
+      <% if (errors.twoStep) { %><div class="notice error" role="alert"><%= errors.twoStep %></div><% } %>
+      <% if (recoveryCodes) { %>
+        <div class="notice success" role="status">Two-step login is on. Save these recovery codes now: each one logs you in once without your phone, and they won't be shown again.</div>
+        <ul class="recovery-codes"><% recoveryCodes.forEach((code) => { %><li><code><%= code %></code></li><% }) %></ul>
+      <% } else if (account.two_step) { %>
+        <p><span class="badge approved">On</span> <%= recoveryLeft %> recovery code<%= recoveryLeft === 1 ? '' : 's' %> left.</p>
+      <% } %>
+      <% if (account.two_step) { %>
+        <form method="post" action="/account/two-step/off" data-confirm="Turn off two-step login?">
+          <input type="hidden" name="_csrf" value="<%= csrf %>">
+          <div class="field">
+            <label for="off_password">Current password</label>
+            <input id="off_password" name="current_password" type="password" autocomplete="current-password" required>
+            <p class="hint">To get new recovery codes, turn it off and on again.</p>
+          </div>
+          <button class="btn secondary" type="submit">Turn off two-step login</button>
+        </form>
+      <% } else if (twoStepSetup) { %>
+        <ol class="steps">
+          <li>Open an authenticator app on your phone (Google Authenticator, Microsoft Authenticator, 1Password and others) and add an account by typing a key.</li>
+          <li>Enter this key, as a time-based code: <code class="setup-key"><%= twoStepSetup.key %></code> <a class="hint" href="<%= twoStepSetup.link %>">Or open it in an authenticator app on this device</a></li>
+          <li>Type the six-digit code the app shows.</li>
+        </ol>
+        <form method="post" action="/account/two-step/confirm" class="inline-form">
+          <input type="hidden" name="_csrf" value="<%= csrf %>">
+          <input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,7}" maxlength="7" required aria-label="Six-digit code">
+          <button class="btn" type="submit">Turn on</button>
+        </form>
+      <% } else { %>
+        <p><span class="badge draft">Off</span></p>
+        <form method="post" action="/account/two-step/start">
+          <input type="hidden" name="_csrf" value="<%= csrf %>">
+          <button class="btn" type="submit">Set up two-step login</button>
+        </form>
+      <% } %>
+    </div>
   </section>
 
   <% if (emailChoices.length > 0) { %>
-    <section class="card" id="emails">
-      <h2>Emails</h2>
-      <form method="post" action="/account/emails">
-        <input type="hidden" name="_csrf" value="<%= csrf %>">
-        <% emailChoices.forEach(([key, kind]) => { %>
-          <label class="check"><input type="checkbox" name="kind" value="<%= key %>" <%= optedOut.includes(key) ? '' : 'checked' %>> <%= kind.label %></label>
-        <% }) %>
+    <section class="settings-row" id="emails">
+      <div class="settings-label">
+        <h2>Notifications</h2>
         <p class="hint">Emails about your account's security, password resets and club approvals always come.</p>
-        <button class="btn" type="submit">Save email choices</button>
-      </form>
+      </div>
+      <div class="settings-body">
+        <form method="post" action="/account/emails">
+          <input type="hidden" name="_csrf" value="<%= csrf %>">
+          <% emailChoices.forEach(([key, kind]) => { %>
+            <label class="check"><input type="checkbox" name="kind" value="<%= key %>" <%= optedOut.includes(key) ? '' : 'checked' %>> <%= kind.label %></label>
+          <% }) %>
+          <button class="btn" type="submit">Save notifications</button>
+        </form>
+      </div>
     </section>
   <% } %>
 
-  <section class="card" id="two-step">
-    <h2>Two-step login</h2>
-    <% if (errors.twoStep) { %><div class="notice error" role="alert"><%= errors.twoStep %></div><% } %>
-    <% if (recoveryCodes) { %>
-      <div class="notice success" role="status">Two-step login is on. Save these recovery codes now: each one logs you in once without your phone, and they won't be shown again.</div>
-      <ul class="recovery-codes"><% recoveryCodes.forEach((code) => { %><li><code><%= code %></code></li><% }) %></ul>
-    <% } else if (account.two_step) { %>
-      <p>On. After your password, you enter the code from your authenticator app. <%= recoveryLeft %> recovery code<%= recoveryLeft === 1 ? '' : 's' %> left.</p>
-    <% } %>
-    <% if (account.two_step) { %>
-      <form method="post" action="/account/two-step/off" data-confirm="Turn off two-step login?">
-        <input type="hidden" name="_csrf" value="<%= csrf %>">
-        <div class="field">
-          <label for="off_password">Current password</label>
-          <input id="off_password" name="current_password" type="password" autocomplete="current-password" required>
-        </div>
-        <button class="btn secondary" type="submit">Turn off two-step login</button>
-        <p class="hint">To get new recovery codes, turn it off and on again.</p>
-      </form>
-    <% } else if (twoStepSetup) { %>
-      <ol class="steps">
-        <li>Open an authenticator app on your phone (Google Authenticator, Microsoft Authenticator, 1Password and others) and add an account by typing a key.</li>
-        <li>Enter this key, as a time-based code: <code class="setup-key"><%= twoStepSetup.key %></code> <a class="hint" href="<%= twoStepSetup.link %>">Or open it in an authenticator app on this device</a></li>
-        <li>Type the six-digit code the app shows.</li>
-      </ol>
-      <form method="post" action="/account/two-step/confirm" class="inline-form">
-        <input type="hidden" name="_csrf" value="<%= csrf %>">
-        <input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,7}" maxlength="7" required aria-label="Six-digit code">
-        <button class="btn" type="submit">Turn on</button>
-      </form>
-    <% } else { %>
-      <p>Off. Turn it on to need a code from your phone as well as your password, so a stolen password alone can't get in.</p>
-      <form method="post" action="/account/two-step/start">
-        <input type="hidden" name="_csrf" value="<%= csrf %>">
-        <button class="btn" type="submit">Set up two-step login</button>
-      </form>
-    <% } %>
-  </section>
-
   <% if (account.role === 'coach') { %>
-    <section class="card">
-      <h2>Club</h2>
-      <% if (errors.club) { %><div class="notice error" role="alert"><%= errors.club %></div><% } %>
-      <% if (clubName) { %>
-        <p class="club-name"><%- include('partials/club_icon', { clubId: account.club_id, name: clubName, size: 'md' }) %><span>You coach for <strong><%= clubName %></strong>. <a href="/club/icon">Change club icon</a></span></p>
-      <% } else { %>
-        <p>You are not in a club yet.</p>
-      <% } %>
-
-      <% if (pending) { %>
-        <div class="notice info">Your request to <%= clubName ? 'move to' : 'join' %> <strong><%= pending.club %></strong> is waiting for an admin.</div>
-        <form method="post" action="/account/club/withdraw" data-confirm="Withdraw your request to <%= pending.club %>?">
-          <input type="hidden" name="_csrf" value="<%= csrf %>">
-          <button class="btn secondary" type="submit">Withdraw request</button>
-        </form>
-      <% } else { %>
-        <% const others = clubs.filter((c) => c.id !== account.club_id); %>
-        <% if (others.length === 0) { %>
-          <p class="empty">There are no other clubs to choose from.</p>
+    <section class="settings-row" id="club">
+      <div class="settings-label">
+        <h2>Club</h2>
+        <p class="hint">An admin approves every change of club.</p>
+      </div>
+      <div class="settings-body">
+        <% if (errors.club) { %><div class="notice error" role="alert"><%= errors.club %></div><% } %>
+        <% if (clubName) { %>
+          <p class="club-name"><%- include('partials/club_icon', { clubId: account.club_id, name: clubName, size: 'md' }) %><span>You coach for <strong><%= clubName %></strong>. <a href="/club/icon">Change club icon</a></span></p>
         <% } else { %>
-          <form method="post" action="/account/club">
+          <p>You are not in a club yet.</p>
+        <% } %>
+
+        <% if (pending) { %>
+          <div class="notice info">Your request to <%= clubName ? 'move to' : 'join' %> <strong><%= pending.club %></strong> is waiting for an admin.</div>
+          <form method="post" action="/account/club/withdraw" data-confirm="Withdraw your request to <%= pending.club %>?">
             <input type="hidden" name="_csrf" value="<%= csrf %>">
-            <div class="field">
-              <label for="club_id"><%= clubName ? 'Move to another club' : 'Join a club' %></label>
-              <select id="club_id" name="club_id" required>
-                <option value="">Select</option>
-                <% others.forEach((c) => { %><option value="<%= c.id %>"><%= c.name %> (<%= c.city %>)</option><% }) %>
-              </select>
-              <p class="hint">An admin approves every change. <%= clubName ? `You stay in ${clubName} until then.` : '' %></p>
-            </div>
-            <button class="btn" type="submit"><%= clubName ? 'Request change' : 'Apply to join' %></button>
+            <button class="btn secondary" type="submit">Withdraw request</button>
+          </form>
+        <% } else { %>
+          <% const others = clubs.filter((c) => c.id !== account.club_id); %>
+          <% if (others.length === 0) { %>
+            <p class="empty">There are no other clubs to choose from.</p>
+          <% } else { %>
+            <form method="post" action="/account/club">
+              <input type="hidden" name="_csrf" value="<%= csrf %>">
+              <div class="field">
+                <label for="club_id"><%= clubName ? 'Move to another club' : 'Join a club' %></label>
+                <select id="club_id" name="club_id" required>
+                  <option value="">Select</option>
+                  <% others.forEach((c) => { %><option value="<%= c.id %>"><%= c.name %> (<%= c.city %>)</option><% }) %>
+                </select>
+                <% if (clubName) { %><p class="hint">You stay in <%= clubName %> until then.</p><% } %>
+              </div>
+              <button class="btn" type="submit"><%= clubName ? 'Request change' : 'Apply to join' %></button>
+            </form>
+          <% } %>
+        <% } %>
+
+        <% if (clubName) { %>
+          <form class="account-leave" method="post" action="/account/club/leave" data-confirm="Leave <%= clubName %>? You'll need an admin's approval to join a club again.">
+            <input type="hidden" name="_csrf" value="<%= csrf %>">
+            <button class="btn danger small" type="submit">Leave <%= clubName %></button>
+            <p class="hint">The club keeps its athletes and their registrations.</p>
           </form>
         <% } %>
-      <% } %>
-
-      <% if (clubName) { %>
-        <form class="account-leave" method="post" action="/account/club/leave" data-confirm="Leave <%= clubName %>? You'll need an admin's approval to join a club again.">
-          <input type="hidden" name="_csrf" value="<%= csrf %>">
-          <button class="btn danger small" type="submit">Leave <%= clubName %></button>
-          <p class="hint">The club keeps its athletes and their registrations.</p>
-        </form>
-      <% } %>
+      </div>
     </section>
   <% } %>
 </div>

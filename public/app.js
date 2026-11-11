@@ -22,8 +22,20 @@
   });
 }());
 
-// The theme button cycles Auto (follow the device), Dark and Light, and remembers
-// the choice for public/theme.js to apply before the next page draws.
+// Themes: Auto (follow the device), Dark and Light, remembered for
+// public/theme.js to apply before the next page draws. Visitors use the top-bar
+// button; logged-in people pick on My account, which also saves it to the account.
+function setTheme(next) {
+  if (next === 'auto') delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = next;
+  try {
+    if (next === 'auto') window.localStorage.removeItem('theme');
+    else window.localStorage.setItem('theme', next);
+  } catch (error) {
+    // Storage blocked: the choice lasts for this page only.
+  }
+}
+
 (function themeToggle() {
   const button = document.querySelector('.theme-toggle');
   if (!button) return;
@@ -37,26 +49,30 @@
   button.hidden = false;
   show();
   button.addEventListener('click', () => {
-    const next = order[(order.indexOf(current()) + 1) % order.length];
-    if (next === 'auto') delete document.documentElement.dataset.theme;
-    else document.documentElement.dataset.theme = next;
-    try {
-      if (next === 'auto') window.localStorage.removeItem('theme');
-      else window.localStorage.setItem('theme', next);
-    } catch (error) {
-      // Storage blocked: the choice lasts for this page only.
-    }
+    setTheme(order[(order.indexOf(current()) + 1) % order.length]);
     show();
-    // Logged in: keep it on the account too, so other devices follow.
-    const token = document.querySelector('input[name="_csrf"]');
-    if (document.documentElement.dataset.accountTheme && token) {
-      document.documentElement.dataset.accountTheme = next;
-      fetch('/account/theme', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ _csrf: token.value, theme: next, ajax: '1' }),
-      }).catch(() => {});
-    }
+  });
+}());
+
+// My account's theme choice applies and saves as soon as it's picked. Without
+// JavaScript its Save button posts the form instead.
+(function accountTheme() {
+  const form = document.querySelector('[data-theme-form]');
+  if (!form) return;
+  const save = form.querySelector('[data-theme-save]');
+  if (save) save.hidden = true;
+  form.addEventListener('change', (event) => {
+    const next = event.target.value;
+    setTheme(next);
+    document.documentElement.dataset.accountTheme = next;
+    fetch(form.action, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ _csrf: form.elements._csrf.value, theme: next, ajax: '1' }),
+    }).then((response) => {
+      // Saving failed (for example an expired form): post it the usual way.
+      if (!response.ok) form.submit();
+    }).catch(() => form.submit());
   });
 }());
 

@@ -58,8 +58,8 @@
         <%- link('/login', 'Log in') %>
         <% if (site.coachSignup) { %><%- link('/register', 'Coach sign up') %><% } %>
       <% } %>
-      <%# Shown by public/app.js. Without JavaScript the device's light or dark setting applies. %>
-      <button class="link-button theme-toggle" type="button" hidden>Theme: Auto</button>
+      <%# For visitors, shown by public/app.js; logged-in people choose on My account. Without JavaScript the device's setting applies. %>
+      <% if (!user) { %><button class="link-button theme-toggle" type="button" hidden>Theme: Auto</button><% } %>
     </nav>
   </div>
 </header>

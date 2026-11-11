@@ -133,7 +133,7 @@ On small screens the menu folds behind a **Menu** button, so the pinned top bar 
 
 ## Dark theme
 
-The site follows the device's light or dark setting. **Theme** at the end of the menu switches between **Auto** (follow the device), **Dark** and **Light**. Logged out, each browser remembers its choice; logged in, it's kept with the account (also on **My account → Appearance**), so every device follows. Court screens always stay dark, and printed pages are always light.
+The site follows the device's light or dark setting. Visitors switch between **Auto** (follow the device), **Dark** and **Light** with **Theme** at the end of the menu, and each browser remembers it. Logged-in people choose on **My account → Theme** instead; it applies at once and is kept with the account, so every device follows. Court screens always stay dark, and printed pages are always light.
 
 ## Settings
 

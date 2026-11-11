@@ -154,7 +154,7 @@ router.post('/emails', (req, res) => {
   const optOut = kindsFor(req.user.role).map(([key]) => key).filter((key) => !chosen.has(key));
   req.app.locals.db.prepare('UPDATE users SET email_opt_out = ? WHERE id = ?').run(JSON.stringify(optOut), req.user.id);
   req.logActivity('account.emails', 'Changed which emails they get');
-  req.flash('success', 'Email choices saved.');
+  req.flash('success', 'Notifications saved.');
   return res.redirect('/account#emails');
 });
 
