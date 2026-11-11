@@ -1,0 +1,5 @@
+<%# A small Google map of a competition's location. Expects query (what Google Maps searches for) and label. %>
+<div class="mini-map">
+  <iframe src="<%= mapEmbedUrl(query) %>" title="Map of <%= label %>" loading="lazy" referrerpolicy="no-referrer-when-downgrade" allowfullscreen></iframe>
+</div>
+<p class="hint"><a href="<%= mapOpenUrl(query) %>" target="_blank" rel="noopener">Open in Google Maps</a> · <%= query %></p>

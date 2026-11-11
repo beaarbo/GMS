@@ -16,6 +16,12 @@
       <input id="venue" name="venue" value="<%= competition.venue || '' %>" required>
     </div>
     <div class="field">
+      <label for="map_query">Map location <span class="hint">(optional)</span></label>
+      <input id="map_query" name="map_query" maxlength="300" value="<%= competition.map_query || '' %>" placeholder="For example: OCBC Arena, 5 Stadium Drive, Singapore">
+      <p class="hint">Type the address or place name as you would in Google Maps, or paste a full Google Maps link (open the place in Google Maps on a computer and copy the address bar). The competition page shows it on a small map.</p>
+      <% if (competition.map_query) { %><%- include('../partials/map', { query: competition.map_query, label: competition.venue }) %><% } %>
+    </div>
+    <div class="field">
       <label for="events">Events</label>
       <select id="events" name="events" <%= locked ? 'disabled' : '' %>>
         <% Object.entries(EVENT_TYPES).forEach(([value, label]) => { %><option value="<%= value %>" <%= (competition.events || 'kyorugi') === value ? 'selected' : '' %>><%= label %></option><% }) %>

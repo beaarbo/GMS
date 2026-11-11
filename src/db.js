@@ -53,6 +53,8 @@ CREATE TABLE IF NOT EXISTS competitions (
   registration_deadline TEXT NOT NULL,
   registration_deadline_time TEXT NOT NULL DEFAULT '23:59',
   venue TEXT NOT NULL,
+  -- Where Google Maps finds the venue (address, place name or "lat,lng"). Blank: no map.
+  map_query TEXT NOT NULL DEFAULT '',
   description TEXT NOT NULL DEFAULT '',
   age_basis TEXT NOT NULL DEFAULT 'year' CHECK (age_basis IN ('year', 'date')),
   status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'open', 'closed')),
@@ -682,6 +684,14 @@ function migrateJudges(db) {
   })();
 }
 
+// Version 20: competitions can show their venue on a map. None has one yet.
+function migrateMapLocation(db) {
+  db.transaction(() => {
+    addColumnIfMissing(db, 'competitions', 'map_query', "TEXT NOT NULL DEFAULT ''");
+    db.pragma('user_version = 20');
+  })();
+}
+
 function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 1) migrateBelts(db);
   if (db.pragma('user_version', { simple: true }) < 2) migrateSchedule(db);
@@ -702,6 +712,7 @@ function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 17) migratePoomsaeStages(db);
   if (db.pragma('user_version', { simple: true }) < 18) migrateWalkovers(db);
   if (db.pragma('user_version', { simple: true }) < 19) migrateJudges(db);
+  if (db.pragma('user_version', { simple: true }) < 20) migrateMapLocation(db);
 }
 
 // Safe on old databases: only tables that don't exist yet are created.

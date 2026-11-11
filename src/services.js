@@ -147,10 +147,10 @@ function createCompetition(db, { event_dates: eventDates, ...fields }) {
   return db.transaction(() => {
     const id = db
       .prepare(
-        `INSERT INTO competitions (name, event_date, registration_deadline, registration_deadline_time, venue, description, age_basis, status, max_per_club_division, events, poomsae_format, poomsae_cut)
-         VALUES (@name, @event_date, @registration_deadline, @registration_deadline_time, @venue, @description, @age_basis, @status, @max_per_club_division, @events, @poomsae_format, @poomsae_cut)`
+        `INSERT INTO competitions (name, event_date, registration_deadline, registration_deadline_time, venue, description, age_basis, status, max_per_club_division, events, poomsae_format, poomsae_cut, map_query)
+         VALUES (@name, @event_date, @registration_deadline, @registration_deadline_time, @venue, @description, @age_basis, @status, @max_per_club_division, @events, @poomsae_format, @poomsae_cut, @map_query)`
       )
-      .run({ description: '', age_basis: 'year', status: 'draft', registration_deadline_time: '23:59', max_per_club_division: null, events: 'kyorugi', poomsae_format: 'score', poomsae_cut: 16, ...fields }).lastInsertRowid;
+      .run({ description: '', age_basis: 'year', status: 'draft', registration_deadline_time: '23:59', max_per_club_division: null, events: 'kyorugi', poomsae_format: 'score', poomsae_cut: 16, map_query: '', ...fields }).lastInsertRowid;
     saveEventDates(db, id, eventDates || [fields.event_date]);
     saveDivisionSetup(db, id, { ageGroups: DEFAULT_AGE_GROUPS, beltGroups: DEFAULT_BELT_GROUPS });
     savePoomsaeAgeGroups(db, id, DEFAULT_POOMSAE_AGE_GROUPS);

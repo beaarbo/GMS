@@ -44,6 +44,14 @@
   </section>
 <% } %>
 
+<% if (competition.map_query) { %>
+  <section class="card">
+    <h2>Location</h2>
+    <p class="sub"><%= competition.venue %></p>
+    <%- include('partials/map', { query: competition.map_query, label: competition.venue }) %>
+  </section>
+<% } %>
+
 <% if (files.length > 0) { %>
   <section class="card">
     <h2>Documents</h2>

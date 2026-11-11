@@ -65,6 +65,7 @@ const { writeBoutListPdf } = require('../boutlistPdf');
 const { clean, toArray, requireRole, notFound, wrap, passwordError } = require('./helpers');
 const { resultsPath } = require('./competitionDay');
 const { createBackup, pruneBackups, listBackups } = require('../backups');
+const { readMapLocation } = require('../maps');
 const { EVENT_TYPES, POOMSAE_FORMATS, MAX_CUT, hasKyorugi, hasPoomsae, validatePoomsaeAgeGroups } = require('../poomsae');
 
 const router = express.Router();
@@ -86,6 +87,7 @@ function readCompetition(body, lockedFirstDay = null) {
     registration_deadline: clean(body.registration_deadline, 10),
     registration_deadline_time: clean(body.registration_deadline_time, 5) || '23:59',
     venue: clean(body.venue),
+    map_query: '',
     description: typeof body.description === 'string' ? body.description.replace(/\r\n?/g, '\n').trim().slice(0, 5000) : '',
     age_basis: body.age_basis === 'date' ? 'date' : 'year',
     events: EVENT_TYPES[body.events] ? body.events : 'kyorugi',
@@ -103,6 +105,9 @@ function readCompetition(body, lockedFirstDay = null) {
   }
   if (!values.name) errors.push('Enter a competition name.');
   if (!values.venue) errors.push('Enter a venue.');
+  const map = readMapLocation(body.map_query);
+  if (map.ok) values.map_query = map.query;
+  else errors.push(map.error);
   if (!values.description) errors.push('Enter a description for clubs.');
   if (eventDates.length === 0) errors.push('Enter at least one event date.');
   if (!eventDates.every(isValidDate)) errors.push('Enter valid event dates.');
@@ -330,7 +335,7 @@ router.post('/competitions/:id(\\d+)', (req, res) => {
       `UPDATE competitions SET name = @name, registration_deadline = @registration_deadline,
          registration_deadline_time = @registration_deadline_time, venue = @venue, description = @description, age_basis = @age_basis,
          max_per_club_division = @max_per_club_division, events = @events,
-         poomsae_format = @poomsae_format, poomsae_cut = @poomsae_cut WHERE id = @id`
+         poomsae_format = @poomsae_format, poomsae_cut = @poomsae_cut, map_query = @map_query WHERE id = @id`
     ).run({ ...fields, id: req.competition.id });
     saveEventDates(db, req.competition.id, eventDates);
     // Keeps the draw, but moves bouts onto the new list of days.
@@ -339,6 +344,7 @@ router.post('/competitions/:id(\\d+)', (req, res) => {
   const changes = [];
   if (values.name !== req.competition.name) changes.push(`name to ${values.name}`);
   if (values.venue !== req.competition.venue) changes.push(`venue to ${values.venue}`);
+  if (values.map_query !== req.competition.map_query) changes.push(values.map_query ? `map location to ${values.map_query}` : 'map location removed');
   if (values.events !== req.competition.events) changes.push(`events to ${EVENT_TYPES[values.events].toLowerCase()}`);
   if (values.poomsae_format !== req.competition.poomsae_format || values.poomsae_cut !== req.competition.poomsae_cut) {
     changes.push(`poomsae format to ${POOMSAE_FORMATS[values.poomsae_format].toLowerCase()}${values.poomsae_format === 'cut' ? ` (top ${values.poomsae_cut})` : ''}`);

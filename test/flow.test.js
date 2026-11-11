@@ -651,7 +651,7 @@ test('schedule migration clears old draws and keeps competitions', () => {
 
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM bouts').get().n, 0);
   assert.equal(db.prepare('SELECT bout_courts FROM competitions WHERE id = ?').get(compId).bout_courts, 2);
-  assert.equal(db.pragma('user_version', { simple: true }), 19);
+  assert.equal(db.pragma('user_version', { simple: true }), 20);
 });
 
 test('admin creates a club, a coach applies, and only approval unlocks athlete registration', async () => {
@@ -816,7 +816,7 @@ test('migrating old club accounts keeps logins and fighters and approves each co
   const clubColumns = db.pragma('table_info(clubs)').map((c) => c.name);
   assert.ok(!clubColumns.includes('coach_name'));
   assert.equal(db.pragma('foreign_key_check').length, 0);
-  assert.equal(db.pragma('user_version', { simple: true }), 19);
+  assert.equal(db.pragma('user_version', { simple: true }), 20);
 });
 
 test('a fighter alone in a division has no bout number', async () => {
@@ -990,7 +990,7 @@ test('migration turns a day count into consecutive dates', () => {
   const { id } = db.prepare('SELECT id FROM competitions').get();
   assert.deepEqual(getEventDates(db, id), ['2030-01-30', '2030-01-31', '2030-02-01']);
   assert.ok(!db.pragma('table_info(competitions)').some((c) => c.name === 'bout_days'));
-  assert.equal(db.pragma('user_version', { simple: true }), 19);
+  assert.equal(db.pragma('user_version', { simple: true }), 20);
 });
 
 const tokenIn = (message) => message.text.match(/reset-password\/([0-9a-f]{64})/)[1];
@@ -1235,7 +1235,7 @@ test('the results migration removes declared weights and keeps registrations', (
   db.pragma('user_version = 4');
   migrate(db);
   assert.ok(!db.pragma('table_info(registrations)').some((c) => c.name === 'declared_weight_kg'));
-  assert.equal(db.pragma('user_version', { simple: true }), 19);
+  assert.equal(db.pragma('user_version', { simple: true }), 20);
 });
 
 test('athletes need the right document before they can enter', async () => {
@@ -1852,7 +1852,7 @@ test('rebuilding the users table for officials keeps every linked row', async ()
   db.close();
 
   db = openDb(file);
-  assert.equal(db.pragma('user_version', { simple: true }), 19);
+  assert.equal(db.pragma('user_version', { simple: true }), 20);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM club_applications').get().n, 1);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM password_resets').get().n, 1);
   assert.equal(db.prepare('SELECT author_id FROM news_posts').get().author_id, coachId);
@@ -2336,7 +2336,7 @@ test('migrating to version 13 moves poomsae entries onto poomsae age groups', ()
   db.pragma('user_version = 12');
 
   migrate(db);
-  assert.equal(db.pragma('user_version', { simple: true }), 19);
+  assert.equal(db.pragma('user_version', { simple: true }), 20);
   const moved = db.prepare('SELECT a.name, e.status FROM poomsae_entries e JOIN poomsae_age_groups a ON a.id = e.age_group_id WHERE e.id = ?').get(entry);
   assert.deepEqual(moved, { name: 'U40', status: 'approved' });
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM poomsae_members').get().n, 1);
@@ -2750,4 +2750,38 @@ test('poomsae on court screens and the mat page, judges\' scores, and final resu
   assert.equal(total('Tigers') + total('Dragons'), 5);
   assert.ok(total('Tigers') >= 3);
   assert.equal(table.reduce((n, r) => n + r.gold, 0), 2, 'one gold per event division');
+});
+
+test('a competition can show its venue on a small Google map', async () => {
+  const { app, db } = await setup();
+  const admin = await login(app, 'admin@test.test');
+  const compId = openCompetition(db, { name: 'Map Cup', venue: 'OCBC Arena' });
+  const edit = `/admin/competitions/${compId}`;
+  const fields = (map) => ({
+    name: 'Map Cup', venue: 'OCBC Arena', description: 'Details.', event_dates: `${EVENT_YEAR}-12-01`,
+    registration_deadline: `${EVENT_YEAR}-11-01`, registration_deadline_time: '23:59', age_basis: 'year', map_query: map,
+  });
+  const mapOf = () => db.prepare('SELECT map_query FROM competitions WHERE id = ?').get(compId).map_query;
+
+  // No map until one is set.
+  assert.doesNotMatch((await request(app).get(`/competitions/${compId}`)).text, /mini-map/);
+
+  // A short share link can't be read, so nothing changes.
+  const refused = await post(admin, edit, fields('https://maps.app.goo.gl/abc123'), `${edit}/edit`);
+  assert.equal(refused.status, 400);
+  assert.match(refused.text, /Short links/);
+  assert.equal(mapOf(), '');
+
+  // A full Google Maps link gives up its place, which the public page shows on a map.
+  await post(admin, edit, fields('https://www.google.com/maps/place/OCBC+Arena/@1.30,103.87,17z'), `${edit}/edit`);
+  assert.equal(mapOf(), 'OCBC Arena');
+  const page = await request(app).get(`/competitions/${compId}`);
+  assert.match(page.text, /<iframe src="https:\/\/www\.google\.com\/maps\?q=OCBC%20Arena&amp;output=embed"/);
+  assert.match(page.text, /href="https:\/\/www\.google\.com\/maps\/search\/\?api=1&amp;query=OCBC%20Arena"/);
+  assert.match(page.headers['content-security-policy'], /frame-src https:\/\/www\.google\.com/);
+  assert.match((await admin.get(`${edit}/edit`)).text, /mini-map/, 'the edit form previews it');
+
+  // Clearing the field removes the map.
+  await post(admin, edit, fields(''), `${edit}/edit`);
+  assert.equal(mapOf(), '');
 });

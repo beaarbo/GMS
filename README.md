@@ -36,6 +36,7 @@ npm test
 
 - **Dashboard** is an overview: a **Needs attention** list (coach applications and registrations to review, competitions ready to draw or publish, drafts missing a logo or description, email or backup problems), totals for competitions, clubs, athletes, officials and news, what's coming up, recent activity and the latest news.
 - **Competitions** is where competitions are created and run: **New competition**, and a card per competition with its registrations, divisions, weigh-in, bout list, results, settings, files and delete. The public list of competitions is still at the site's home page.
+- **Map location** on the competition form (optional) puts the venue on a small Google map on the competition page, with an **Open in Google Maps** link. Type the address or place name, or paste a full Google Maps link from a computer's address bar; short share links (maps.app.goo.gl) don't work, so type the address instead. No Google API key is needed.
 
 ## How divisions work
 
