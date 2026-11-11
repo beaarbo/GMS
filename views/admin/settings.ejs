@@ -1,0 +1,154 @@
+<%- include('../partials/top') %>
+<p class="breadcrumb"><a href="/admin">Admin dashboard</a></p>
+<div class="page-head">
+  <div>
+    <h1>Settings</h1>
+    <p class="sub">How the site looks and behaves for everyone. Email keys and passwords stay in the server's environment variables.</p>
+  </div>
+  <a class="btn secondary" href="/admin/settings/defaults">Competition defaults</a>
+</div>
+
+<%- include('../partials/errors') %>
+
+<section class="card">
+  <h2>Organiser logo</h2>
+  <p class="sub">Shown in the top bar in place of the red mark. A square JPG, PNG or WebP picture up to 1 MB looks best.</p>
+  <div class="logo-row">
+    <% if (hasLogo) { %><img class="settings-logo" src="<%= siteLogoUrl() %>" alt="Current logo"><% } %>
+    <form method="post" action="/admin/settings/logo" enctype="multipart/form-data" class="inline-form">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <input name="logo" type="file" accept="image/jpeg,image/png,image/webp" required aria-label="Logo picture">
+      <button class="btn" type="submit"><%= hasLogo ? 'Replace logo' : 'Upload logo' %></button>
+    </form>
+    <% if (hasLogo) { %>
+      <form method="post" action="/admin/settings/logo/delete" class="inline-form">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <button class="btn secondary" type="submit">Remove</button>
+      </form>
+    <% } %>
+  </div>
+</section>
+
+<form method="post" action="/admin/settings">
+  <input type="hidden" name="_csrf" value="<%= csrf %>">
+
+  <section class="card">
+    <h2>Organisation</h2>
+    <div class="form-row">
+      <div class="field">
+        <label for="site_name">Site name</label>
+        <input id="site_name" name="site_name" maxlength="80" value="<%= values.site_name %>" required>
+        <p class="hint">In the top bar, the browser tab and emails.</p>
+      </div>
+      <div class="field">
+        <label for="contact_email">Contact email <span class="hint">(optional)</span></label>
+        <input id="contact_email" name="contact_email" type="email" maxlength="200" value="<%= values.contact_email %>">
+        <p class="hint">Shown at the foot of every page, for coaches and parents with questions.</p>
+      </div>
+    </div>
+    <div class="field">
+      <label for="footer_text">Footer text <span class="hint">(optional)</span></label>
+      <input id="footer_text" name="footer_text" maxlength="200" value="<%= values.footer_text %>">
+    </div>
+    <div class="form-row">
+      <div class="field">
+        <label for="time_zone">Time zone</label>
+        <select id="time_zone" name="time_zone">
+          <option value="">The server's own (<%= serverTimeZone %>)</option>
+          <% timeZones.forEach((zone) => { %><option value="<%= zone %>" <%= values.time_zone === zone ? 'selected' : '' %>><%= zone %></option><% }) %>
+        </select>
+        <p class="hint">Registration deadlines close, and backups are named, in this time zone.</p>
+      </div>
+      <div class="field">
+        <label for="sender_name">Email sender name <span class="hint">(optional)</span></label>
+        <input id="sender_name" name="sender_name" maxlength="80" value="<%= values.sender_name %>" placeholder="As in MAIL_FROM">
+        <p class="hint">The name people see on emails from the site. The address stays the one in MAIL_FROM.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Registration</h2>
+    <label class="check"><input type="checkbox" name="coach_signup" value="1" <%= values.coach_signup === '1' ? 'checked' : '' %>> Coaches can sign up themselves</label>
+    <p class="hint">When off, the sign-up page is closed and you add coaches on <a href="/admin/accounts">Accounts</a>.</p>
+    <label class="check"><input type="checkbox" name="require_document" value="1" <%= values.require_document === '1' ? 'checked' : '' %>> Athletes need a belt document (grading card or black belt certificate) before they're entered</label>
+    <div class="form-row">
+      <div class="field">
+        <label for="document_types">Accepted document files</label>
+        <select id="document_types" name="document_types">
+          <% Object.entries(DOCUMENT_TYPES).forEach(([value, label]) => { %><option value="<%= value %>" <%= values.document_types === value ? 'selected' : '' %>><%= label %></option><% }) %>
+        </select>
+      </div>
+      <div class="field">
+        <label for="reminder_days">Deadline reminder (days before)</label>
+        <input id="reminder_days" name="reminder_days" type="number" min="1" max="30" inputmode="numeric" value="<%= values.reminder_days %>" required>
+        <p class="hint">Coaches are emailed once when registration closes within this many days.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Privacy</h2>
+    <div class="form-row">
+      <div class="field">
+        <label for="public_names">Athlete names for visitors without an account</label>
+        <select id="public_names" name="public_names">
+          <% Object.entries(PUBLIC_NAMES).forEach(([value, label]) => { %><option value="<%= value %>" <%= values.public_names === value ? 'selected' : '' %>><%= label %></option><% }) %>
+        </select>
+        <p class="hint">On the public bout lists, results and PDF. Logged-in coaches and officials always see full names.</p>
+      </div>
+      <div class="field">
+        <label for="document_retention_days">Delete athlete documents after (days) <span class="hint">(optional)</span></label>
+        <input id="document_retention_days" name="document_retention_days" type="number" min="1" max="3650" inputmode="numeric" value="<%= values.document_retention_days %>" placeholder="Keep them">
+        <p class="hint">Checked daily. A document goes once it's this old and the athlete's competitions ended at least this long ago. Coaches upload a new one for the next entry.</p>
+      </div>
+    </div>
+    <label class="check"><input type="checkbox" name="public_club_icons" value="1" <%= values.public_club_icons === '1' ? 'checked' : '' %>> Show club icons to visitors without an account</label>
+    <label class="check"><input type="checkbox" name="require_2fa_admins" value="1" <%= values.require_2fa_admins === '1' ? 'checked' : '' %>> Admins must use two-step login</label>
+    <p class="hint"><%= user.two_step ? 'You have two-step login on.' : 'Set up two-step login on My account before turning this on.' %> An admin without it can only reach My account until they set it up.</p>
+  </section>
+
+  <section class="card">
+    <h2>Backups</h2>
+    <% if (!backupsConfigured) { %><div class="notice info">Backups aren't set up on this server, so these only apply once they are.</div><% } %>
+    <div class="form-row">
+      <div class="field">
+        <label for="backup_keep_daily">Daily backups to keep</label>
+        <input id="backup_keep_daily" name="backup_keep_daily" type="number" min="1" max="365" inputmode="numeric" value="<%= values.backup_keep_daily %>" required>
+      </div>
+      <div class="field">
+        <label for="backup_keep_manual">Manual backups to keep</label>
+        <input id="backup_keep_manual" name="backup_keep_manual" type="number" min="1" max="100" inputmode="numeric" value="<%= values.backup_keep_manual %>" required>
+      </div>
+      <div class="field">
+        <label for="offsite_backup_email">Email each daily backup to <span class="hint">(optional)</span></label>
+        <input id="offsite_backup_email" name="offsite_backup_email" type="email" maxlength="200" value="<%= values.offsite_backup_email %>">
+      </div>
+    </div>
+    <p class="hint">An emailed copy survives if the server's disk is lost. A backup holds everyone's personal data and password hashes, so use an address only organisers can read. Backups over <%= maxEmailedMb %> MB are too big to email; download those from <a href="/admin/backups">Backups</a>.<% if (!mailConfigured) { %> <strong>Email isn't set up, so nothing can be sent yet.</strong><% } %></p>
+  </section>
+
+  <div class="actions">
+    <button class="btn" type="submit">Save settings</button>
+  </div>
+</form>
+
+<section class="card">
+  <h2>Check now</h2>
+  <div class="actions">
+    <% if (site.offsiteBackupEmail && backupsConfigured) { %>
+      <form method="post" action="/admin/settings/offsite-test" class="inline-form">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <button class="btn secondary" type="submit">Email the newest backup to <%= site.offsiteBackupEmail %></button>
+      </form>
+    <% } %>
+    <% if (site.documentRetentionDays) { %>
+      <form method="post" action="/admin/settings/documents/clean-up" class="inline-form" data-confirm="Delete athlete documents older than <%= site.documentRetentionDays %> days now? This cannot be undone.">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <button class="btn secondary" type="submit">Delete old documents now</button>
+      </form>
+    <% } %>
+    <% if (!site.offsiteBackupEmail && !site.documentRetentionDays) { %><p class="empty">Set an off-site email or a document limit above, and save, to check them here.</p><% } %>
+  </div>
+</section>
+<%- include('../partials/bottom') %>

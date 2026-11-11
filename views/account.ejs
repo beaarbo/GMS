@@ -64,6 +64,74 @@
     </form>
   </section>
 
+  <section class="card" id="appearance">
+    <h2>Appearance</h2>
+    <form method="post" action="/account/theme">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <div class="field">
+        <label for="theme">Theme</label>
+        <select id="theme" name="theme">
+          <% [['auto', 'Auto (follow the device)'], ['dark', 'Dark'], ['light', 'Light']].forEach(([value, label]) => { %><option value="<%= value %>" <%= account.theme === value ? 'selected' : '' %>><%= label %></option><% }) %>
+        </select>
+        <p class="hint">Kept with your account, so every device you log in on uses it.</p>
+      </div>
+      <button class="btn" type="submit">Save theme</button>
+    </form>
+  </section>
+
+  <% if (emailChoices.length > 0) { %>
+    <section class="card" id="emails">
+      <h2>Emails</h2>
+      <form method="post" action="/account/emails">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <% emailChoices.forEach(([key, kind]) => { %>
+          <label class="check"><input type="checkbox" name="kind" value="<%= key %>" <%= optedOut.includes(key) ? '' : 'checked' %>> <%= kind.label %></label>
+        <% }) %>
+        <p class="hint">Emails about your account's security, password resets and club approvals always come.</p>
+        <button class="btn" type="submit">Save email choices</button>
+      </form>
+    </section>
+  <% } %>
+
+  <section class="card" id="two-step">
+    <h2>Two-step login</h2>
+    <% if (errors.twoStep) { %><div class="notice error" role="alert"><%= errors.twoStep %></div><% } %>
+    <% if (recoveryCodes) { %>
+      <div class="notice success" role="status">Two-step login is on. Save these recovery codes now: each one logs you in once without your phone, and they won't be shown again.</div>
+      <ul class="recovery-codes"><% recoveryCodes.forEach((code) => { %><li><code><%= code %></code></li><% }) %></ul>
+    <% } else if (account.two_step) { %>
+      <p>On. After your password, you enter the code from your authenticator app. <%= recoveryLeft %> recovery code<%= recoveryLeft === 1 ? '' : 's' %> left.</p>
+    <% } %>
+    <% if (account.two_step) { %>
+      <form method="post" action="/account/two-step/off" data-confirm="Turn off two-step login?">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <div class="field">
+          <label for="off_password">Current password</label>
+          <input id="off_password" name="current_password" type="password" autocomplete="current-password" required>
+        </div>
+        <button class="btn secondary" type="submit">Turn off two-step login</button>
+        <p class="hint">To get new recovery codes, turn it off and on again.</p>
+      </form>
+    <% } else if (twoStepSetup) { %>
+      <ol class="steps">
+        <li>Open an authenticator app on your phone (Google Authenticator, Microsoft Authenticator, 1Password and others) and add an account by typing a key.</li>
+        <li>Enter this key, as a time-based code: <code class="setup-key"><%= twoStepSetup.key %></code> <a class="hint" href="<%= twoStepSetup.link %>">Or open it in an authenticator app on this device</a></li>
+        <li>Type the six-digit code the app shows.</li>
+      </ol>
+      <form method="post" action="/account/two-step/confirm" class="inline-form">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,7}" maxlength="7" required aria-label="Six-digit code">
+        <button class="btn" type="submit">Turn on</button>
+      </form>
+    <% } else { %>
+      <p>Off. Turn it on to need a code from your phone as well as your password, so a stolen password alone can't get in.</p>
+      <form method="post" action="/account/two-step/start">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <button class="btn" type="submit">Set up two-step login</button>
+      </form>
+    <% } %>
+  </section>
+
   <% if (account.role === 'coach') { %>
     <section class="card">
       <h2>Club</h2>

@@ -1,17 +1,34 @@
 // Emails sent by the system. `ctx` is { db, mailer, publicUrl }. Each person gets
 // their own message, so recipients never see each other's addresses.
 
+const fs = require('fs');
+const path = require('path');
 const { formatEventDates } = require('./divisions');
 const { getEventDates } = require('./services');
+const { loadSettings } = require('./settings');
 
-const REMINDER_WINDOW_MS = 72 * 3600000;
+const DAY_MS = 24 * 3600000;
+
+// Emails people can turn off on their account page, by kind. Security emails
+// (password resets, account changes, club approvals) always go.
+const EMAIL_KINDS = {
+  decisions: { label: 'Registration and entry decisions', roles: ['coach'] },
+  reminders: { label: 'Registration deadline reminders', roles: ['coach'] },
+  published: { label: 'Bout lists and poomsae orders published', roles: ['coach'] },
+  divisions: { label: 'Athletes moved to another division', roles: ['coach'] },
+  news: { label: 'News posts', roles: ['coach'] },
+  applications: { label: 'Coach applications to review', roles: ['admin'] },
+};
+
+// SQL that drops people who turned off this kind of email (users table aliased u).
+const wants = (kind) => `NOT EXISTS (SELECT 1 FROM json_each(u.email_opt_out) WHERE value = '${kind}')`;
 
 function deadlineText(competition) {
   return `${competition.registration_deadline} at ${competition.registration_deadline_time}`;
 }
 
-function clubCoachEmails(db, clubId) {
-  return db.prepare("SELECT email FROM users WHERE role = 'coach' AND club_id = ?").all(clubId).map((u) => u.email);
+function clubCoachEmails(db, clubId, kind) {
+  return db.prepare(`SELECT u.email FROM users u WHERE u.role = 'coach' AND u.club_id = ? AND ${wants(kind)}`).all(clubId).map((u) => u.email);
 }
 
 function sendAll(ctx, emails, subject, text) {
@@ -32,7 +49,7 @@ function notifyAdminsOfApplication(ctx, userId, clubId) {
     .prepare('SELECT u.full_name, u.email, c.name AS current FROM users u LEFT JOIN clubs c ON c.id = u.club_id WHERE u.id = ?')
     .get(userId);
   const club = db.prepare('SELECT name FROM clubs WHERE id = ?').get(clubId);
-  const admins = db.prepare("SELECT email FROM users WHERE role = 'admin'").all().map((u) => u.email);
+  const admins = db.prepare(`SELECT u.email FROM users u WHERE u.role = 'admin' AND ${wants('applications')}`).all().map((u) => u.email);
   const request = coach.current ? `has asked to move from ${coach.current} to ${club.name}` : `has applied to join ${club.name}`;
   return sendAll(
     ctx,
@@ -106,7 +123,7 @@ function notifyRegistrationDecisions(ctx, competition, registrationIds, decision
     const lines = list.map((r) => `- ${r.first_name} ${r.last_name}${decision === 'rejected' ? `: ${r.review_note}` : ''}`);
     return sendAll(
       ctx,
-      clubCoachEmails(db, clubId),
+      clubCoachEmails(db, clubId, 'decisions'),
       `Registrations ${decision}: ${competition.name}`,
       `These registrations for ${competition.name} were ${decision}:\n\n${lines.join('\n')}\n\nDetails: ${ctx.publicUrl}/club/competitions/${competition.id}`
     );
@@ -124,7 +141,7 @@ function notifyPoomsaeDecisions(ctx, competition, entries, decision) {
       const lines = list.map((e) => `- ${e.names} (${e.event})${decision === 'rejected' ? `: ${e.review_note}` : ''}`);
       return sendAll(
         ctx,
-        clubCoachEmails(ctx.db, clubId),
+        clubCoachEmails(ctx.db, clubId, 'decisions'),
         `Poomsae entries ${decision}: ${competition.name}`,
         `These poomsae entries for ${competition.name} were ${decision}:\n\n${lines.join('\n')}\n\nDetails: ${ctx.publicUrl}/club/competitions/${competition.id}/poomsae`
       );
@@ -139,7 +156,7 @@ function notifyPoomsaePublished(ctx, competition, what = 'performance order') {
   const clubs = db.prepare("SELECT DISTINCT club_id FROM poomsae_entries WHERE competition_id = ? AND status = 'approved'").all(competition.id);
   return sendAll(
     ctx,
-    clubs.flatMap((club) => clubCoachEmails(db, club.club_id)),
+    clubs.flatMap((club) => clubCoachEmails(db, club.club_id, 'published')),
     `Poomsae ${what} published: ${competition.name}`,
     `The poomsae ${what} for ${competition.name} (${formatEventDates(getEventDates(db, competition.id))}) ${what === 'brackets' ? 'are' : 'is'} ready.\n\nSee when your athletes perform: ${ctx.publicUrl}/club/competitions/${competition.id}/poomsae`
   );
@@ -154,7 +171,7 @@ function notifyBoutListPublished(ctx, competition) {
        WHERE b.competition_id = ? AND b.round = 1`
     )
     .all(competition.id);
-  const emails = clubs.flatMap((club) => clubCoachEmails(db, club.club_id));
+  const emails = clubs.flatMap((club) => clubCoachEmails(db, club.club_id, 'published'));
   return sendAll(
     ctx,
     emails,
@@ -163,17 +180,19 @@ function notifyBoutListPublished(ctx, competition) {
   );
 }
 
-// Reminds every approved coach once, when a deadline is within 3 days.
+// Reminds every approved coach once, when a deadline is within the days set on
+// the Settings page (3 unless changed).
 async function sendDeadlineReminders(ctx, now = Date.now()) {
   const { db } = ctx;
+  const window = loadSettings(db).reminderDays * DAY_MS;
   const open = db.prepare("SELECT * FROM competitions WHERE status = 'open' AND reminder_sent_at IS NULL").all();
   const due = open.filter((c) => {
     const closesAt = new Date(`${c.registration_deadline}T${c.registration_deadline_time}:59`).getTime();
-    return closesAt > now && closesAt - now <= REMINDER_WINDOW_MS;
+    return closesAt > now && closesAt - now <= window;
   });
   if (due.length === 0) return 0;
 
-  const emails = db.prepare("SELECT email FROM users WHERE role = 'coach' AND club_id IS NOT NULL").all().map((u) => u.email);
+  const emails = db.prepare(`SELECT u.email FROM users u WHERE u.role = 'coach' AND u.club_id IS NOT NULL AND ${wants('reminders')}`).all().map((u) => u.email);
   await Promise.all(
     due.map((competition) => {
       db.prepare("UPDATE competitions SET reminder_sent_at = datetime('now') WHERE id = ?").run(competition.id);
@@ -190,7 +209,7 @@ async function sendDeadlineReminders(ctx, now = Date.now()) {
 
 // A news post, emailed to every coach who asked for it on publishing. Returns how many.
 async function notifyNewsPosted(ctx, post) {
-  const coaches = ctx.db.prepare("SELECT email FROM users WHERE role = 'coach'").all().map((u) => u.email);
+  const coaches = ctx.db.prepare(`SELECT u.email FROM users u WHERE u.role = 'coach' AND ${wants('news')}`).all().map((u) => u.email);
   await sendAll(ctx, coaches, `News: ${post.title}`, `${post.title}\n\n${post.body}\n\nRead it on the site: ${ctx.publicUrl}/news/${post.id}\n`);
   return coaches.length;
 }
@@ -202,13 +221,37 @@ function notifyDivisionMerged(ctx, competition, moves) {
   moves.forEach((m) => byClub.set(m.clubId, [...(byClub.get(m.clubId) || []), m]));
   return Promise.all([...byClub.entries()].map(([clubId, clubMoves]) => sendAll(
     ctx,
-    clubCoachEmails(ctx.db, clubId),
+    clubCoachEmails(ctx.db, clubId, 'divisions'),
     `Division change: ${competition.name}`,
     `The organiser moved ${clubMoves.length === 1 ? 'an athlete' : 'athletes'} from your club into another division, so ${clubMoves.length === 1 ? 'they have' : 'they have'} an opponent:\n\n${clubMoves.map((m) => `- ${m.name}: from ${m.from} to ${m.to}`).join('\n')}\n\nSee your entries: ${ctx.publicUrl}/club/competitions/${competition.id}\n`
   )));
 }
 
+// Email services cap a message near 10 MB once encoded, so larger backups stay on the server.
+const MAX_EMAILED_BACKUP_BYTES = 7 * 1024 * 1024;
+
+// Emails a backup (an entry from listBackups) to the off-site address on the Settings page. Returns
+// { sent } or { sent: false, reason }.
+async function emailBackup(ctx, dir, backup) {
+  const to = loadSettings(ctx.db).offsiteBackupEmail;
+  if (!to) return { sent: false, reason: 'No off-site address is set.' };
+  if (!ctx.mailer.configured) return { sent: false, reason: 'Email is not set up.' };
+  if (backup.size > MAX_EMAILED_BACKUP_BYTES) {
+    return { sent: false, reason: `The backup is ${Math.round(backup.size / 1024 / 1024)} MB, over the 7 MB an email can carry. Download it from the Backups page instead.` };
+  }
+  await ctx.mailer.send({
+    to,
+    subject: `Database backup ${backup.name}`,
+    text: `The attached file is a full backup of the database, made ${backup.createdAt}. It holds everyone's personal data and password hashes, so keep it somewhere safe.\n\nTo restore it, see "Restore a backup" in the README.\n\nThis address was set on ${ctx.publicUrl}/admin/settings.`,
+    attachments: [{ filename: backup.name, content: fs.readFileSync(path.join(dir, backup.name)) }],
+  });
+  return { sent: true };
+}
+
 module.exports = {
+  EMAIL_KINDS,
+  MAX_EMAILED_BACKUP_BYTES,
+  emailBackup,
   notifyNewsPosted,
   notifyDivisionMerged,
   sendPasswordReset,

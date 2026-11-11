@@ -259,7 +259,11 @@ router.post('/fighters/:id(\\d+)/document', (req, res) => {
   if (req.uploadError) return documentPage(req, res, fighter, 400, req.uploadError);
   if (!req.file) return documentPage(req, res, fighter, 400, 'Choose a file to upload.');
   const type = detectFileType(req.file.buffer);
-  if (!type) return documentPage(req, res, fighter, 400, 'That file type is not accepted. Upload a JPG, PNG, WebP or PDF.');
+  const allowed = { any: () => true, images: (t) => t.extension !== 'pdf', pdf: (t) => t.extension === 'pdf' }[req.site.documentTypes];
+  if (!type || !allowed(type)) {
+    const accepted = { any: 'a JPG, PNG, WebP or PDF', images: 'a JPG, PNG or WebP picture', pdf: 'a PDF' }[req.site.documentTypes];
+    return documentPage(req, res, fighter, 400, `That file type is not accepted. Upload ${accepted}.`);
+  }
 
   saveFighterDocument(db, fighter, { data: req.file.buffer, contentType: type.contentType, userId: req.user.id });
   const label = documentLabel(documentTypeFor(fighter.belt_rank));

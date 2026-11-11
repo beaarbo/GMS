@@ -1,3 +1,5 @@
+const { DEFAULT_BELT_GROUPS } = require('../divisions');
+
 function clean(value, maxLength = 200) {
   return typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
 }
@@ -49,4 +51,37 @@ function wrap(handler) {
   return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
 }
 
-module.exports = { clean, toArray, requireRole, homeFor, passwordError, notFound, wrap };
+// The age group rows of a division setup form (kyorugi with weight limits, and
+// poomsae), used by a competition's setup and the Settings page's defaults.
+function readSetup(body) {
+  const names = toArray(body.age_name);
+  const ageGroups = names
+    .map((_, i) => ({
+      name: clean(names[i], 60),
+      min_age: Number(toArray(body.age_min)[i]),
+      max_age: Number(toArray(body.age_max)[i]),
+      minRaw: clean(toArray(body.age_min)[i]),
+      maxRaw: clean(toArray(body.age_max)[i]),
+      male: clean(toArray(body.age_male)[i], 500),
+      female: clean(toArray(body.age_female)[i], 500),
+    }))
+    .filter((g) => g.name || g.minRaw || g.maxRaw || g.male || g.female);
+
+  // Belt groups are fixed: Blue, Red and Black.
+  return { ageGroups, beltGroups: DEFAULT_BELT_GROUPS };
+}
+
+// Poomsae age group rows from the form. Rows left blank are dropped.
+function readPoomsaeAges(body) {
+  const names = toArray(body.poomsae_name);
+  return names
+    .map((_, i) => ({
+      name: clean(names[i], 60),
+      minRaw: clean(toArray(body.poomsae_min)[i]),
+      maxRaw: clean(toArray(body.poomsae_max)[i]),
+    }))
+    .filter((g) => g.name || g.minRaw || g.maxRaw)
+    .map((g) => ({ ...g, min_age: g.minRaw === '' ? NaN : Number(g.minRaw), max_age: g.maxRaw === '' ? NaN : Number(g.maxRaw) }));
+}
+
+module.exports = { clean, toArray, requireRole, homeFor, passwordError, notFound, wrap, readSetup, readPoomsaeAges };

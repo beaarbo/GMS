@@ -34,6 +34,43 @@
 </section>
 
 <section class="card">
+  <h2>Add a coach</h2>
+  <p class="sub"><%= site.coachSignup ? 'Coaches can also sign up themselves and apply to a club.' : 'Coach sign-up is off on the Settings page, so coaches are added here.' %> Choosing a club approves them for it straight away.</p>
+  <form method="post" action="/admin/accounts/coaches">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <div class="form-row">
+      <div class="field">
+        <label for="c-name">Name</label>
+        <input id="c-name" name="full_name" maxlength="100" required>
+      </div>
+      <div class="field">
+        <label for="c-phone">Contact number</label>
+        <input id="c-phone" name="phone" maxlength="40" required>
+      </div>
+      <div class="field">
+        <label for="c-email">Email</label>
+        <input id="c-email" name="email" type="email" required>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="field">
+        <label for="c-club">Club</label>
+        <select id="c-club" name="club_id">
+          <option value="">None yet (they apply themselves)</option>
+          <% clubs.forEach((club) => { %><option value="<%= club.id %>"><%= club.name %></option><% }) %>
+        </select>
+      </div>
+      <div class="field">
+        <label for="c-password">Starting password</label>
+        <input id="c-password" name="password" type="password" minlength="10" maxlength="72" autocomplete="new-password" required>
+      </div>
+    </div>
+    <p class="hint">Give them the password privately. They can change it on My account.</p>
+    <button class="btn" type="submit">Add coach</button>
+  </form>
+</section>
+
+<section class="card">
   <h2>Add an official</h2>
   <p class="sub">Officials run the weigh-in, record results and use the court screens. They can't approve entries, draw bout lists or change settings.</p>
   <form method="post" action="/admin/accounts/officials">
@@ -63,7 +100,7 @@
   <% } else { %>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Type</th><th>Club</th><th>Created</th></tr></thead>
+        <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Type</th><th>Club</th><th>Two-step login</th><th>Created</th></tr></thead>
         <tbody>
           <% accounts.forEach((a) => { %>
             <tr>
@@ -89,6 +126,17 @@
                 <% } %>
               </td>
               <td><%= a.club || (a.pending_club ? `Applied to ${a.pending_club}` : '–') %></td>
+              <td class="nowrap">
+                <% if (a.two_step) { %>On
+                  <% if (a.id !== user.id) { %>
+                    <form class="inline-form" method="post" action="/admin/accounts/<%= a.id %>/two-step/off" data-confirm="Turn off two-step login for <%= a.full_name || a.email %>? Do this only once you're sure it's them, for example if they lost their phone.">
+                      <input type="hidden" name="_csrf" value="<%= csrf %>">
+                      <input type="hidden" name="type" value="<%= type %>">
+                      <button class="btn secondary small" type="submit">Turn off</button>
+                    </form>
+                  <% } %>
+                <% } else { %>Off<% } %>
+              </td>
               <td class="nowrap"><%= formatActivityTime(a.created_at) %></td>
             </tr>
           <% }) %>

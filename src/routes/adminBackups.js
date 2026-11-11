@@ -1,25 +1,28 @@
 // Admins make, list and download database backups.
 const express = require('express');
 const { listBackups, backupPath, createBackup, pruneBackups } = require('../backups');
+const { backupKeep } = require('../settings');
 const { requireRole, notFound, wrap } = require('./helpers');
 
 const router = express.Router();
 router.use(requireRole('admin'));
 
 router.get('/', (req, res) => {
-  const { dir, keep } = req.app.locals.backups;
+  const { db, backups: { dir, keep: startKeep } } = req.app.locals;
+  const keep = backupKeep(db, startKeep);
   const backups = listBackups(dir);
   res.render('admin/backups', {
     title: 'Backups',
     configured: Boolean(dir),
     backups,
     totalSize: backups.reduce((sum, b) => sum + b.size, 0),
-    keep: keep || { daily: 7, manual: 10 },
+    keep,
   });
 });
 
 router.post('/', wrap(async (req, res) => {
-  const { db, backups: { dir, keep } } = req.app.locals;
+  const { db, backups: { dir, keep: startKeep } } = req.app.locals;
+  const keep = backupKeep(db, startKeep);
   if (!dir) {
     req.flash('error', 'Backups are not set up on this server.');
     return res.redirect('/admin/backups');

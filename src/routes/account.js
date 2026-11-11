@@ -4,7 +4,8 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
 const { applyToClub } = require('../services');
-const { notifyAdminsOfApplication, notifyAccountChange } = require('../notifications');
+const { notifyAdminsOfApplication, notifyAccountChange, EMAIL_KINDS } = require('../notifications');
+const { newSecret, verifyCode, otpauthUrl, groupSecret, newRecoveryCodes, hashRecoveryCode } = require('../totp');
 const { clean, passwordError, wrap } = require('./helpers');
 
 const router = express.Router();
@@ -30,9 +31,13 @@ const passwordCheckLimiter = rateLimit({
   },
 });
 
-function render(req, res, status = 200, errors = {}, values = {}) {
+// The email kinds this person's role receives.
+const kindsFor = (role) => Object.entries(EMAIL_KINDS).filter(([, kind]) => kind.roles.includes(role));
+
+function render(req, res, status = 200, errors = {}, values = {}, extra = {}) {
   const { db } = req.app.locals;
-  const user = db.prepare('SELECT id, email, full_name, phone, role, club_id FROM users WHERE id = ?').get(req.user.id);
+  const user = db.prepare('SELECT id, email, full_name, phone, role, club_id, theme, email_opt_out, totp_secret IS NOT NULL AS two_step, totp_recovery FROM users WHERE id = ?').get(req.user.id);
+  const setupSecret = !user.two_step && req.session.totpSetup;
   const pending =
     db
       .prepare(
@@ -48,6 +53,14 @@ function render(req, res, status = 200, errors = {}, values = {}) {
     clubs: db.prepare('SELECT id, name, city FROM clubs ORDER BY name').all(),
     errors,
     values,
+    emailChoices: kindsFor(user.role),
+    optedOut: JSON.parse(user.email_opt_out),
+    recoveryLeft: JSON.parse(user.totp_recovery).length,
+    twoStepSetup: setupSecret
+      ? { key: groupSecret(setupSecret), link: otpauthUrl(setupSecret, user.email, req.site.siteName) }
+      : null,
+    recoveryCodes: null,
+    ...extra,
   });
 }
 
@@ -125,6 +138,64 @@ router.post(
     return res.redirect('/account');
   })
 );
+
+// The theme follows the account onto every device. The top bar's theme button
+// posts here in the background (ajax=1), and the Appearance form without JavaScript.
+router.post('/theme', (req, res) => {
+  const theme = ['auto', 'dark', 'light'].includes(req.body.theme) ? req.body.theme : 'auto';
+  req.app.locals.db.prepare('UPDATE users SET theme = ? WHERE id = ?').run(theme, req.user.id);
+  if (req.body.ajax === '1') return res.status(204).end();
+  req.flash('success', 'Theme saved.');
+  return res.redirect('/account#appearance');
+});
+
+router.post('/emails', (req, res) => {
+  const chosen = new Set([].concat(req.body.kind || []));
+  const optOut = kindsFor(req.user.role).map(([key]) => key).filter((key) => !chosen.has(key));
+  req.app.locals.db.prepare('UPDATE users SET email_opt_out = ? WHERE id = ?').run(JSON.stringify(optOut), req.user.id);
+  req.logActivity('account.emails', 'Changed which emails they get');
+  req.flash('success', 'Email choices saved.');
+  return res.redirect('/account#emails');
+});
+
+// Two-step login: a new key is kept in the session until a code from it is
+// entered, so a mistyped key never locks anyone out.
+router.post('/two-step/start', (req, res) => {
+  if (req.user.two_step) return res.redirect('/account#two-step');
+  req.session.totpSetup = newSecret();
+  return res.redirect('/account#two-step');
+});
+
+router.post('/two-step/confirm', (req, res) => {
+  const { db, notify } = req.app.locals;
+  const secret = req.session.totpSetup;
+  if (req.user.two_step || !secret) return res.redirect('/account#two-step');
+  if (!verifyCode(secret, req.body.code)) {
+    return render(req, res, 400, { twoStep: 'That code didn\'t match. Check the key was typed correctly and the phone\'s clock is right, then try the newest code.' });
+  }
+  const codes = newRecoveryCodes();
+  db.prepare('UPDATE users SET totp_secret = ?, totp_recovery = ? WHERE id = ?').run(secret, JSON.stringify(codes.map(hashRecoveryCode)), req.user.id);
+  delete req.session.totpSetup;
+  req.user.two_step = 1;
+  res.locals.user = req.user;
+  req.logActivity('account.two_step_on', 'Turned on two-step login');
+  notifyAccountChange(notify, req.user.email, 'Two-step login was turned on for your account.');
+  // Shown this once only; just their hashes are kept.
+  return render(req, res, 200, {}, {}, { recoveryCodes: codes });
+});
+
+router.post('/two-step/off', passwordCheckLimiter, wrap(async (req, res) => {
+  const { db, notify } = req.app.locals;
+  if (!req.user.two_step) return res.redirect('/account#two-step');
+  if (!(await checkCurrentPassword(req, req.body.current_password))) {
+    return render(req, res, 401, { twoStep: 'Your current password is incorrect.' });
+  }
+  db.prepare("UPDATE users SET totp_secret = NULL, totp_recovery = '[]' WHERE id = ?").run(req.user.id);
+  req.logActivity('account.two_step_off', 'Turned off two-step login');
+  notifyAccountChange(notify, req.user.email, 'Two-step login was turned off for your account.');
+  req.flash('success', 'Two-step login is off. You log in with your password alone.');
+  return res.redirect('/account#two-step');
+}));
 
 function requireCoach(req, res, next) {
   if (req.user.role === 'coach') return next();

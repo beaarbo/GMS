@@ -3,9 +3,10 @@ require('dotenv').config();
 const { openDb } = require('./src/db');
 const { createApp } = require('./src/app');
 const { createMailer } = require('./src/mailer');
-const { ensureAdmin } = require('./src/services');
-const { sendDeadlineReminders } = require('./src/notifications');
+const { ensureAdmin, cleanUpDocuments } = require('./src/services');
+const { sendDeadlineReminders, emailBackup } = require('./src/notifications');
 const { defaultBackupDir, runDailyBackup, restoreBackup, DEFAULT_KEEP } = require('./src/backups');
+const { loadSettings, applyTimeZone, backupKeep } = require('./src/settings');
 
 const PLACEHOLDER = /^replace-with/;
 const REMINDER_CHECK_MS = 3600000;
@@ -55,7 +56,8 @@ async function main() {
 
   const databasePath = process.env.DATABASE_PATH || './data/gms.sqlite';
 
-  // A snapshot each day beside the database, keeping the newest BACKUP_KEEP_DAYS.
+  // A snapshot each day beside the database. How many to keep is on the Settings
+  // page; BACKUP_KEEP_DAYS is only the starting value until that is saved.
   const keepDays = Number(process.env.BACKUP_KEEP_DAYS);
   const backups = {
     dir: process.env.BACKUP_DIR || defaultBackupDir(databasePath),
@@ -73,13 +75,8 @@ async function main() {
   }
 
   const db = openDb(databasePath);
-  const checkBackups = () => {
-    runDailyBackup(db, backups.dir, { keep: backups.keep })
-      .then((made) => made && console.log(`Daily backup saved: ${made.name}`))
-      .catch((error) => console.error('Daily backup failed:', error.message));
-  };
-  checkBackups();
-  setInterval(checkBackups, BACKUP_CHECK_MS).unref();
+  // The Settings page's time zone, if one is saved, replaces the server's TZ.
+  applyTimeZone(loadSettings(db).timeZone);
 
   const adminExists = db.prepare("SELECT 1 FROM users WHERE role = 'admin' LIMIT 1").get();
   if (!adminExists) {
@@ -102,6 +99,7 @@ async function main() {
     brevoApiKey: process.env.BREVO_API_KEY,
     resendApiKey: process.env.RESEND_API_KEY,
     production,
+    senderName: () => loadSettings(db).senderName,
   });
   if (!mailer.configured) {
     console.warn('Email is not set up (no BREVO_API_KEY, RESEND_API_KEY or SMTP_HOST), so no emails will be sent. Password reset will not work without it.');
@@ -110,8 +108,26 @@ async function main() {
     console.log(`Email is sent through ${provider || `SMTP (${host})`}.`);
   }
 
+  const checkBackups = () => {
+    runDailyBackup(db, backups.dir, { keep: backupKeep(db, backups.keep) })
+      .then(async (made) => {
+        if (!made) return;
+        console.log(`Daily backup saved: ${made.name}`);
+        const emailed = await emailBackup({ db, mailer, publicUrl }, backups.dir, made);
+        if (emailed.sent) console.log(`Daily backup emailed off-site: ${made.name}`);
+        else if (loadSettings(db).offsiteBackupEmail) console.warn(`Daily backup not emailed: ${emailed.reason}`);
+      })
+      .catch((error) => console.error('Daily backup failed:', error.message));
+  };
+  checkBackups();
+  setInterval(checkBackups, BACKUP_CHECK_MS).unref();
+
   const checkReminders = () => {
     sendDeadlineReminders({ db, mailer, publicUrl }).catch((error) => console.error('Deadline reminders failed:', error.message));
+    // Old athlete documents go once the Settings page sets how long to keep them.
+    const days = loadSettings(db).documentRetentionDays;
+    const removed = days ? cleanUpDocuments(db, days) : 0;
+    if (removed > 0) console.log(`Deleted ${removed} athlete document(s) older than ${days} days.`);
   };
   checkReminders();
   setInterval(checkReminders, REMINDER_CHECK_MS).unref();

@@ -13,7 +13,7 @@
     <a class="btn" href="/club/competitions/<%= competition.id %>"><%= open ? 'Register athletes' : 'View your entries' %></a>
   <% } else if (user && user.role === 'coach') { %>
     <a class="btn" href="/coach">Join a club to enter</a>
-  <% } else if (!user && open) { %>
+  <% } else if (!user && open && site.coachSignup) { %>
     <a class="btn" href="/register">Create a coach account to enter</a>
   <% } %>
 </div>

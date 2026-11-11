@@ -140,6 +140,15 @@ html { scroll-padding-top: calc(var(--topbar-height, 72px) + var(--space-3)); }
   background: linear-gradient(135deg, var(--hong-fill) 50%, var(--chung-fill) 50%);
   flex: none;
 }
+/* The organiser's logo from the Settings page, in place of the mark. */
+.brand-logo { width: 30px; height: 30px; object-fit: contain; border-radius: var(--radius-sm); flex: none; }
+
+/* Settings and My account */
+.logo-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.settings-logo { width: 64px; height: 64px; object-fit: contain; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); }
+.setup-key { display: inline-block; font-size: 1.05em; letter-spacing: 0.05em; padding: 2px var(--space-2); background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm); word-break: break-all; }
+.recovery-codes { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: var(--space-2); list-style: none; padding: 0; }
+.recovery-codes code { font-size: 1.05em; }
 
 .nav { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
 .nav a, .link-button {

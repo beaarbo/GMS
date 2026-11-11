@@ -12,24 +12,32 @@ function maskUser(user) {
 }
 
 // Email services that work over HTTPS, for hosts that block outgoing SMTP
-// (Railway does on some plans). Each takes the sender as { name, email }.
+// (Railway does on some plans). Each takes the sender as { name, email }, and
+// attachments as [{ filename, content: Buffer }].
+const base64 = (attachments) => attachments.map((a) => ({ filename: a.filename, content: Buffer.from(a.content).toString('base64') }));
 const API_PROVIDERS = {
   brevo: {
     label: 'Brevo',
     host: 'api.brevo.com',
-    request: ({ apiKey, sender, to, subject, text }) => ({
+    request: ({ apiKey, sender, to, subject, text, attachments }) => ({
       url: 'https://api.brevo.com/v3/smtp/email',
       headers: { 'api-key': apiKey, 'content-type': 'application/json', accept: 'application/json' },
-      body: { sender, to: [{ email: to }], subject, textContent: text },
+      body: {
+        sender, to: [{ email: to }], subject, textContent: text,
+        ...(attachments && attachments.length ? { attachment: base64(attachments).map((a) => ({ name: a.filename, content: a.content })) } : {}),
+      },
     }),
   },
   resend: {
     label: 'Resend',
     host: 'api.resend.com',
-    request: ({ apiKey, sender, to, subject, text }) => ({
+    request: ({ apiKey, sender, to, subject, text, attachments }) => ({
       url: 'https://api.resend.com/emails',
       headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
-      body: { from: sender.name ? `${sender.name} <${sender.email}>` : sender.email, to: [to], subject, text },
+      body: {
+        from: sender.name ? `${sender.name} <${sender.email}>` : sender.email, to: [to], subject, text,
+        ...(attachments && attachments.length ? { attachments: base64(attachments) } : {}),
+      },
     }),
   },
 };
@@ -80,8 +88,8 @@ function explainMailError({ code, responseCode, status, provider, error = '' }) 
 }
 
 // Sends through an email service's HTTPS API. Returns { ok } or the failure.
-async function sendViaApi(provider, apiKey, sender, { to, subject, text }, fetchImpl) {
-  const { url, headers, body } = API_PROVIDERS[provider].request({ apiKey, sender, to, subject, text });
+async function sendViaApi(provider, apiKey, sender, { to, subject, text, attachments }, fetchImpl) {
+  const { url, headers, body } = API_PROVIDERS[provider].request({ apiKey, sender, to, subject, text, attachments });
   try {
     const response = await fetchImpl(url, { method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(15000) });
     if (response.ok) return { ok: true };
@@ -102,23 +110,34 @@ async function sendViaApi(provider, apiKey, sender, { to, subject, text }, fetch
 // send() never rejects: a mail problem must not break the page the user is on.
 // test() is for the admin's email check, so it reports what went wrong instead.
 // An API key (Brevo or Resend) wins over SMTP settings when both are set.
+// senderName(), when given, returns the name to send as (the Settings page),
+// in place of the name in MAIL_FROM; the address always stays MAIL_FROM's.
 function createMailer({
-  host, port, user, pass, from, brevoApiKey, resendApiKey, production = false, logger = console, fetchImpl = globalThis.fetch,
+  host, port, user, pass, from, brevoApiKey, resendApiKey, production = false, logger = console, fetchImpl = globalThis.fetch, senderName = () => '',
 } = {}) {
   const sender = from || 'Game Management System <no-reply@localhost>';
+  const currentSender = () => {
+    const parsed = parseSender(sender);
+    const name = senderName();
+    return name ? { ...parsed, name } : parsed;
+  };
+  // Nodemailer's form of the sender.
+  const smtpFrom = () => {
+    const { name, email } = currentSender();
+    return name ? { name, address: email } : email;
+  };
 
   const apiProvider = (brevoApiKey && 'brevo') || (resendApiKey && 'resend') || null;
   if (apiProvider) {
     const apiKey = apiProvider === 'brevo' ? brevoApiKey : resendApiKey;
-    const parsed = parseSender(sender);
     return {
       configured: true,
       details: () => ({
         configured: true, provider: API_PROVIDERS[apiProvider].label, host: API_PROVIDERS[apiProvider].host, port: 443, secure: true, user: '', from: sender,
       }),
-      test: (message) => sendViaApi(apiProvider, apiKey, parsed, message, fetchImpl),
+      test: (message) => sendViaApi(apiProvider, apiKey, currentSender(), message, fetchImpl),
       async send(message) {
-        const result = await sendViaApi(apiProvider, apiKey, parsed, message, fetchImpl);
+        const result = await sendViaApi(apiProvider, apiKey, currentSender(), message, fetchImpl);
         if (!result.ok) logger.error(`Email failed: "${message.subject}" to ${message.to}: ${result.error}`);
       },
     };
@@ -155,15 +174,15 @@ function createMailer({
     async test({ to, subject, text }) {
       try {
         await transport.verify();
-        await transport.sendMail({ from: sender, to, subject, text });
+        await transport.sendMail({ from: smtpFrom(), to, subject, text });
         return { ok: true };
       } catch (error) {
         return { ok: false, error: error.message, code: error.code, responseCode: error.responseCode };
       }
     },
-    async send({ to, subject, text }) {
+    async send({ to, subject, text, attachments }) {
       try {
-        await transport.sendMail({ from: sender, to, subject, text });
+        await transport.sendMail({ from: smtpFrom(), to, subject, text, attachments });
       } catch (error) {
         logger.error(`Email failed: "${subject}" to ${to}: ${error.message}`);
       }

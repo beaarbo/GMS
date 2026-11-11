@@ -177,3 +177,17 @@ test('behind a proxy, each visitor gets their own rate limit', async () => {
   assert.equal(last.status, 429, 'one visitor hits the limit');
   assert.notEqual((await ask('203.0.113.2')).status, 429, 'another visitor is not blocked by them');
 });
+
+test('the Settings sender name and backup attachments reach Brevo and Resend', async () => {
+  const brevo = fakeFetch({ status: 201, body: {} });
+  await createMailer({ brevoApiKey: 'k', from: 'GMS <club@example.com>', senderName: () => 'Lions TKD', fetchImpl: brevo.fetchImpl })
+    .send({ to: 'a@b.test', subject: 's', text: 't', attachments: [{ filename: 'gms.sqlite', content: Buffer.from('db') }] });
+  assert.deepEqual(brevo.calls[0].body.sender, { name: 'Lions TKD', email: 'club@example.com' });
+  assert.deepEqual(brevo.calls[0].body.attachment, [{ name: 'gms.sqlite', content: Buffer.from('db').toString('base64') }]);
+
+  const resend = fakeFetch({ status: 200, body: {} });
+  await createMailer({ resendApiKey: 'k', from: 'club@example.com', fetchImpl: resend.fetchImpl })
+    .send({ to: 'a@b.test', subject: 's', text: 't', attachments: [{ filename: 'gms.sqlite', content: Buffer.from('db') }] });
+  assert.equal(resend.calls[0].body.from, 'club@example.com');
+  assert.deepEqual(resend.calls[0].body.attachments, [{ filename: 'gms.sqlite', content: Buffer.from('db').toString('base64') }]);
+});

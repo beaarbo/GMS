@@ -6,6 +6,10 @@ const {
 const { formatEventDates } = require('../divisions');
 const { hasKyorugi, hasPoomsae } = require('../poomsae');
 const { writeBoutListPdf } = require('../boutlistPdf');
+const { shortenNames } = require('../settings');
+
+// Visitors without an account see shortened names when the Settings page says so.
+const forVisitor = (req, data) => (!req.user && req.site.publicNames === 'initials' ? shortenNames(data) : data);
 const { sendAttachment } = require('../documents');
 const { notFound } = require('./helpers');
 
@@ -90,7 +94,7 @@ router.get('/competitions/:id(\\d+)/results', (req, res) => {
   const staff = Boolean(req.user && ['admin', 'official'].includes(req.user.role));
   const filters = programmeFilters(req, competition);
   if (!staff && competitionResults(db, competition, { published: true }).divisions.length === 0) return notFound(res);
-  const results = competitionResults(db, competition, { published: !staff, event: filters.event });
+  const results = forVisitor(req, competitionResults(db, competition, { published: !staff, event: filters.event }));
   const mine = (d) => ['gold', 'silver', 'bronze'].some((medal) => d[medal].some((m) => m.clubId === filters.clubId));
   return res.render('results_public', {
     title: `${competition.name}: results`,
@@ -112,7 +116,7 @@ router.get('/competitions/:id(\\d+)/bouts', (req, res) => {
   return res.render('programme', {
     title: `${competition.name}: bout list`,
     ...programmeLocals(req, competition, filters, 'bouts'),
-    parts: competitionProgramme(db, competition, { published: true, ...filters }),
+    parts: forVisitor(req, competitionProgramme(db, competition, { published: true, ...filters })),
   });
 });
 
@@ -120,7 +124,7 @@ router.get('/competitions/:id(\\d+)/bouts.pdf', (req, res) => {
   const competition = visibleCompetition(req);
   if (!competition) return notFound(res);
   const { db } = req.app.locals;
-  const parts = competitionProgramme(db, competition, { published: true, ...programmeFilters(req, competition) });
+  const parts = forVisitor(req, competitionProgramme(db, competition, { published: true, ...programmeFilters(req, competition) }));
   if (parts.length === 0) return notFound(res);
   pdfHeaders(res, 'bout-list', competition);
   return writeBoutListPdf(res, { competition, divisions: parts, dateLabel: dateLabel(db, competition) });

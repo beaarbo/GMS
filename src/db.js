@@ -20,7 +20,13 @@ CREATE TABLE IF NOT EXISTS users (
   full_name TEXT NOT NULL DEFAULT '',
   phone TEXT NOT NULL DEFAULT '',
   club_id INTEGER REFERENCES clubs(id) ON DELETE SET NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  -- My settings: 'auto', 'dark' or 'light', and which emails they want (JSON of opt-outs).
+  theme TEXT NOT NULL DEFAULT 'auto',
+  email_opt_out TEXT NOT NULL DEFAULT '[]',
+  -- Two-step login: the authenticator secret, and hashes of one-time recovery codes.
+  totp_secret TEXT,
+  totp_recovery TEXT NOT NULL DEFAULT '[]'
 );
 
 CREATE TABLE IF NOT EXISTS club_applications (
@@ -350,6 +356,20 @@ CREATE TABLE IF NOT EXISTS poomsae_divisions (
   list_day INTEGER,
   list_court INTEGER,
   PRIMARY KEY (competition_id, division_key)
+);
+
+-- The Settings page. Keys are listed with their defaults in src/settings.js.
+CREATE TABLE IF NOT EXISTS site_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
+-- The organiser's logo for the top bar, set on the Settings page.
+CREATE TABLE IF NOT EXISTS site_logo (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  content_type TEXT NOT NULL,
+  data BLOB NOT NULL,
+  uploaded_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -717,6 +737,18 @@ function migrateDropJudgeLinks(db) {
   })();
 }
 
+// Version 23: site settings and each user's own settings (theme, emails,
+// two-step login). Nothing is set yet, so everything keeps working as before.
+function migrateSettings(db) {
+  db.transaction(() => {
+    addColumnIfMissing(db, 'users', 'theme', "TEXT NOT NULL DEFAULT 'auto'");
+    addColumnIfMissing(db, 'users', 'email_opt_out', "TEXT NOT NULL DEFAULT '[]'");
+    addColumnIfMissing(db, 'users', 'totp_secret', 'TEXT');
+    addColumnIfMissing(db, 'users', 'totp_recovery', "TEXT NOT NULL DEFAULT '[]'");
+    db.pragma('user_version = 23');
+  })();
+}
+
 function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 1) migrateBelts(db);
   if (db.pragma('user_version', { simple: true }) < 2) migrateSchedule(db);
@@ -740,6 +772,7 @@ function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 20) migrateMapLocation(db);
   if (db.pragma('user_version', { simple: true }) < 21) migrateWinsAndJudgeLinks(db);
   if (db.pragma('user_version', { simple: true }) < 22) migrateDropJudgeLinks(db);
+  if (db.pragma('user_version', { simple: true }) < 23) migrateSettings(db);
 }
 
 // Safe on old databases: only tables that don't exist yet are created.

@@ -3,7 +3,6 @@
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const {
-  DEFAULT_AGE_GROUPS,
   DEFAULT_BELT_GROUPS,
   GENDERS,
   assignDivision,
@@ -13,10 +12,11 @@ const {
 } = require('./divisions');
 const { buildBracket, roundsFromSlots, seededSlots, slotsAreValid, assignCourts, scheduleCourt, formatTime, layoutBracket, computeMedals } = require('./bracket');
 const {
-  placeEntry, POOMSAE_EVENTS, POOMSAE_GENDERS, DEFAULT_POOMSAE_AGE_GROUPS, poomsaeDivisionTitle, rankEntries, divisionMode, bracketEntrants, poomsaeMedalists, schedulePoomsae, hasKyorugi, hasPoomsae, judgesScore,
+  placeEntry, POOMSAE_EVENTS, POOMSAE_GENDERS, poomsaeDivisionTitle, rankEntries, divisionMode, bracketEntrants, poomsaeMedalists, schedulePoomsae, hasKyorugi, hasPoomsae, judgesScore,
 } = require('./poomsae');
 const { logActivity } = require('./activity');
 const { documentLabel, documentTypeFor } = require('./documents');
+const { loadSettings } = require('./settings');
 
 const RESET_LIFETIME_MS = 3600000;
 const RESET_COOLDOWN_MS = 5 * 60000;
@@ -143,17 +143,21 @@ function saveEventDates(db, competitionId, dates) {
   })();
 }
 
+// Anything the form leaves out comes from the Settings page's competition defaults.
 function createCompetition(db, { event_dates: eventDates, ...fields }) {
+  const { defaults } = loadSettings(db);
   return db.transaction(() => {
     const id = db
       .prepare(
-        `INSERT INTO competitions (name, event_date, registration_deadline, registration_deadline_time, venue, description, age_basis, status, max_per_club_division, events, poomsae_format, poomsae_cut, map_query)
-         VALUES (@name, @event_date, @registration_deadline, @registration_deadline_time, @venue, @description, @age_basis, @status, @max_per_club_division, @events, @poomsae_format, @poomsae_cut, @map_query)`
+        `INSERT INTO competitions (name, event_date, registration_deadline, registration_deadline_time, venue, description, age_basis, status, max_per_club_division, events, poomsae_format, poomsae_cut, map_query,
+           bout_courts, bout_start, bout_minutes, bout_rest_minutes, poomsae_courts, poomsae_start, poomsae_minutes, poomsae_rest_minutes, poomsae_judges)
+         VALUES (@name, @event_date, @registration_deadline, @registration_deadline_time, @venue, @description, @age_basis, @status, @max_per_club_division, @events, @poomsae_format, @poomsae_cut, @map_query,
+           @bout_courts, @bout_start, @bout_minutes, @bout_rest_minutes, @poomsae_courts, @poomsae_start, @poomsae_minutes, @poomsae_rest_minutes, @poomsae_judges)`
       )
-      .run({ description: '', age_basis: 'year', status: 'draft', registration_deadline_time: '23:59', max_per_club_division: null, events: 'kyorugi', poomsae_format: 'score', poomsae_cut: 16, map_query: '', ...fields }).lastInsertRowid;
+      .run({ description: '', status: 'draft', registration_deadline_time: '23:59', events: 'kyorugi', map_query: '', ...defaults.competition, ...fields }).lastInsertRowid;
     saveEventDates(db, id, eventDates || [fields.event_date]);
-    saveDivisionSetup(db, id, { ageGroups: DEFAULT_AGE_GROUPS, beltGroups: DEFAULT_BELT_GROUPS });
-    savePoomsaeAgeGroups(db, id, DEFAULT_POOMSAE_AGE_GROUPS);
+    saveDivisionSetup(db, id, { ageGroups: defaults.kyorugiAgeGroups, beltGroups: DEFAULT_BELT_GROUPS });
+    savePoomsaeAgeGroups(db, id, defaults.poomsaeAgeGroups);
     return Number(id);
   })();
 }
@@ -168,7 +172,7 @@ function enterFighter(db, competition, fighter, weightClassId) {
   });
   if (!placement.ok) return placement;
 
-  if (!db.prepare('SELECT 1 FROM fighter_documents WHERE fighter_id = ?').get(fighter.id)) {
+  if (loadSettings(db).requireDocument && !db.prepare('SELECT 1 FROM fighter_documents WHERE fighter_id = ?').get(fighter.id)) {
     return { ok: false, error: `Upload their ${documentLabel(documentTypeFor(fighter.belt_rank))} first.` };
   }
 
@@ -407,7 +411,7 @@ function enterPoomsae(db, competition, clubId, event, fighters) {
   if (!placement.ok) return placement;
   const label = POOMSAE_EVENTS[event].label.toLowerCase();
 
-  const missingDocument = fighters.find((f) => !db.prepare('SELECT 1 FROM fighter_documents WHERE fighter_id = ?').get(f.id));
+  const missingDocument = loadSettings(db).requireDocument && fighters.find((f) => !db.prepare('SELECT 1 FROM fighter_documents WHERE fighter_id = ?').get(f.id));
   if (missingDocument) {
     return { ok: false, error: `Upload the ${documentLabel(documentTypeFor(missingDocument.belt_rank))} of ${missingDocument.first_name} ${missingDocument.last_name} first.` };
   }
@@ -1903,7 +1907,26 @@ function removeCoach(db, userId) {
   })();
 }
 
+// Deletes athlete documents uploaded more than `days` ago, unless the athlete is
+// entered in a competition that ended less than `days` ago or hasn't happened
+// yet. Coaches upload a fresh one for their next entry. Returns how many went.
+function cleanUpDocuments(db, days) {
+  const cutoff = `-${Number(days)} days`;
+  return db.prepare(
+    `DELETE FROM fighter_documents
+     WHERE uploaded_at < datetime('now', @cutoff)
+       AND fighter_id NOT IN (
+         SELECT x.fighter_id FROM (
+           SELECT fighter_id, competition_id FROM registrations WHERE status != 'rejected'
+           UNION SELECT m.fighter_id, e.competition_id FROM poomsae_members m JOIN poomsae_entries e ON e.id = m.entry_id WHERE e.status != 'rejected'
+         ) x
+         WHERE (SELECT MAX(d.event_date) FROM competition_dates d WHERE d.competition_id = x.competition_id) >= date('now', @cutoff)
+       )`
+  ).run({ cutoff }).changes;
+}
+
 module.exports = {
+  cleanUpDocuments,
   today,
   isRegistrationOpen,
   loadDivisionSetup,

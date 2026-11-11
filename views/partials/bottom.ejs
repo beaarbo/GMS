@@ -1,4 +1,4 @@
 </main>
-<footer class="footer">Game Management System · Taekwondo kyorugi and poomsae registration</footer>
+<footer class="footer"><%= site.siteName %><%= site.footerText ? ` · ${site.footerText}` : '' %><% if (site.contactEmail) { %> · <a href="mailto:<%= site.contactEmail %>"><%= site.contactEmail %></a><% } %></footer>
 </body>
 </html>

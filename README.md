@@ -133,7 +133,25 @@ On small screens the menu folds behind a **Menu** button, so the pinned top bar 
 
 ## Dark theme
 
-The site follows the device's light or dark setting. **Theme** at the end of the menu switches between **Auto** (follow the device), **Dark** and **Light**, and each browser remembers its choice. Court screens always stay dark, and printed pages are always light.
+The site follows the device's light or dark setting. **Theme** at the end of the menu switches between **Auto** (follow the device), **Dark** and **Light**. Logged out, each browser remembers its choice; logged in, it's kept with the account (also on **My account → Appearance**), so every device follows. Court screens always stay dark, and printed pages are always light.
+
+## Settings
+
+**Settings** in the admin menu changes the site without a redeploy:
+
+- **Organisation:** the site name (top bar, browser tab, emails), a contact email and footer text, an organiser logo for the top bar, the time zone deadlines close in, and the name emails are sent as (the address stays `MAIL_FROM`'s).
+- **Registration:** whether coaches can sign up themselves (when off, add them on **Accounts → Add a coach**, optionally straight into a club), whether athletes need a belt document, which file types it can be, and how many days before a deadline coaches are reminded.
+- **Privacy:** athlete names for visitors without an account (full, or one name and initials, as in "Rossi A."), whether club icons show to visitors, deleting athlete documents after a number of days (checked hourly; an athlete still entered in a coming or recent competition keeps theirs), and requiring two-step login for admins.
+- **Backups:** how many daily and manual backups to keep, and an address each daily backup is emailed to (up to 7 MB), so a copy survives losing the server's disk. **Check now** sends the newest one straight away.
+- **Competition defaults:** the age groups and weight classes, poomsae age groups, schedule, poomsae format, judges, club limit and age rule each new competition starts with. Existing competitions keep their own.
+
+Email keys, passwords and the session secret stay environment variables.
+
+## My account
+
+Everyone can change their name, email, password and theme, and choose which emails they get (decisions, reminders, published lists, division changes, news; admins: coach applications). Security emails always come.
+
+**Two-step login** asks for a six-digit code from an authenticator app (Google Authenticator, Microsoft Authenticator, 1Password and others) after the password. Setting it up shows a key to type into the app, then ten one-time recovery codes, shown once. Someone who lost their phone and codes can ask an admin, who can turn it off for them on **Accounts**.
 
 ## Deleting things
 
@@ -202,12 +220,12 @@ The database holds personal data, including children's names and dates of birth,
 
 ## Backups
 
-The server saves a snapshot of the database once a day, in a `backups` folder next to the database file (on Railway, `/data/backups`). It keeps the newest 7 daily snapshots, plus the newest 10 made with **Back up now**. Each snapshot is checked before it's kept. Two optional settings change this:
+The server saves a snapshot of the database once a day, in a `backups` folder next to the database file (on Railway, `/data/backups`). It keeps the newest 7 daily snapshots, plus the newest 10 made with **Back up now**, unless **Settings → Backups** says otherwise; it can also email each daily snapshot off-site. Each snapshot is checked before it's kept. Two optional settings change this:
 
 | Variable | Value |
 | --- | --- |
 | `BACKUP_DIR` | Another folder for backups. Default: `backups` next to the database. |
-| `BACKUP_KEEP_DAYS` | How many daily backups to keep. Default: `7`. |
+| `BACKUP_KEEP_DAYS` | How many daily backups to keep until the Settings page sets it. Default: `7`. |
 
 Admins can make a backup and download any of them from **Backups** in the admin menu. Snapshots on the same disk don't survive losing that disk, so **download one regularly**, for example weekly and before each competition, and store it safely. A backup contains everyone's personal data and password hashes.
 

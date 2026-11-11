@@ -2,7 +2,6 @@ const express = require('express');
 const {
   beltName,
   GENDERS,
-  DEFAULT_BELT_GROUPS,
   isValidDate,
   formatEventDates,
   formatDay,
@@ -40,6 +39,7 @@ const {
   addCompetitionFile,
   deleteCompetitionFile,
   createOfficialAccount,
+  createCoachAccount,
   removeOfficial,
   today,
   listNews,
@@ -59,10 +59,10 @@ const {
 } = require('../services');
 const { sendDocument, detectIconType, detectAttachmentType, safeFilename, MAX_ICON_BYTES, MAX_NEW_COMPETITION_FILES } = require('../documents');
 const { ACTIVITY_CATEGORIES, listActivity, countActivity, formatActivityTime } = require('../activity');
-const { notifyRegistrationDecisions, notifyBoutListPublished, notifyDivisionMerged } = require('../notifications');
+const { notifyRegistrationDecisions, notifyBoutListPublished, notifyDivisionMerged, notifyAccountChange } = require('../notifications');
 const { layoutBracket, computeMedals } = require('../bracket');
 const { writeBoutListPdf } = require('../boutlistPdf');
-const { clean, toArray, requireRole, notFound, wrap, passwordError } = require('./helpers');
+const { clean, toArray, requireRole, notFound, wrap, passwordError, readSetup, readPoomsaeAges } = require('./helpers');
 const { resultsPath } = require('./competitionDay');
 const { createBackup, pruneBackups, listBackups } = require('../backups');
 const { readMapLocation } = require('../maps');
@@ -216,9 +216,11 @@ router.get('/competitions', (req, res) => {
 });
 
 router.get('/competitions/new', (req, res) => {
+  const { age_basis, max_per_club_division, poomsae_format, poomsae_cut } = req.site.defaults.competition;
   res.render('admin/comp_form', {
     title: 'New competition',
-    competition: { age_basis: 'year' },
+    // The Settings page's defaults; courts, times and age groups follow on creation.
+    competition: { age_basis, max_per_club_division, poomsae_format, poomsae_cut },
     errors: [],
     action: '/admin/competitions',
     locked: false,
@@ -524,37 +526,6 @@ function setupRowsForForm(setup) {
       female: formatWeightLimits(classesFor('F')),
     };
   });
-}
-
-function readSetup(body) {
-  const names = toArray(body.age_name);
-  const ageGroups = names
-    .map((_, i) => ({
-      name: clean(names[i], 60),
-      min_age: Number(toArray(body.age_min)[i]),
-      max_age: Number(toArray(body.age_max)[i]),
-      minRaw: clean(toArray(body.age_min)[i]),
-      maxRaw: clean(toArray(body.age_max)[i]),
-      male: clean(toArray(body.age_male)[i], 500),
-      female: clean(toArray(body.age_female)[i], 500),
-    }))
-    .filter((g) => g.name || g.minRaw || g.maxRaw || g.male || g.female);
-
-  // Belt groups are fixed: Blue, Red and Black.
-  return { ageGroups, beltGroups: DEFAULT_BELT_GROUPS };
-}
-
-// Poomsae age group rows from the form. Rows left blank are dropped.
-function readPoomsaeAges(body) {
-  const names = toArray(body.poomsae_name);
-  return names
-    .map((_, i) => ({
-      name: clean(names[i], 60),
-      minRaw: clean(toArray(body.poomsae_min)[i]),
-      maxRaw: clean(toArray(body.poomsae_max)[i]),
-    }))
-    .filter((g) => g.name || g.minRaw || g.maxRaw)
-    .map((g) => ({ ...g, min_age: g.minRaw === '' ? NaN : Number(g.minRaw), max_age: g.maxRaw === '' ? NaN : Number(g.maxRaw) }));
 }
 
 function setupPage(res, competition, { status = 200, ageRows, poomsaeRows, beltRows, errors = [], locked = false }) {
@@ -1143,6 +1114,49 @@ function accountType(row) {
 }
 
 // Officials get a starting password from the admin. They can change it on My account.
+// Adds a coach directly, for sites where coaches can't sign up themselves. With
+// a club chosen they are approved for it straight away.
+router.post('/accounts/coaches', wrap(async (req, res) => {
+  const { db } = req.app.locals;
+  const values = { full_name: clean(req.body.full_name, 100), phone: clean(req.body.phone, 40), email: clean(req.body.email).toLowerCase() };
+  const password = typeof req.body.password === 'string' ? req.body.password : '';
+  const club = /^\d+$/.test(clean(req.body.club_id, 12)) ? db.prepare('SELECT id, name FROM clubs WHERE id = ?').get(Number(req.body.club_id)) : null;
+  const errors = [];
+  if (!values.full_name) errors.push('Enter the coach\'s name.');
+  if (!values.phone) errors.push('Enter the coach\'s contact number.');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.email)) errors.push('Enter a valid email address.');
+  else if (db.prepare('SELECT 1 FROM users WHERE email = ?').get(values.email)) errors.push('An account with this email already exists.');
+  if (passwordError(password)) errors.push(passwordError(password));
+  if (req.body.club_id && !club) errors.push('Choose a club from the list.');
+  if (errors.length > 0) {
+    errors.forEach((error) => req.flash('error', error));
+    return res.redirect('/admin/accounts?type=coach');
+  }
+  const userId = await createCoachAccount(db, { ...values, password });
+  if (club) {
+    db.transaction(() => {
+      db.prepare('UPDATE users SET club_id = ? WHERE id = ?').run(club.id, userId);
+      db.prepare("INSERT INTO club_applications (user_id, club_id, status, reviewed_at) VALUES (?, ?, 'approved', datetime('now'))").run(userId, club.id);
+    })();
+  }
+  req.logActivity('account.coach_added', `Added the coach ${values.full_name} (${values.email})${club ? ` for ${club.name}` : ''}`);
+  req.flash('success', `${values.full_name} can now log in as a coach${club ? ` for ${club.name}` : ''}. Give them the starting password privately, and ask them to change it on My account.`);
+  return res.redirect('/admin/accounts?type=coach');
+}));
+
+// For someone who lost their phone and their recovery codes.
+router.post('/accounts/:userId(\\d+)/two-step/off', (req, res) => {
+  const { db } = req.app.locals;
+  const account = db.prepare('SELECT id, email, full_name FROM users WHERE id = ? AND totp_secret IS NOT NULL').get(Number(req.params.userId));
+  if (account) {
+    db.prepare("UPDATE users SET totp_secret = NULL, totp_recovery = '[]' WHERE id = ?").run(account.id);
+    req.logActivity('account.two_step_reset', `Turned off two-step login for ${account.full_name || account.email}`);
+    notifyAccountChange(req.app.locals.notify, account.email, 'An admin turned off two-step login for your account. Set it up again on My account.');
+    req.flash('success', `Two-step login is off for ${account.full_name || account.email}. They log in with their password alone until they set it up again.`);
+  }
+  return res.redirect(`/admin/accounts${req.body.type ? `?type=${encodeURIComponent(clean(req.body.type, 20))}` : ''}`);
+});
+
 router.post('/accounts/officials', wrap(async (req, res) => {
   const { db } = req.app.locals;
   const values = { full_name: clean(req.body.full_name, 100), email: clean(req.body.email).toLowerCase() };
@@ -1198,7 +1212,7 @@ router.get('/accounts', (req, res) => {
   }
   const accounts = db
     .prepare(
-      `SELECT u.id, u.email, u.full_name, u.phone, u.role, u.club_id, u.created_at, c.name AS club,
+      `SELECT u.id, u.email, u.full_name, u.phone, u.role, u.club_id, u.created_at, c.name AS club, u.totp_secret IS NOT NULL AS two_step,
          (SELECT pc.name FROM club_applications a JOIN clubs pc ON pc.id = a.club_id
           WHERE a.user_id = u.id AND a.status = 'pending') AS pending_club
        FROM users u LEFT JOIN clubs c ON c.id = u.club_id
@@ -1222,6 +1236,7 @@ router.get('/accounts', (req, res) => {
     type,
     search,
     formatActivityTime,
+    clubs: db.prepare('SELECT id, name FROM clubs ORDER BY name').all(),
   });
 });
 

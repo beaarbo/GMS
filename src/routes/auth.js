@@ -5,6 +5,10 @@ const { createCoachAccount, createPasswordReset, findPasswordReset, completePass
 const { sendPasswordReset } = require('../notifications');
 const { logActivity } = require('../activity');
 const { clean, wrap, homeFor, passwordError } = require('./helpers');
+const { verifyCode, hashRecoveryCode } = require('../totp');
+
+// How long the code page waits after the password was right.
+const TWO_STEP_WINDOW_MS = 5 * 60 * 1000;
 
 const router = express.Router();
 
@@ -52,17 +56,71 @@ router.post(
     if (!user || !valid) {
       return res.status(401).render('login', { title: 'Log in', email, error: 'Incorrect email or password.' });
     }
+    if (user.totp_secret) {
+      // Not logged in yet: the code page finishes it.
+      return req.session.regenerate((error) => {
+        if (error) return next(error);
+        req.session.twoStep = { userId: user.id, at: Date.now() };
+        return req.session.save((saveError) => (saveError ? next(saveError) : res.redirect('/login/code')));
+      });
+    }
     return startSession(req, user.id, (error) => (error ? next(error) : res.redirect(homeFor(user))));
   })
 );
 
-router.get('/register', (req, res) => {
+function pendingTwoStep(req) {
+  const pending = req.session.twoStep;
+  return pending && Date.now() - pending.at < TWO_STEP_WINDOW_MS ? pending : null;
+}
+
+router.get('/login/code', (req, res) => {
+  if (!pendingTwoStep(req)) return res.redirect('/login');
+  return res.render('login_code', { title: 'Two-step login', error: null });
+});
+
+// Takes the authenticator's six digits or one of the recovery codes, which then stops working.
+// shortcut: a code can be used twice within its 30 seconds; keep the last used step per user if that matters.
+router.post('/login/code', authLimiter, (req, res, next) => {
+  const pending = pendingTwoStep(req);
+  if (!pending) {
+    req.flash('error', 'That took too long. Please log in again.');
+    return res.redirect('/login');
+  }
+  const { db } = req.app.locals;
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(pending.userId);
+  const code = clean(req.body.code, 20);
+  let ok = Boolean(user && user.totp_secret && verifyCode(user.totp_secret, code));
+  if (user && !ok && /[a-f0-9]{5}-?[a-f0-9]{5}/i.test(code)) {
+    const hashes = JSON.parse(user.totp_recovery);
+    const left = hashes.filter((hash) => hash !== hashRecoveryCode(code));
+    if (left.length < hashes.length) {
+      db.prepare('UPDATE users SET totp_recovery = ? WHERE id = ?').run(JSON.stringify(left), user.id);
+      logActivity(db, { user, action: 'account.recovery_code', summary: `Logged in with a recovery code (${left.length} left)` });
+      req.flash('info', `You used a recovery code. ${left.length} left. If you lost your phone, turn two-step login off and on again on My account for new ones.`);
+      ok = true;
+    }
+  }
+  if (!ok) return res.status(401).render('login_code', { title: 'Two-step login', error: 'That code is not right. Use the newest code from your authenticator app.' });
+  return startSession(req, user.id, (error) => (error ? next(error) : res.redirect(homeFor(user))));
+});
+
+// Sign-up can be closed on the Settings page; admins then add coaches themselves.
+function signupOpen(req, res, next) {
+  if (req.site.coachSignup) return next();
+  return res.status(403).render('error', {
+    title: 'Sign-up is closed',
+    message: `Coach accounts are made by the organiser.${req.site.contactEmail ? ` Ask them at ${req.site.contactEmail}.` : ' Ask them for one.'}`,
+  });
+}
+
+router.get('/register', signupOpen, (req, res) => {
   if (req.user) return res.redirect(homeFor(req.user));
   return res.render('register', { title: 'Create a coach account', values: {}, errors: [] });
 });
 
 router.post(
   '/register',
+  signupOpen,
   authLimiter,
   wrap(async (req, res, next) => {
     const { db } = req.app.locals;

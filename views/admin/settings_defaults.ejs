@@ -1,0 +1,112 @@
+<%- include('../partials/top') %>
+<p class="breadcrumb"><a href="/admin/settings">Settings</a></p>
+<div class="page-head">
+  <div>
+    <h1>Competition defaults</h1>
+    <p class="sub">What each new competition starts with. Every competition can still change its own afterwards, and existing ones keep theirs.</p>
+  </div>
+</div>
+
+<%- include('../partials/errors') %>
+
+<form method="post" action="/admin/settings/defaults">
+  <input type="hidden" name="_csrf" value="<%= csrf %>">
+
+  <section class="card">
+    <h2>Rules</h2>
+    <div class="form-row">
+      <div class="field">
+        <label for="default_age_basis">Age rule</label>
+        <select id="default_age_basis" name="default_age_basis">
+          <option value="year" <%= values.default_age_basis === 'year' ? 'selected' : '' %>>Competition year minus birth year</option>
+          <option value="date" <%= values.default_age_basis === 'date' ? 'selected' : '' %>>Exact age on the first event day</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="default_max_per_club">Most entries per club in one division <span class="hint">(optional)</span></label>
+        <input id="default_max_per_club" name="default_max_per_club" type="number" min="1" max="50" inputmode="numeric" value="<%= values.default_max_per_club %>" placeholder="No limit">
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Kyorugi schedule</h2>
+    <div class="form-row">
+      <div class="field"><label for="default_bout_courts">Courts</label><input id="default_bout_courts" name="default_bout_courts" type="number" min="1" max="20" inputmode="numeric" value="<%= values.default_bout_courts %>" required></div>
+      <div class="field"><label for="default_bout_start">Start time</label><input id="default_bout_start" name="default_bout_start" type="time" value="<%= values.default_bout_start %>" required></div>
+      <div class="field"><label for="default_bout_minutes">Minutes per bout</label><input id="default_bout_minutes" name="default_bout_minutes" type="number" min="1" max="120" inputmode="numeric" value="<%= values.default_bout_minutes %>" required></div>
+      <div class="field"><label for="default_bout_rest">Minimum rest between bouts (minutes)</label><input id="default_bout_rest" name="default_bout_rest" type="number" min="0" max="240" inputmode="numeric" value="<%= values.default_bout_rest %>" required></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Poomsae</h2>
+    <div class="form-row">
+      <div class="field">
+        <label for="default_poomsae_format">Format</label>
+        <select id="default_poomsae_format" name="default_poomsae_format">
+          <% Object.entries(POOMSAE_FORMATS).forEach(([value, label]) => { %><option value="<%= value %>" <%= values.default_poomsae_format === value ? 'selected' : '' %>><%= label %></option><% }) %>
+        </select>
+      </div>
+      <div class="field"><label for="default_poomsae_cut">Top entries into the bracket</label><input id="default_poomsae_cut" name="default_poomsae_cut" type="number" min="2" max="<%= MAX_CUT %>" inputmode="numeric" value="<%= values.default_poomsae_cut %>" required></div>
+      <div class="field">
+        <label for="default_poomsae_judges">Judges</label>
+        <select id="default_poomsae_judges" name="default_poomsae_judges">
+          <% JUDGE_COUNTS.forEach((n) => { %><option value="<%= n %>" <%= Number(values.default_poomsae_judges) === n ? 'selected' : '' %>><%= n %></option><% }) %>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="field"><label for="default_poomsae_courts">Courts</label><input id="default_poomsae_courts" name="default_poomsae_courts" type="number" min="1" max="20" inputmode="numeric" value="<%= values.default_poomsae_courts %>" required></div>
+      <div class="field"><label for="default_poomsae_start">Start time</label><input id="default_poomsae_start" name="default_poomsae_start" type="time" value="<%= values.default_poomsae_start %>" required></div>
+      <div class="field"><label for="default_poomsae_minutes">Minutes per performance or bout</label><input id="default_poomsae_minutes" name="default_poomsae_minutes" type="number" min="1" max="60" inputmode="numeric" value="<%= values.default_poomsae_minutes %>" required></div>
+      <div class="field"><label for="default_poomsae_rest">Rest between bouts (minutes)</label><input id="default_poomsae_rest" name="default_poomsae_rest" type="number" min="0" max="120" inputmode="numeric" value="<%= values.default_poomsae_rest %>" required></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Kyorugi age groups and weight classes</h2>
+    <p class="sub">List limits in increasing order. <strong>-45</strong> means up to and including 45 kg, and <strong>+78</strong> is the open class above 78 kg. Clear a row's fields to remove it.</p>
+    <div class="table-wrap">
+      <table class="setup-table">
+        <thead><tr><th>Name</th><th>Min age</th><th>Max age</th><th>Male limits (kg)</th><th>Female limits (kg)</th></tr></thead>
+        <tbody>
+          <% [...ageRows, {}, {}].forEach((row, i) => { %>
+            <tr>
+              <td><input name="age_name" value="<%= row.name || '' %>" aria-label="Age group <%= i + 1 %> name"></td>
+              <td><input name="age_min" type="number" min="0" value="<%= row.min_age ?? '' %>" aria-label="Age group <%= i + 1 %> minimum age"></td>
+              <td><input name="age_max" type="number" min="0" value="<%= row.max_age ?? '' %>" aria-label="Age group <%= i + 1 %> maximum age"></td>
+              <td><input class="limits" name="age_male" value="<%= row.male || '' %>" aria-label="Age group <%= i + 1 %> male weight limits"></td>
+              <td><input class="limits" name="age_female" value="<%= row.female || '' %>" aria-label="Age group <%= i + 1 %> female weight limits"></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Poomsae age groups</h2>
+    <p class="sub">Each group covers ages from its minimum to its maximum. A pair or team goes by its oldest athlete. Clear a row's fields to remove it.</p>
+    <div class="table-wrap">
+      <table class="setup-table">
+        <thead><tr><th>Name</th><th>Min age</th><th>Max age</th></tr></thead>
+        <tbody>
+          <% [...poomsaeRows, {}, {}].forEach((row, i) => { %>
+            <tr>
+              <td><input name="poomsae_name" value="<%= row.name || '' %>" aria-label="Poomsae age group <%= i + 1 %> name"></td>
+              <td><input name="poomsae_min" type="number" min="0" value="<%= row.min_age ?? '' %>" aria-label="Poomsae age group <%= i + 1 %> minimum age"></td>
+              <td><input name="poomsae_max" type="number" min="0" value="<%= row.max_age ?? '' %>" aria-label="Poomsae age group <%= i + 1 %> maximum age"></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="actions">
+    <button class="btn" type="submit">Save defaults</button>
+    <a class="btn secondary" href="/admin/settings">Back to settings</a>
+  </div>
+</form>
+<%- include('../partials/bottom') %>

@@ -24,8 +24,8 @@
       <input type="hidden" name="_csrf" value="<%= csrf %>">
       <div class="field">
         <label for="document"><%= document ? 'Replace with a new file' : `Choose a photo or scan of the ${label}` %></label>
-        <input id="document" name="document" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" required>
-        <p class="hint">JPG, PNG, WebP or PDF, up to 5 MB. Only your club and the organisers can see it.</p>
+        <input id="document" name="document" type="file" accept="<%= { any: 'image/jpeg,image/png,image/webp,application/pdf', images: 'image/jpeg,image/png,image/webp', pdf: 'application/pdf' }[site.documentTypes] %>" required>
+        <p class="hint"><%= { any: 'JPG, PNG, WebP or PDF', images: 'JPG, PNG or WebP', pdf: 'PDF' }[site.documentTypes] %>, up to 5 MB. Only your club and the organisers can see it.</p>
       </div>
       <div class="actions">
         <button class="btn" type="submit"><%= document ? 'Replace' : 'Upload' %></button>

@@ -4,7 +4,7 @@
     <h1>Taekwondo competitions</h1>
     <p class="sub">Kyorugi (sparring) events open for club registration.</p>
   </div>
-  <% if (!user) { %><a class="btn" href="/register">Create a coach account</a><% } %>
+  <% if (!user && site.coachSignup) { %><a class="btn" href="/register">Create a coach account</a><% } %>
 </div>
 
 <% if (competitions.length === 0) { %>

@@ -1,0 +1,16 @@
+<%- include('partials/top') %>
+<div class="card narrow">
+  <h1>Two-step login</h1>
+  <p class="sub">Enter the six-digit code from your authenticator app, or one of your recovery codes.</p>
+  <% if (error) { %><div class="notice error" role="alert"><%= error %></div><% } %>
+  <form method="post" action="/login/code">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <div class="field">
+      <label for="code">Code</label>
+      <input id="code" name="code" autocomplete="one-time-code" maxlength="20" required autofocus>
+    </div>
+    <button class="btn" type="submit">Log in</button>
+  </form>
+  <p class="sub"><a href="/login">Start again</a></p>
+</div>
+<%- include('partials/bottom') %>

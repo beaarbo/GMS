@@ -28,6 +28,9 @@ const adminClubRoutes = require('./routes/adminClubs');
 const adminNewsRoutes = require('./routes/adminNews');
 const adminBackupRoutes = require('./routes/adminBackups');
 const adminEmailRoutes = require('./routes/adminEmail');
+const adminSettingsRoutes = require('./routes/adminSettings');
+const { loadSettings } = require('./settings');
+const { EMAIL_KINDS } = require('./notifications');
 const { AUDIENCES, formatBody, summary } = require('./news');
 
 const SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 12;
@@ -159,6 +162,7 @@ function createApp({
     { path: /^\/club\/icon$/, field: 'icon', maxBytes: MAX_ICON_BYTES, tooBig: 'That picture is over the 1 MB limit.' },
     { path: /^\/admin\/competitions\/\d+\/logo$/, field: 'logo', maxBytes: MAX_ICON_BYTES, tooBig: 'That logo is over the 1 MB limit.' },
     { path: /^\/admin\/competitions\/\d+\/files$/, field: 'file', maxBytes: MAX_ATTACHMENT_BYTES, tooBig: 'That file is over the 10 MB limit.' },
+    { path: /^\/admin\/settings\/logo$/, field: 'logo', maxBytes: MAX_ICON_BYTES, tooBig: 'That logo is over the 1 MB limit.' },
   ].map((upload) => ({
     ...upload,
     read: multer({ storage: multer.memoryStorage(), limits: { fileSize: upload.maxBytes, files: 1, fields: 5 } }).single(upload.field),
@@ -205,6 +209,9 @@ function createApp({
 
   function baseLocals(req) {
     return {
+      // The Settings page: site name, footer, privacy and registration rules.
+      site: loadSettings(db),
+      emailKinds: EMAIL_KINDS,
       user: null,
       csrf: req.session.csrf,
       flash: [],
@@ -236,6 +243,7 @@ function createApp({
       documentTypeFor,
       clubInitials,
       clubIconUrl: () => null,
+      siteLogoUrl: () => null,
       competitionLogoUrl: () => null,
       maxNewFiles: MAX_NEW_COMPETITION_FILES,
       fileSize: (bytes) => (bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`),
@@ -254,13 +262,15 @@ function createApp({
     if (req.session.userId) {
       const user = db
         .prepare(
-          `SELECT u.id, u.email, u.role, u.full_name, u.club_id, c.name AS club_name
+          `SELECT u.id, u.email, u.role, u.full_name, u.club_id, c.name AS club_name, u.theme,
+             u.totp_secret IS NOT NULL AS two_step
            FROM users u LEFT JOIN clubs c ON c.id = u.club_id WHERE u.id = ?`
         )
         .get(req.session.userId);
       req.user = user || null;
       res.locals.user = req.user;
     }
+    req.site = res.locals.site;
     res.locals.flash = req.session.flash || [];
     delete req.session.flash;
     req.flash = (type, text) => {
@@ -275,10 +285,14 @@ function createApp({
     // Club icon links for templates, read from the database once per page when first needed.
     let iconVersions = null;
     res.locals.clubIconUrl = (clubId) => {
-      if (!req.user || !clubId) return null;
+      if ((!req.user && !req.site.publicClubIcons) || !clubId) return null;
       iconVersions = iconVersions || clubIconVersions(db);
       const version = iconVersions.get(Number(clubId));
       return version ? `/club-icons/${clubId}?v=${encodeURIComponent(version)}` : null;
+    };
+    res.locals.siteLogoUrl = () => {
+      const logo = db.prepare('SELECT uploaded_at FROM site_logo WHERE id = 1').get();
+      return logo ? `/site-logo?v=${encodeURIComponent(logo.uploaded_at)}` : null;
     };
     let logoVersions = null;
     res.locals.competitionLogoUrl = (competitionId) => {
@@ -289,14 +303,32 @@ function createApp({
     next();
   });
 
-  // Club icons are only shown to logged-in users. The link changes whenever the
-  // icon does, so the browser may keep its copy.
+  // Club icons are only shown to logged-in users, unless the Settings page makes
+  // them public. The link changes whenever the icon does, so the browser may keep its copy.
   app.get('/club-icons/:id(\\d+)', (req, res) => {
-    const icon = req.user ? getClubIcon(db, Number(req.params.id)) : null;
+    const icon = req.user || req.site.publicClubIcons ? getClubIcon(db, Number(req.params.id)) : null;
     if (!icon) return res.status(404).render('error', { title: 'Page not found', message: 'That page does not exist.' });
     res.setHeader('Content-Type', icon.content_type);
-    res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
+    res.setHeader('Cache-Control', `${req.user ? 'private' : 'public'}, max-age=31536000, immutable`);
     return res.send(icon.data);
+  });
+
+  // The organiser's logo in the top bar, from the Settings page.
+  app.get('/site-logo', (req, res) => {
+    const logo = db.prepare('SELECT content_type, data FROM site_logo WHERE id = 1').get();
+    if (!logo) return res.status(404).render('error', { title: 'Page not found', message: 'That page does not exist.' });
+    res.setHeader('Content-Type', logo.content_type);
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    return res.send(logo.data);
+  });
+
+  // When the Settings page requires it, an admin without two-step login can only
+  // reach their account page (to set it up) until they have.
+  app.use((req, res, next) => {
+    if (!req.user || req.user.role !== 'admin' || req.user.two_step || !req.site.require2faAdmins) return next();
+    if (req.path.startsWith('/account') || req.path === '/logout' || req.method === 'GET' && !req.path.startsWith('/admin')) return next();
+    req.flash('error', 'Set up two-step login to use the admin pages. The Settings page requires it for admins.');
+    return res.redirect('/account#two-step');
   });
 
   app.use((req, res, next) => {
@@ -314,6 +346,7 @@ function createApp({
   app.use('/admin/news', adminNewsRoutes);
   app.use('/admin/backups', adminBackupRoutes);
   app.use('/admin/email', adminEmailRoutes);
+  app.use('/admin/settings', adminSettingsRoutes);
   // Weigh-in and results first: officials may use them, the rest of /admin they may not.
   app.use('/admin', competitionDayRoutes.router);
   app.use('/admin', adminRoutes);

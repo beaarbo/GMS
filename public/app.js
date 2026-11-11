@@ -47,6 +47,16 @@
       // Storage blocked: the choice lasts for this page only.
     }
     show();
+    // Logged in: keep it on the account too, so other devices follow.
+    const token = document.querySelector('input[name="_csrf"]');
+    if (document.documentElement.dataset.accountTheme && token) {
+      document.documentElement.dataset.accountTheme = next;
+      fetch('/account/theme', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ _csrf: token.value, theme: next, ajax: '1' }),
+      }).catch(() => {});
+    }
   });
 }());
 
