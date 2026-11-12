@@ -129,7 +129,7 @@ While a bout list exists, approvals can't change and registration can't reopen. 
 
 ## Phones
 
-Visitors without an account see one page: the competitions, with the latest five public news posts below them (**All news** opens the rest). Their top bar has just a **Log in** button, and the login page has **Log in** and **Sign up** tabs (Sign up only while coach sign-up is on in Settings).
+Visitors without an account see one page: the upcoming competitions, the latest five public news posts below them (**All news** opens the rest), then **Past competitions**, one line each, newest first, with a **Results** button once results are published. A competition moves to Past the day after its last day. Their top bar has just a **Log in** button, and the login page has **Log in** and **Sign up** tabs (Sign up only while coach sign-up is on in Settings).
 
 Logged in, on small screens the menu folds behind a **Menu** button, so the pinned top bar stays short. Without JavaScript the full menu shows instead.
 

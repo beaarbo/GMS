@@ -9,7 +9,7 @@
   </div>
 
   <% if (competitions.length === 0) { %>
-    <div class="card"><p class="empty">No competitions have been posted yet. Check back soon.</p></div>
+    <div class="card"><p class="empty"><%= past.length > 0 ? 'No competitions are coming up right now. Check back soon.' : 'No competitions have been posted yet. Check back soon.' %></p></div>
   <% } else { %>
     <div class="card-grid">
       <% competitions.forEach((c) => { %><%- include('partials/competition_card', { c }) %><% }) %>
@@ -30,4 +30,21 @@
   <% } %>
   <% news.forEach((post) => { %><%- include('partials/news_card', { post }) %><% }) %>
 </section>
+<% if (past.length > 0) { %>
+  <section class="section" id="past">
+    <div class="section-head"><h2>Past competitions</h2></div>
+    <ul class="past-list">
+      <% past.forEach((c) => { %>
+        <li>
+          <%- include('partials/comp_logo', { competition: c, size: 'sm' }) %>
+          <div class="past-text">
+            <a class="title-link" href="/competitions/<%= c.id %>"><strong><%= c.name %></strong></a>
+            <span class="sub"><%= eventDatesText(c) %> · <%= c.venue %></span>
+          </div>
+          <% if (c.hasResults) { %><a class="btn secondary small" href="/competitions/<%= c.id %>/results">Results</a><% } %>
+        </li>
+      <% }) %>
+    </ul>
+  </section>
+<% } %>
 <%- include('partials/bottom') %>

@@ -106,3 +106,22 @@ test('admins post news; visitors see only public posts', async () => {
   await coach.post('/admin/news').type('form').send({ _csrf, title: 'Hack', body: 'x', audience: 'public' });
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM news_posts WHERE title = 'Hack'").get().n, 0);
 });
+
+test('the front page lists finished competitions apart, newest first, with their results', async () => {
+  const { openDb } = require('../src/db');
+  const { createApp } = require('../src/app');
+  const { createCompetition } = require('../src/services');
+  const request = require('supertest');
+  const db = openDb(':memory:');
+  const year = new Date().getFullYear();
+  createCompetition(db, { name: 'Coming Cup', event_date: `${year + 1}-05-01`, registration_deadline: `${year + 1}-04-01`, venue: 'Hall', status: 'open' });
+  createCompetition(db, { name: 'Old Open', event_date: `${year - 2}-05-01`, registration_deadline: `${year - 2}-04-01`, venue: 'Hall', status: 'closed' });
+  createCompetition(db, { name: 'Last Open', event_date: `${year - 1}-05-01`, registration_deadline: `${year - 1}-04-01`, venue: 'Hall', status: 'closed' });
+  const app = createApp({ db, sessionSecret: 'test-secret', mailer: { configured: false, send: async () => {} } });
+  const page = (await request(app).get('/')).text;
+  const past = page.slice(page.indexOf('Past competitions'));
+  assert.ok(page.indexOf('Coming Cup') < page.indexOf('Past competitions'), 'upcoming ones stay at the top');
+  assert.ok(past.indexOf('Last Open') < past.indexOf('Old Open'), 'newest finished one first');
+  assert.doesNotMatch(past, /Coming Cup/);
+  assert.doesNotMatch(past, /\/results/, 'no results link until results are published');
+});

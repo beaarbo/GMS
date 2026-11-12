@@ -1,6 +1,6 @@
 const express = require('express');
 const {
-  loadDivisionSetup, listNews, getNews, getCompetitionLogo, listCompetitionFiles, getCompetitionFile,
+  loadDivisionSetup, listNews, getNews, today, getCompetitionLogo, listCompetitionFiles, getCompetitionFile,
   getEventDates, competitionResults, competitionProgramme,
 } = require('../services');
 const { formatEventDates } = require('../divisions');
@@ -18,12 +18,19 @@ const HOME_NEWS = 5;
 
 router.get('/', (req, res) => {
   const { db } = req.app.locals;
+  // Upcoming until the competition's last day has passed, as on the coach Home page.
+  const lastDay = '(SELECT MAX(d.event_date) FROM competition_dates d WHERE d.competition_id = c.id)';
   const competitions = db
-    .prepare("SELECT * FROM competitions WHERE status IN ('open', 'closed') ORDER BY status = 'closed', event_date")
-    .all();
+    .prepare(`SELECT c.* FROM competitions c WHERE c.status IN ('open', 'closed') AND ${lastDay} >= ? ORDER BY c.status = 'closed', c.event_date`)
+    .all(today());
+  // Finished ones, newest first, each with a link to its results once any are published.
+  const past = db
+    .prepare(`SELECT c.* FROM competitions c WHERE c.status IN ('open', 'closed') AND ${lastDay} < ? ORDER BY ${lastDay} DESC, c.id DESC`)
+    .all(today())
+    .map((c) => ({ ...c, hasResults: competitionResults(db, c, { published: true }).divisions.length > 0 }));
   // The latest news below the competitions; the News page keeps the rest.
   const news = listNews(db, { signedIn: Boolean(req.user), limit: HOME_NEWS + 1 });
-  res.render('home', { title: 'Competitions', competitions, news: news.slice(0, HOME_NEWS), moreNews: news.length > HOME_NEWS });
+  res.render('home', { title: 'Competitions', competitions, past, news: news.slice(0, HOME_NEWS), moreNews: news.length > HOME_NEWS });
 });
 
 // Members-only posts look like they don't exist to visitors.
