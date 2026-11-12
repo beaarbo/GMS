@@ -507,6 +507,17 @@ label.check { display: flex; align-items: center; gap: var(--space-2); font-weig
 .comp-logo.md { width: 48px; height: 48px; font-size: var(--text-sm); }
 .comp-logo.lg { width: 88px; height: 88px; font-size: var(--text-xl); }
 .club-name { display: inline-flex; align-items: center; gap: var(--space-2); }
+
+/* Athlete photos: a circle, or initials until one is uploaded. */
+.athlete-photo { display: inline-flex; align-items: center; justify-content: center; flex: none; border-radius: 50%; object-fit: cover; border: 1px solid var(--line); background: var(--surface); font-weight: 700; vertical-align: middle; }
+/* No photo yet: a plain person shape, cropped by the circle. */
+.athlete-photo.placeholder { overflow: hidden; align-items: flex-end; background: var(--neutral-soft); border-color: transparent; }
+.athlete-photo.placeholder svg { width: 100%; height: 100%; fill: var(--muted); }
+.athlete-photo.sm { width: 32px; height: 32px; font-size: var(--text-xs); }
+.athlete-photo.md { width: 48px; height: 48px; font-size: var(--text-sm); }
+.athlete-photo.lg { width: 88px; height: 88px; font-size: var(--text-xl); }
+.athlete-name { display: inline-flex; align-items: center; gap: var(--space-2); color: inherit; text-decoration: none; }
+.athlete-name:hover strong { text-decoration: underline; }
 .club-icon-edit { position: relative; display: inline-flex; border-radius: 50%; text-decoration: none; }
 .club-icon-edit-label {
   position: absolute;

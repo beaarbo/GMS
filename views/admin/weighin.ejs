@@ -72,7 +72,12 @@
         <tbody>
           <% rows.forEach((r) => { const action = `/admin/competitions/${competition.id}/weigh-in/${r.id}`; const deciding = pending && pending.registrationId === r.id; %>
             <tr id="reg-<%= r.id %>" class="<%= deciding ? 'row-attention' : '' %>">
-              <td><strong><%= r.last_name %>, <%= r.first_name %></strong><br><span class="club-name hint"><%- include('../partials/club_icon', { clubId: r.club_id, name: r.club_name, size: 'sm' }) %><%= r.club_name %></span></td>
+              <td>
+                <% const athletePage = `/admin/competitions/${competition.id}/athletes/${r.fighter_id}`; %>
+                <a class="athlete-name" href="<%= athletePage %>">
+                  <%- include('../partials/athlete_photo', { url: r.photo_at ? `${athletePage}/photo?v=${encodeURIComponent(r.photo_at)}` : null, name: `${r.first_name} ${r.last_name}`, size: 'md' }) %>
+                  <strong><%= r.last_name %>, <%= r.first_name %></strong>
+                </a><br><span class="club-name hint"><%- include('../partials/club_icon', { clubId: r.club_id, name: r.club_name, size: 'sm' }) %><%= r.club_name %></span></td>
               <td><%= GENDERS[r.gender] %> · <%= r.age_group %> · <%= r.belt_group %></td>
               <td class="nowrap"><strong><%= r.weight_class %></strong><% if (r.entered_weight_class) { %><br><span class="hint">Entered as <%= r.entered_weight_class %></span><% } %></td>
               <td>

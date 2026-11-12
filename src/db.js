@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS clubs (
   id INTEGER PRIMARY KEY,
   name TEXT NOT NULL COLLATE NOCASE UNIQUE,
   city TEXT NOT NULL,
+  -- Three-letter code from src/countries.js (SGP, MAS…), shown with its athletes. Blank: none.
+  country TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -251,6 +253,16 @@ CREATE TABLE IF NOT EXISTS competition_files (
 CREATE INDEX IF NOT EXISTS idx_competition_files ON competition_files(competition_id);
 
 -- Each club's icon, set by its coaches. Select the data column only when serving it.
+-- An athlete's photo, for the club's list, the officials' athlete page and the
+-- printed athlete card. Never shown on public pages: many athletes are minors.
+CREATE TABLE IF NOT EXISTS fighter_photos (
+  fighter_id INTEGER PRIMARY KEY REFERENCES fighters(id) ON DELETE CASCADE,
+  content_type TEXT NOT NULL,
+  data BLOB NOT NULL,
+  uploaded_by INTEGER,
+  uploaded_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS club_icons (
   club_id INTEGER PRIMARY KEY REFERENCES clubs(id) ON DELETE CASCADE,
   content_type TEXT NOT NULL,
@@ -749,6 +761,14 @@ function migrateSettings(db) {
   })();
 }
 
+// Version 24: each club's country. Existing clubs have none until an admin sets it.
+function migrateClubCountry(db) {
+  db.transaction(() => {
+    addColumnIfMissing(db, 'clubs', 'country', "TEXT NOT NULL DEFAULT ''");
+    db.pragma('user_version = 24');
+  })();
+}
+
 function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 1) migrateBelts(db);
   if (db.pragma('user_version', { simple: true }) < 2) migrateSchedule(db);
@@ -773,6 +793,7 @@ function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 21) migrateWinsAndJudgeLinks(db);
   if (db.pragma('user_version', { simple: true }) < 22) migrateDropJudgeLinks(db);
   if (db.pragma('user_version', { simple: true }) < 23) migrateSettings(db);
+  if (db.pragma('user_version', { simple: true }) < 24) migrateClubCountry(db);
 }
 
 // Safe on old databases: only tables that don't exist yet are created.

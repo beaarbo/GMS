@@ -159,7 +159,15 @@ Everyone can change their name, email, password and theme, and choose which emai
 
 - **All entries (Excel)**, on a competition's Registrations page: every kyorugi registration and poomsae entry with club, date of birth, age, belt, division, status and weigh-in result, for insurers and federations. Admin-only, and each download is logged, since it holds minors' details. **Export approved (CSV)** stays for the approved kyorugi list.
 - **Download list (Excel)** on the Weigh-in page and **Download results (Excel)** on the Results page (medallists and the club medal table), for admins and officials.
-- **Athlete cards (PDF)**, on the Registrations page: ten cards to an A4 page, one per approved athlete, with their name, club, divisions and a QR code. Add `?club=<id>` to the address for one club's cards. Scanning a code opens the athlete's page for logged-in admins and officials (after logging in if needed): their weigh-in result with a button that opens them in the weigh-in, their bouts with court, time, opponent and result, and their poomsae entries. The code holds only a link, no personal data, and visitors who scan it get the login page.
+- **Athlete cards (PDF)**, on the Registrations page: ten cards to an A4 page, one per approved athlete, with their photo (or a plain placeholder), name, club with its country code, divisions and a QR code. Add `?club=<id>` to the address for one club's cards. Scanning a code opens the athlete's page for logged-in admins and officials (after logging in if needed): their weigh-in result with a button that opens them in the weigh-in, their bouts with court, time, opponent and result, and their poomsae entries. The code holds only a link, no personal data, and visitors who scan it get the login page.
+
+## Athlete photos
+
+Coaches can add a photo of each athlete from the club dashboard (**Add photo**, or click the athlete's name): JPG or PNG, up to 1 MB. WebP isn't accepted because the card PDF can't print it. Photos are optional; athletes without one show a plain person icon. The photo shows on the club's athlete list, the weigh-in list, the officials' athlete page and the printed athlete card. Only the club, admins and officials can see it, and officials only for athletes entered in that competition. It never appears on public pages.
+
+## Club countries
+
+Each club can have a country, set on **Clubs and coaches** (chosen from a list). Its athletes then show the country's three-letter code before the club, as in **SGP · Tigers Taekwondo Club** or **MAS · Dragons Martial Arts**, on the bout lists and their PDF, brackets, court screens, results, the medal table and athlete cards. A club without a country shows its name alone.
 
 ## Deleting things
 

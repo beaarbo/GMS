@@ -2,9 +2,12 @@
 <% const isAdmin = user.role === 'admin'; %>
 <p class="breadcrumb"><% if (isAdmin) { %><a href="/admin/competitions">Competitions</a><% } else { %><a href="/official">Competition day</a><% } %></p>
 <div class="page-head">
-  <div>
-    <h1><%= fighter.last_name %> <%= fighter.first_name %></h1>
-    <p class="sub"><%= fighter.club %> · <%= competition.name %></p>
+  <div class="title-row">
+    <%- include('../partials/athlete_photo', { url: photoUrl, name: `${fighter.first_name} ${fighter.last_name}`, size: 'lg' }) %>
+    <div>
+      <h1><%= fighter.last_name %> <%= fighter.first_name %></h1>
+      <p class="sub"><%= fighter.club %> · <%= competition.name %></p>
+    </div>
   </div>
 </div>
 

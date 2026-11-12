@@ -13,7 +13,9 @@ function cardAthletes(db, competition, { clubId = null } = {}) {
   const athletes = new Map();
   const add = (fighter, line) => {
     if (!athletes.has(fighter.fighter_id)) {
-      athletes.set(fighter.fighter_id, { fighterId: fighter.fighter_id, firstName: fighter.first_name, lastName: fighter.last_name, club: fighter.club_name, lines: [] });
+      // The club as the bout list shows it, its country code first.
+      const club = fighter.club_country ? `${fighter.club_country} · ${fighter.club_name}` : fighter.club_name;
+      athletes.set(fighter.fighter_id, { fighterId: fighter.fighter_id, firstName: fighter.first_name, lastName: fighter.last_name, club, lines: [] });
     }
     athletes.get(fighter.fighter_id).lines.push(line);
   };
@@ -21,7 +23,7 @@ function cardAthletes(db, competition, { clubId = null } = {}) {
     .all(...[competition.id, clubId].filter(Boolean))
     .forEach((r) => add(r, `Kyorugi: ${r.age_group} · ${GENDERS[r.gender]} · ${r.belt_group} · ${r.weight_class}`));
   db.prepare(
-    `SELECT m.fighter_id, f.first_name, f.last_name, c.name AS club_name, e.event, e.gender, a.name AS age_group, b.name AS belt_group
+    `SELECT m.fighter_id, f.first_name, f.last_name, c.name AS club_name, c.country AS club_country, e.event, e.gender, a.name AS age_group, b.name AS belt_group
      FROM poomsae_entries e
      JOIN poomsae_members m ON m.entry_id = e.id
      JOIN fighters f ON f.id = m.fighter_id
@@ -57,9 +59,32 @@ function drawQr(doc, text, x, y, size) {
 
 const PAGE = { margin: 28, columns: 2, rows: 5 };
 
-function drawCard(doc, athlete, { x, y, width, height, competition, publicUrl }) {
+// The athlete's photo in a circle, or a plain person shape when there's none (or it can't be read).
+function drawPhoto(doc, photo, x, y, size) {
+  const r = size / 2;
+  if (photo) {
+    try {
+      doc.save().circle(x + r, y + r, r).clip();
+      doc.image(photo, x, y, { cover: [size, size], align: 'center', valign: 'center' });
+      doc.restore();
+      doc.save().lineWidth(0.5).strokeColor('#c9ced6').circle(x + r, y + r, r).stroke().restore();
+      return;
+    } catch (error) {
+      doc.restore();
+    }
+  }
+  const u = size / 24;
+  doc.save().circle(x + r, y + r, r).clip();
+  doc.rect(x, y, size, size).fill('#eceef3');
+  doc.fillColor('#9aa1ab').circle(x + 12 * u, y + 9 * u, 4.2 * u).fill();
+  doc.ellipse(x + 12 * u, y + 22 * u, 8.5 * u, 8.2 * u).fill();
+  doc.restore();
+}
+
+function drawCard(doc, athlete, { x, y, width, height, competition, publicUrl, photo }) {
   const pad = 10;
   const qrSize = 84;
+  const photoSize = 72;
   doc.save().dash(3, { space: 3 }).lineWidth(0.5).strokeColor('#9aa1ab').rect(x, y, width, height).stroke().restore();
   // The coloured stripe of the site's mark, red over blue.
   doc.save().rect(x, y, width / 2, 4).fill('#c62828').rect(x + width / 2, y, width / 2, 4).fill('#1565c0').restore();
@@ -67,11 +92,16 @@ function drawCard(doc, athlete, { x, y, width, height, competition, publicUrl })
   const textWidth = width - qrSize - pad * 3;
   doc.fillColor('#555555').font('Helvetica').fontSize(7.5)
     .text(competition.name, x + pad, y + pad + 2, { width: textWidth, height: 10, ellipsis: true, lineBreak: false });
+  // The photo, with the name and club beside it.
+  const photoY = y + pad + 16;
+  drawPhoto(doc, photo, x + pad, photoY, photoSize);
+  const nameX = x + pad + photoSize + 10;
+  const nameWidth = textWidth - photoSize - 10;
   doc.fillColor('#111111').font('Helvetica-Bold').fontSize(14)
-    .text(`${athlete.lastName} ${athlete.firstName}`, x + pad, y + pad + 16, { width: textWidth, height: 34, ellipsis: true });
+    .text(`${athlete.lastName} ${athlete.firstName}`, nameX, photoY + 4, { width: nameWidth, height: 34, ellipsis: true });
   doc.fillColor('#333333').font('Helvetica').fontSize(9)
-    .text(athlete.club, x + pad, doc.y + 2, { width: textWidth, height: 12, ellipsis: true, lineBreak: false });
-  let lineY = doc.y + 8;
+    .text(athlete.club, nameX, doc.y + 2, { width: nameWidth, height: 24, ellipsis: true });
+  let lineY = Math.max(doc.y, photoY + photoSize) + 8;
   doc.fontSize(7.5).fillColor('#222222');
   athlete.lines.slice(0, 4).forEach((line) => {
     doc.text(line, x + pad, lineY, { width: textWidth, height: 18, ellipsis: true });
@@ -83,7 +113,9 @@ function drawCard(doc, athlete, { x, y, width, height, competition, publicUrl })
     .text('Officials: scan at the weigh-in and court', x + width - qrSize - pad - 4, y + pad + qrSize + 8, { width: qrSize + 8, align: 'center' });
 }
 
-function writeAthleteCards(stream, { competition, athletes, publicUrl }) {
+// photoFor(fighterId) returns that athlete's photo (JPG or PNG bytes) or null.
+// Photos are read one card at a time, so a big club never sits in memory at once.
+function writeAthleteCards(stream, { competition, athletes, publicUrl, photoFor = () => null }) {
   const doc = new PDFDocument({ size: 'A4', autoFirstPage: false, margin: 0, info: { Title: `Athlete cards - ${competition.name}` } });
   doc.pipe(stream);
   const cardWidth = (595.28 - PAGE.margin * 2) / PAGE.columns;
@@ -103,6 +135,7 @@ function writeAthleteCards(stream, { competition, athletes, publicUrl }) {
       height: cardHeight,
       competition,
       publicUrl,
+      photo: photoFor(athlete.fighterId),
     });
   });
   doc.end();

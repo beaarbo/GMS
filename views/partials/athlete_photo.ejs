@@ -1,0 +1,2 @@
+<%# An athlete's photo in a circle, or a plain person icon until one is uploaded (photos are optional). Pass url (or null), name and size ('sm', 'md' or 'lg'). %>
+<% if (url) { %><img class="athlete-photo <%= size %>" src="<%= url %>" alt="Photo of <%= name %>"><% } else { %><span class="athlete-photo <%= size %> placeholder" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><circle cx="12" cy="9" r="4.2"/><path d="M3.5 22c0-4.9 3.8-8.2 8.5-8.2s8.5 3.3 8.5 8.2z"/></svg></span><% } %>

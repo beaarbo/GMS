@@ -1101,7 +1101,11 @@ router.get('/competitions/:id(\\d+)/cards.pdf', (req, res) => {
   const athletes = cardAthletes(db, req.competition, { clubId });
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="athlete-cards-competition-${req.competition.id}${clubId ? `-club-${clubId}` : ''}.pdf"`);
-  return writeAthleteCards(res, { competition: req.competition, athletes, publicUrl: notify.publicUrl });
+  const photoFor = (fighterId) => {
+    const photo = db.prepare('SELECT data FROM fighter_photos WHERE fighter_id = ?').get(fighterId);
+    return photo ? photo.data : null;
+  };
+  return writeAthleteCards(res, { competition: req.competition, athletes, publicUrl: notify.publicUrl, photoFor });
 });
 
 router.get('/fighters/:id(\\d+)/document', (req, res) => {

@@ -71,7 +71,12 @@
         <tbody>
           <% fighters.forEach((f) => { %>
             <tr>
-              <td><strong><%= f.last_name %>, <%= f.first_name %></strong></td>
+              <td>
+                <a class="athlete-name" href="/club/fighters/<%= f.id %>/photo" title="<%= f.photo_at ? 'Change photo' : 'Add a photo' %>">
+                  <%- include('../partials/athlete_photo', { url: f.photo_at ? `/club/fighters/${f.id}/photo/file?v=${encodeURIComponent(f.photo_at)}` : null, name: `${f.first_name} ${f.last_name}`, size: 'sm' }) %>
+                  <strong><%= f.last_name %>, <%= f.first_name %></strong>
+                </a>
+              </td>
               <td><%= GENDERS[f.gender] %></td>
               <td class="nowrap"><%= formatDate(f.date_of_birth) %></td>
               <td><%= beltName(f.belt_rank) %></td>
@@ -85,6 +90,7 @@
               <td>
                 <div class="actions">
                   <a class="btn secondary small" href="/club/fighters/<%= f.id %>/edit">Edit</a>
+                  <a class="btn secondary small" href="/club/fighters/<%= f.id %>/photo"><%= f.photo_at ? 'Photo' : 'Add photo' %></a>
                   <form method="post" action="/club/fighters/<%= f.id %>/delete" data-confirm="Remove <%= f.first_name %> <%= f.last_name %>?">
                     <input type="hidden" name="_csrf" value="<%= csrf %>">
                     <button class="btn danger small" type="submit">Remove</button>

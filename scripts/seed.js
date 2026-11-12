@@ -56,7 +56,7 @@ async function main() {
   const year = new Date().getFullYear();
   const clubs = [
     {
-      club: { name: 'Tigers Taekwondo Club', city: 'Demo City' },
+      club: { name: 'Tigers Taekwondo Club', city: 'Demo City', country: 'SGP' },
       coach: { full_name: 'Demo Coach A', phone: '555-0101', email: 'tigers@demo.test' },
       fighters: [
         ['Alex', 'Reyes', 'M', `${year - 16}-03-14`, 3, 58],
@@ -68,7 +68,7 @@ async function main() {
       ],
     },
     {
-      club: { name: 'Dragons Martial Arts', city: 'Demo City' },
+      club: { name: 'Dragons Martial Arts', city: 'Demo City', country: 'MAS' },
       coach: { full_name: 'Demo Coach B', phone: '555-0102', email: 'dragons@demo.test' },
       fighters: [
         ['Kai', 'Tan', 'M', `${year - 16}-05-30`, 3, 57.5],

@@ -40,7 +40,8 @@ const { writeBoutListPdf } = require('../boutlistPdf');
 const { computeMedals, WIN_TYPES, readBoutScore } = require('../bracket');
 const { clean, requireRole, notFound, wrap } = require('./helpers');
 const { weighInSheets, resultsSheets, sendXlsx, weighLabel } = require('../exports');
-const { REGISTRATION_SELECT } = require('../services');
+const { REGISTRATION_SELECT, getFighterPhoto } = require('../services');
+const { sendPhoto } = require('../documents');
 
 const router = express.Router();
 const staff = requireRole(['admin', 'official']);
@@ -94,10 +95,12 @@ router.get('/competitions/:id(\\d+)/athletes/:fighterId(\\d+)', (req, res) => {
         return { ...b, own, opponent: b[own === 'blue' ? 'red' : 'blue'], dayLabel: eventDates[b.day - 1] ? formatDay(eventDates[b.day - 1]) : `Day ${b.day}` };
       })
     : [];
+  const photo = db.prepare('SELECT uploaded_at FROM fighter_photos WHERE fighter_id = ?').get(fighterId);
   return res.render('admin/athlete', {
     title: `${fighter.last_name} ${fighter.first_name}`,
     competition,
     fighter,
+    photoUrl: photo ? `/admin/competitions/${competition.id}/athletes/${fighterId}/photo?v=${encodeURIComponent(photo.uploaded_at)}` : null,
     registration,
     weighText: registration && registration.status === 'approved' ? weighLabel(registration) : null,
     weighInLink: registration ? weighInPath(competition, { q: `${fighter.first_name} ${fighter.last_name}` }, registration.id) : null,
@@ -105,6 +108,19 @@ router.get('/competitions/:id(\\d+)/athletes/:fighterId(\\d+)', (req, res) => {
     entries,
     poomsaeTitle: poomsaeDivisionTitle,
   });
+});
+
+// The photo on that page, only for athletes entered in this competition.
+router.get('/competitions/:id(\\d+)/athletes/:fighterId(\\d+)/photo', (req, res) => {
+  const { db } = req.app.locals;
+  const fighterId = Number(req.params.fighterId);
+  const entered = db.prepare(
+    `SELECT 1 FROM registrations WHERE competition_id = ? AND fighter_id = ?
+     UNION SELECT 1 FROM poomsae_members m JOIN poomsae_entries e ON e.id = m.entry_id WHERE e.competition_id = ? AND m.fighter_id = ?`
+  ).get(req.competition.id, fighterId, req.competition.id, fighterId);
+  const photo = entered && getFighterPhoto(db, fighterId);
+  if (!photo) return notFound(res);
+  return sendPhoto(res, photo);
 });
 
 router.get('/competitions/:id(\\d+)/weigh-in', (req, res) => {

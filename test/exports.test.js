@@ -105,3 +105,69 @@ test('a card links to the athlete page, which an official reaches after logging 
   assert.match(page.text, /Lee Mia \(=Lions\)/);
   assert.equal((await agent.get(`/admin/competitions/${compId}/athletes/9999`)).status, 404);
 });
+
+test('athlete photos: the club uploads one, officials see it, other clubs and visitors never do, and the card carries it', async () => {
+  const { createCoachAccount, applyToClub, approveApplication, createClub: makeClub } = require('../src/services');
+  const { db, app, compId, ana } = await setup();
+  const clubId = db.prepare('SELECT club_id FROM fighters WHERE id = ?').get(ana).club_id;
+  const coachId = await createCoachAccount(db, { full_name: 'Coach', phone: '1', email: 'coach@test.test', password: PASSWORD });
+  applyToClub(db, coachId, clubId);
+  approveApplication(db, db.prepare('SELECT id FROM club_applications WHERE user_id = ?').get(coachId).id);
+  const otherClub = makeClub(db, { name: 'Bears', city: 'City' });
+  const otherId = await createCoachAccount(db, { full_name: 'Other', phone: '1', email: 'other@test.test', password: PASSWORD });
+  applyToClub(db, otherId, otherClub);
+  approveApplication(db, db.prepare('SELECT id FROM club_applications WHERE user_id = ?').get(otherId).id);
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
+  const webp = Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WEBPVP8 '), Buffer.alloc(8)]);
+
+  const { agent: coach } = await login(app, 'coach@test.test');
+  const upload = async (file, name) => {
+    const _csrf = await csrfFrom(coach, `/club/fighters/${ana}/photo`);
+    return coach.post(`/club/fighters/${ana}/photo`).field('_csrf', _csrf).attach('photo', file, name);
+  };
+  assert.equal((await upload(webp, 'a.webp')).status, 400, 'WebP is refused: the card PDF cannot use it');
+  assert.equal((await upload(png, 'a.png')).status, 302);
+  assert.match((await coach.get('/club')).text, /\/club\/fighters\/\d+\/photo\/file\?v=/);
+  assert.equal((await coach.get(`/club/fighters/${ana}/photo/file`)).status, 200);
+
+  const { agent: other } = await login(app, 'other@test.test');
+  assert.equal((await other.get(`/club/fighters/${ana}/photo/file`)).status, 404);
+  assert.equal((await request(app).get(`/club/fighters/${ana}/photo/file`)).status, 302);
+  assert.equal((await request(app).get(`/admin/competitions/${compId}/athletes/${ana}/photo`)).status, 302);
+
+  const { agent: official } = await login(app, 'ref@test.test');
+  const page = await official.get(`/admin/competitions/${compId}/athletes/${ana}`);
+  const photoLink = page.text.match(/src="(\/admin\/competitions\/\d+\/athletes\/\d+\/photo\?v=[^"]+)"/)[1];
+  assert.equal((await official.get(photoLink.replace(/&amp;/g, '&'))).status, 200);
+  // Only for athletes in this competition.
+  const outsider = Number(db.prepare("INSERT INTO fighters (club_id, first_name, last_name, gender, date_of_birth, belt_rank) VALUES (?, 'Zed', 'Out', 'M', '2010-01-01', 1)").run(clubId).lastInsertRowid);
+  db.prepare("INSERT INTO fighter_photos (fighter_id, content_type, data) VALUES (?, 'image/png', ?)").run(outsider, png);
+  assert.equal((await official.get(`/admin/competitions/${compId}/athletes/${outsider}/photo`)).status, 404);
+
+  const { agent: admin } = await login(app, 'admin@test.test');
+  assert.equal((await admin.get(`/admin/competitions/${compId}/cards.pdf`)).status, 200);
+});
+
+test('a club’s country code shows beside its athletes on the bout list, and athletes without a photo get a plain icon', async () => {
+  const { db, app, compId, ana } = await setup();
+  db.prepare("UPDATE clubs SET country = 'SGP' WHERE name = 'Tigers'").run();
+  db.prepare("UPDATE competitions SET bouts_published_at = datetime('now') WHERE id = ?").run(compId);
+  const list = (await request(app).get(`/competitions/${compId}/bouts`)).text;
+  assert.match(list, /SGP · Tigers/);
+  assert.doesNotMatch(list, /· =Lions/, 'a club with no country shows its name alone');
+  const competition = db.prepare('SELECT * FROM competitions WHERE id = ?').get(compId);
+  assert.deepEqual(cardAthletes(db, competition).map((a) => a.club), ['=Lions', 'SGP · Tigers'], 'the athlete card matches');
+
+  const { agent: official } = await login(app, 'ref@test.test');
+  const weighIn = (await official.get(`/admin/competitions/${compId}/weigh-in`)).text;
+  assert.match(weighIn, new RegExp(`href="/admin/competitions/${compId}/athletes/${ana}"`));
+  assert.match(weighIn, /athlete-photo md placeholder/);
+
+  const { agent: admin } = await login(app, 'admin@test.test');
+  const clubId = db.prepare("SELECT id FROM clubs WHERE name = 'Tigers'").get().id;
+  const _csrf = await csrfFrom(admin, '/admin/clubs');
+  await admin.post(`/admin/clubs/${clubId}`).type('form').send({ _csrf, name: 'Tigers', city: 'City', country: 'mas' });
+  assert.equal(db.prepare('SELECT country FROM clubs WHERE id = ?').get(clubId).country, 'MAS');
+  await admin.post(`/admin/clubs/${clubId}`).type('form').send({ _csrf, name: 'Tigers', city: 'City', country: 'XYZ' });
+  assert.equal(db.prepare('SELECT country FROM clubs WHERE id = ?').get(clubId).country, '', 'unknown codes are not kept');
+});

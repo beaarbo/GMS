@@ -10,6 +10,9 @@ const {
   getEventDates,
   saveFighterDocument,
   getFighterDocument,
+  getFighterPhoto,
+  saveFighterPhoto,
+  deleteFighterPhoto,
   hasApprovedRegistration,
   saveClubIcon,
   deleteClubIcon,
@@ -24,7 +27,7 @@ const {
   REGISTRATION_SELECT,
 } = require('../services');
 const { POOMSAE_EVENTS, hasKyorugi, hasPoomsae, placeEntry, entryResult } = require('../poomsae');
-const { documentLabel, documentTypeFor, detectFileType, detectIconType, sendDocument } = require('../documents');
+const { documentLabel, documentTypeFor, detectFileType, detectIconType, detectPhotoType, sendDocument, sendPhoto } = require('../documents');
 const { layoutBracket, computeMedals, clubAthleteSummary } = require('../bracket');
 const { writeBoutListPdf } = require('../boutlistPdf');
 const { clean, toArray, requireRole, notFound, wrap } = require('./helpers');
@@ -68,7 +71,8 @@ router.get('/', (req, res) => {
     title: 'Club dashboard',
     fighters: db
       .prepare(
-        `SELECT f.*, (SELECT d.doc_type FROM fighter_documents d WHERE d.fighter_id = f.id) AS document_type
+        `SELECT f.*, (SELECT d.doc_type FROM fighter_documents d WHERE d.fighter_id = f.id) AS document_type,
+           (SELECT p.uploaded_at FROM fighter_photos p WHERE p.fighter_id = f.id) AS photo_at
          FROM fighters f WHERE f.club_id = ? ORDER BY f.last_name, f.first_name`
       )
       .all(clubId),
@@ -240,6 +244,48 @@ router.get('/fighters/:id(\\d+)/document', (req, res) => {
   const fighter = ownFighter(req, req.params.id);
   if (!fighter) return notFound(res);
   return documentPage(req, res, fighter);
+});
+
+// An athlete's photo: for the club's list, the officials' athlete page and the card.
+function photoPage(req, res, fighter, status = 200, error = null) {
+  const photo = getFighterPhoto(req.app.locals.db, fighter.id);
+  return res.status(status).render('club/photo', { title: 'Athlete photo', fighter, photoAt: photo && photo.uploaded_at, error });
+}
+
+router.get('/fighters/:id(\\d+)/photo', (req, res) => {
+  const fighter = ownFighter(req, req.params.id);
+  if (!fighter) return notFound(res);
+  return photoPage(req, res, fighter);
+});
+
+router.post('/fighters/:id(\\d+)/photo', (req, res) => {
+  const fighter = ownFighter(req, req.params.id);
+  if (!fighter) return notFound(res);
+  if (req.uploadError) return photoPage(req, res, fighter, 400, req.uploadError);
+  if (!req.file) return photoPage(req, res, fighter, 400, 'Choose a photo to upload.');
+  const type = detectPhotoType(req.file.buffer);
+  if (!type) return photoPage(req, res, fighter, 400, 'That file type is not accepted. Upload a JPG or PNG photo.');
+  saveFighterPhoto(req.app.locals.db, fighter.id, { data: req.file.buffer, contentType: type.contentType, userId: req.user.id });
+  req.logActivity('athlete.photo', `Uploaded a photo of ${fighter.first_name} ${fighter.last_name} (${req.user.club_name})`);
+  req.flash('success', `Photo saved for ${fighter.first_name} ${fighter.last_name}.`);
+  return res.redirect('/club');
+});
+
+router.post('/fighters/:id(\\d+)/photo/delete', (req, res) => {
+  const fighter = ownFighter(req, req.params.id);
+  if (!fighter) return notFound(res);
+  if (deleteFighterPhoto(req.app.locals.db, fighter.id)) {
+    req.logActivity('athlete.photo_removed', `Removed the photo of ${fighter.first_name} ${fighter.last_name} (${req.user.club_name})`);
+    req.flash('success', `Photo removed for ${fighter.first_name} ${fighter.last_name}.`);
+  }
+  return res.redirect('/club');
+});
+
+router.get('/fighters/:id(\\d+)/photo/file', (req, res) => {
+  const fighter = ownFighter(req, req.params.id);
+  const photo = fighter && getFighterPhoto(req.app.locals.db, fighter.id);
+  if (!photo) return notFound(res);
+  return sendPhoto(res, photo);
 });
 
 router.get('/fighters/:id(\\d+)/document/file', (req, res) => {

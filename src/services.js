@@ -336,6 +336,22 @@ function clubIconVersions(db) {
   return new Map(db.prepare('SELECT club_id, uploaded_at FROM club_icons').all().map((r) => [r.club_id, r.uploaded_at]));
 }
 
+function saveFighterPhoto(db, fighterId, { data, contentType, userId = null }) {
+  db.prepare(
+    `INSERT INTO fighter_photos (fighter_id, content_type, data, uploaded_by) VALUES (?, ?, ?, ?)
+     ON CONFLICT(fighter_id) DO UPDATE SET content_type = excluded.content_type, data = excluded.data,
+       uploaded_by = excluded.uploaded_by, uploaded_at = datetime('now')`
+  ).run(fighterId, contentType, data, userId);
+}
+
+function getFighterPhoto(db, fighterId) {
+  return db.prepare('SELECT fighter_id, content_type, data, uploaded_at FROM fighter_photos WHERE fighter_id = ?').get(fighterId) || null;
+}
+
+function deleteFighterPhoto(db, fighterId) {
+  return db.prepare('DELETE FROM fighter_photos WHERE fighter_id = ?').run(fighterId).changes > 0;
+}
+
 function getFighterDocument(db, fighterId) {
   return db.prepare('SELECT * FROM fighter_documents WHERE fighter_id = ?').get(fighterId) || null;
 }
@@ -369,8 +385,12 @@ function hasEntryHistory(db, fighterId) {
   return hasEntryIn(db, fighterId, ['pending', 'approved', 'rejected']);
 }
 
+// How a club appears beside its athletes on bout lists, results and screens:
+// its country code first when it has one, as in "SGP · Tigers Taekwondo Club".
+const clubLabel = (alias) => `CASE WHEN ${alias}.country != '' THEN ${alias}.country || ' · ' || ${alias}.name ELSE ${alias}.name END`;
+
 const POOMSAE_SELECT = `
-  SELECT e.*, c.name AS club_name, a.name AS age_group, a.min_age, b.name AS belt_group, b.min_rank
+  SELECT e.*, c.name AS club_name, ${clubLabel('c')} AS club_label, a.name AS age_group, a.min_age, b.name AS belt_group, b.min_rank
   FROM poomsae_entries e
   JOIN clubs c ON c.id = e.club_id
   JOIN poomsae_age_groups a ON a.id = e.age_group_id
@@ -542,7 +562,7 @@ function loadPoomsaeBrackets(db, competitionId, entries) {
   db.prepare('SELECT * FROM poomsae_bouts WHERE competition_id = ? ORDER BY division_key, round, position').all(competitionId).forEach((row) => {
     const side = (color) => {
       const entry = byId.get(row[`${color}_entry_id`]);
-      return entry ? { registrationId: entry.id, name: entry.names, club: entry.club_name, clubId: entry.club_id, seed: row[`${color}_seed`] } : null;
+      return entry ? { registrationId: entry.id, name: entry.names, club: entry.club_label, clubId: entry.club_id, seed: row[`${color}_seed`] } : null;
     };
     const blue = side('blue');
     const red = side('red');
@@ -767,7 +787,7 @@ function poomsaeBoutList(db, competition, { clubId = null, published = false } =
         pages.push({
           kind: 'list', key: d.key, title: boutListTitle(d), day: d.listDay, court: d.listCourt, start: d.order[0].perform_time || '',
           meta: [`Day: ${dayLabel(d.listDay)}`, `Poomsae court: ${d.listCourt || '-'}`, `Entries: ${d.order.length}`, `Starts: ${d.order[0].perform_time || '-'}`],
-          performers: d.order.map((e) => ({ id: e.id, name: e.names, club: e.club_name, clubId: e.club_id, time: e.perform_time })),
+          performers: d.order.map((e) => ({ id: e.id, name: e.names, club: e.club_label, clubId: e.club_id, time: e.perform_time })),
           dayLabel: dayLabel(d.listDay),
         });
       }
@@ -797,7 +817,7 @@ function poomsaeCourtItems(db, competition, { published = false } = {}) {
     if (showLists && d.listCourt) {
       d.order.forEach((e) => items.push({
         kind: 'perform', id: e.id, day: d.listDay, court: d.listCourt, time: e.perform_time || '', title: d.title,
-        name: e.names, club: e.club_name, score: e.score, done: e.score !== null, place: e.perform_order, of: d.order.length,
+        name: e.names, club: e.club_label, score: e.score, done: e.score !== null, place: e.perform_order, of: d.order.length,
       }));
     }
     if (showBrackets && d.bouts && d.court) {
@@ -869,7 +889,7 @@ function competitionResults(db, competition, { published = false, event = null }
   }
   if (event !== 'kyorugi' && hasPoomsae(competition)) {
     const entries = listPoomsaeEntries(db, competition.id);
-    const byId = new Map(entries.map((e) => [e.id, { name: e.names, club: e.club_name, clubId: e.club_id }]));
+    const byId = new Map(entries.map((e) => [e.id, { name: e.names, club: e.club_label, clubId: e.club_id }]));
     poomsaeDivisions(entries, competition, loadPoomsaeBrackets(db, competition.id, entries), loadPoomsaeSettings(db, competition.id)).forEach((d) => {
       const visible = d.mode === 'score' ? competition.poomsae_published_at : competition.poomsae_brackets_published_at;
       if ((published && !visible) || d.medalists.gold.length === 0) return;
@@ -986,7 +1006,7 @@ function recordPoomsaeBout(db, competitionId, boutId, side) {
 
 const REGISTRATION_SELECT = `
   SELECT r.*, f.first_name, f.last_name, f.gender, f.date_of_birth, f.belt_rank,
-         c.name AS club_name, a.name AS age_group, a.min_age,
+         c.name AS club_name, c.country AS club_country, a.name AS age_group, a.min_age,
          b.name AS belt_group, b.min_rank, w.label AS weight_class, w.max_kg,
          (SELECT d.doc_type FROM fighter_documents d WHERE d.fighter_id = r.fighter_id) AS document_type
   FROM registrations r
@@ -1128,7 +1148,8 @@ const DRAWN = "r.status = 'approved' AND (r.weigh_status IS NULL OR r.weigh_stat
 function listWeighIns(db, competitionId) {
   return db
     .prepare(
-      `${REGISTRATION_SELECT.replace('FROM registrations r', ', ew.label AS entered_weight_class FROM registrations r')}
+      `${REGISTRATION_SELECT.replace('FROM registrations r', `, ew.label AS entered_weight_class,
+         (SELECT p.uploaded_at FROM fighter_photos p WHERE p.fighter_id = r.fighter_id) AS photo_at FROM registrations r`)}
        LEFT JOIN weight_classes ew ON ew.id = r.entered_weight_class_id
        WHERE r.competition_id = ? AND r.status = 'approved' ORDER BY ${DIVISION_ORDER}`
     )
@@ -1519,8 +1540,8 @@ function loadBoutList(db, competitionId) {
   const rows = db
     .prepare(
       `SELECT bt.*, a.name AS age_group, a.min_age, a.max_age, bg.name AS belt_group, w.label AS weight_class,
-         fb.first_name AS blue_first, fb.last_name AS blue_last, cb.name AS blue_club, cb.id AS blue_club_id,
-         fr.first_name AS red_first, fr.last_name AS red_last, cr.name AS red_club, cr.id AS red_club_id
+         fb.first_name AS blue_first, fb.last_name AS blue_last, ${clubLabel('cb')} AS blue_club, cb.id AS blue_club_id,
+         fr.first_name AS red_first, fr.last_name AS red_last, ${clubLabel('cr')} AS red_club, cr.id AS red_club_id
        FROM bouts bt
        JOIN age_groups a ON a.id = bt.age_group_id
        JOIN belt_groups bg ON bg.id = bt.belt_group_id
@@ -1781,8 +1802,8 @@ async function ensureAdmin(db, email, password) {
   return true;
 }
 
-function createClub(db, { name, city }) {
-  return Number(db.prepare('INSERT INTO clubs (name, city) VALUES (?, ?)').run(name, city).lastInsertRowid);
+function createClub(db, { name, city, country = '' }) {
+  return Number(db.prepare('INSERT INTO clubs (name, city, country) VALUES (?, ?, ?)').run(name, city, country).lastInsertRowid);
 }
 
 async function createCoachAccount(db, { full_name, phone, email, password }) {
@@ -1926,6 +1947,9 @@ function cleanUpDocuments(db, days) {
 }
 
 module.exports = {
+  saveFighterPhoto,
+  getFighterPhoto,
+  deleteFighterPhoto,
   cleanUpDocuments,
   today,
   isRegistrationOpen,

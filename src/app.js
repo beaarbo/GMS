@@ -160,6 +160,7 @@ function createApp({
     { path: /^\/club\/fighters\/\d+\/document$/, field: 'document', maxBytes: MAX_DOCUMENT_BYTES, tooBig: 'That file is over the 5 MB limit.' },
     { path: /^\/club\/fighters\/import$/, field: 'sheet', maxBytes: MAX_IMPORT_BYTES, tooBig: 'That file is over the 1 MB limit.' },
     { path: /^\/club\/icon$/, field: 'icon', maxBytes: MAX_ICON_BYTES, tooBig: 'That picture is over the 1 MB limit.' },
+    { path: /^\/club\/fighters\/\d+\/photo$/, field: 'photo', maxBytes: MAX_ICON_BYTES, tooBig: 'That photo is over the 1 MB limit.' },
     { path: /^\/admin\/competitions\/\d+\/logo$/, field: 'logo', maxBytes: MAX_ICON_BYTES, tooBig: 'That logo is over the 1 MB limit.' },
     { path: /^\/admin\/competitions\/\d+\/files$/, field: 'file', maxBytes: MAX_ATTACHMENT_BYTES, tooBig: 'That file is over the 10 MB limit.' },
     { path: /^\/admin\/settings\/logo$/, field: 'logo', maxBytes: MAX_ICON_BYTES, tooBig: 'That logo is over the 1 MB limit.' },

@@ -83,6 +83,20 @@ function detectIconType(buffer) {
   return type && type.contentType.startsWith('image/') ? type : null;
 }
 
+// Sends an athlete's photo. Its links carry the upload time, so a browser may
+// keep its copy, but never a shared cache: the photo is of a child, often.
+function sendPhoto(res, photo) {
+  res.setHeader('Content-Type', photo.content_type);
+  res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
+  return res.send(photo.data);
+}
+
+// Athlete photos go on the printed card, and the PDF library reads only JPG and PNG.
+function detectPhotoType(buffer) {
+  const type = detectFileType(buffer);
+  return type && ['image/jpeg', 'image/png'].includes(type.contentType) ? type : null;
+}
+
 // Short letters shown when a club has no icon, for example "TT" for Tigers Taekwondo.
 function clubInitials(name) {
   const words = String(name || '').split(/\s+/).filter((w) => /^[\p{L}\p{N}]/u.test(w));
@@ -90,6 +104,8 @@ function clubInitials(name) {
 }
 
 module.exports = {
+  detectPhotoType,
+  sendPhoto,
   MAX_DOCUMENT_BYTES,
   MAX_ICON_BYTES,
   MAX_ATTACHMENT_BYTES,

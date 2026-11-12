@@ -1,0 +1,34 @@
+<%- include('../partials/top') %>
+<p class="breadcrumb"><a href="/club">Club dashboard</a></p>
+<div class="card narrow">
+  <h1>Photo of <%= fighter.first_name %> <%= fighter.last_name %></h1>
+  <p class="sub">Shown on your athlete list, on the athlete card printed for competition day, and to the organisers and officials who check them in. It never appears on public pages.</p>
+  <% if (error) { %><div class="notice error" role="alert"><%= error %></div><% } %>
+
+  <% const photoUrl = photoAt ? `/club/fighters/${fighter.id}/photo/file?v=${encodeURIComponent(photoAt)}` : null; %>
+  <div class="icon-current">
+    <%- include('../partials/athlete_photo', { url: photoUrl, name: `${fighter.first_name} ${fighter.last_name}`, size: 'lg' }) %>
+    <span class="hint"><%= photoAt ? 'Current photo' : 'No photo yet. A photo is optional; until there is one, this plain icon is shown.' %></span>
+  </div>
+
+  <form method="post" action="/club/fighters/<%= fighter.id %>/photo" enctype="multipart/form-data">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <div class="field">
+      <label for="photo"><%= photoAt ? 'Replace with a new photo' : 'Choose a photo' %></label>
+      <input id="photo" name="photo" type="file" accept="image/jpeg,image/png" required>
+      <p class="hint">JPG or PNG, up to 1 MB. A head-and-shoulders photo works best: it's shown in a circle.</p>
+    </div>
+    <div class="actions">
+      <button class="btn" type="submit"><%= photoAt ? 'Replace' : 'Upload' %></button>
+      <a class="btn secondary" href="/club">Cancel</a>
+    </div>
+  </form>
+
+  <% if (photoAt) { %>
+    <form class="icon-remove" method="post" action="/club/fighters/<%= fighter.id %>/photo/delete" data-confirm="Remove the photo of <%= fighter.first_name %> <%= fighter.last_name %>?">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <button class="btn danger small" type="submit">Remove photo</button>
+    </form>
+  <% } %>
+</div>
+<%- include('../partials/bottom') %>

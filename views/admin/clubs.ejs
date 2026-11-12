@@ -58,7 +58,15 @@
         <label for="new-city">City</label>
         <input id="new-city" name="city" required>
       </div>
+      <div class="field">
+        <label for="new-country">Country</label>
+        <select id="new-country" name="country">
+          <option value="">Not set</option>
+          <% countries.forEach(([code, name]) => { %><option value="<%= code %>"><%= name %> (<%= code %>)</option><% }) %>
+        </select>
+      </div>
     </div>
+    <p class="hint">The country’s three-letter code (SGP, MAS…) shows beside the club’s athletes on bout lists and results.</p>
     <button class="btn" type="submit">Create club</button>
   </form>
 </section>
@@ -69,7 +77,7 @@
 
 <% clubs.forEach((club) => { %>
   <section class="card">
-    <h2 class="club-name"><%- include('../partials/club_icon', { clubId: club.id, name: club.name, size: 'md' }) %><%= club.name %></h2>
+    <h2 class="club-name"><%- include('../partials/club_icon', { clubId: club.id, name: club.name, size: 'md' }) %><%= club.name %><% if (club.country) { %> <span class="badge draft"><%= club.country %></span><% } %></h2>
     <p class="stats"><span><strong><%= club.fighter_count %></strong> athlete<%= club.fighter_count === 1 ? '' : 's' %></span><span><strong><%= club.coaches.length %></strong> coach<%= club.coaches.length === 1 ? '' : 'es' %></span></p>
     <% if (club.coaches.length > 0) { %>
       <div class="table-wrap">
@@ -97,6 +105,10 @@
         <input type="hidden" name="_csrf" value="<%= csrf %>">
         <input class="note-field" name="name" value="<%= club.name %>" aria-label="Name of <%= club.name %>" required>
         <input class="note-field" name="city" value="<%= club.city %>" aria-label="City of <%= club.name %>" required>
+        <select name="country" aria-label="Country of <%= club.name %>">
+          <option value="">Country not set</option>
+          <% countries.forEach(([code, name]) => { %><option value="<%= code %>" <%= club.country === code ? 'selected' : '' %>><%= name %> (<%= code %>)</option><% }) %>
+        </select>
         <button class="btn secondary small" type="submit">Save</button>
       </form>
       <% if (club.fighter_count === 0 && club.coaches.length === 0) { %>
