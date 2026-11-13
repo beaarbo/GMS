@@ -1,5 +1,6 @@
+<%# Club medal table. Pass medals ({ table }), and optionally medalTitle and medalHint. %>
 <section class="card">
-  <h2>Medal standings</h2>
+  <h2><%= typeof medalTitle === 'undefined' ? 'Medal standings' : medalTitle %></h2>
   <% if (medals.table.length === 0) { %>
     <p class="empty">No medals yet.</p>
   <% } else { %>
@@ -18,6 +19,6 @@
         </tbody>
       </table>
     </div>
-    <p class="hint">Each losing semifinalist gets bronze. Athletes alone in a division aren't counted.</p>
+    <p class="hint"><%= typeof medalHint === 'undefined' ? "Each losing semifinalist gets bronze. Athletes alone in a division aren't counted." : medalHint %></p>
   <% } %>
 </section>

@@ -1,9 +1,13 @@
-<%# Poomsae's part of the shared Results page: each division's scores (one box per judge when there are several), places and medals, and its bracket winners. Pass competition, poomsaeDivisions and marks. Each form comes back here, to its entry or division. %>
+<%# Poomsae's part of the shared Results page: each division's scores (one box per judge when there are several), places and medals, and its bracket winners. Pass competition, poomsaeDivisions, poomsaeMedals and marks. Each form comes back here, to its entry or division. %>
 <section id="poomsae">
-  <h2 class="event-heading">Poomsae scores and winners</h2>
+  <div class="division-head">
+    <h2 class="event-heading">Poomsae scores and winners</h2>
+  </div>
   <% const decided = poomsaeDivisions.filter((d) => d.approved > 0); %>
   <% if (decided.length === 0) { %>
     <section class="card"><p class="empty">No approved poomsae entries yet.</p></section>
+  <% } else { %>
+    <p class="hint">Enter each score and save; places update by themselves. In a bracket, click the winner. They move into their next bout automatically.</p>
   <% } %>
   <% decided.forEach((d) => { %>
     <% const scoring = d.mode === 'score' || (d.mode === 'cut' && !d.bouts); %>
@@ -59,25 +63,29 @@
         <h3><%= d.mode === 'cut' ? 'Final round' : 'Bracket' %></h3>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Bout</th><th>When</th><th>Blue</th><th>Red</th><th></th></tr></thead>
+            <thead><tr><th>Bout</th><th>When</th><th>Athletes</th><th></th></tr></thead>
             <tbody>
               <% played.forEach((b) => { %>
                 <tr class="<%= b.winner ? 'result-row-done' : '' %>">
                   <td class="num"><strong><%= b.number %></strong></td>
                   <td class="nowrap"><%= b.time %></td>
-                  <% [['blue', b.blue, b.bluePlaceholder], ['red', b.red, b.redPlaceholder]].forEach(([color, side, placeholder]) => { %>
-                    <td>
-                      <% if (!side) { %><span class="hint"><%= placeholder %></span>
-                      <% } else if (b.winner) { %><% if (b.winner.registrationId === side.registrationId) { %><span class="badge approved">Winner</span> <strong><%= side.name %></strong><% } else { %><%= side.name %><% } %> <span class="hint"><%= side.club %></span>
-                      <% } else if (b.blue && b.red) { %>
-                        <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/bouts/<%= b.id %>">
-                          <input type="hidden" name="_csrf" value="<%= csrf %>">
-                          <input type="hidden" name="back" value="results"><input type="hidden" name="event" value="<%= event || '' %>">
-                          <button class="btn secondary small winner-choice" name="winner" value="<%= color %>" type="submit" aria-label="<%= side.name %> wins bout <%= b.number %>"><%= side.name %> <span class="hint"><%= side.club %></span></button>
-                        </form>
-                      <% } else { %><%= side.name %> <span class="hint"><%= side.club %></span><% } %>
-                    </td>
-                  <% }) %>
+                  <td>
+                    <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/bouts/<%= b.id %>">
+                      <input type="hidden" name="_csrf" value="<%= csrf %>">
+                      <input type="hidden" name="back" value="results"><input type="hidden" name="event" value="<%= event || '' %>">
+                      <% [['blue', b.blue, b.bluePlaceholder], ['red', b.red, b.redPlaceholder]].forEach(([color, side, placeholder]) => { %>
+                        <% if (!side) { %>
+                          <div class="hint"><%= placeholder %></div>
+                        <% } else if (b.winner) { %>
+                          <div><% if (b.winner.registrationId === side.registrationId) { %><span class="badge approved">Winner</span> <strong><%= side.name %></strong><% } else { %><%= side.name %><% } %> <span class="hint"><%= side.club %></span></div>
+                        <% } else if (b.blue && b.red) { %>
+                          <p><button class="btn secondary small winner-choice" name="winner" value="<%= color %>" type="submit" aria-label="<%= side.name %> wins bout <%= b.number %>"><%= side.name %> <span class="hint"><%= side.club %></span></button></p>
+                        <% } else { %>
+                          <div><%= side.name %> <span class="hint"><%= side.club %></span></div>
+                        <% } %>
+                      <% }) %>
+                    </form>
+                  </td>
                   <td>
                     <% if (b.winner) { %>
                       <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/bouts/<%= b.id %>">
@@ -97,4 +105,5 @@
       <% } %>
     </section>
   <% }) %>
+  <% if (decided.length > 0) { %><%- include('medals', { medals: poomsaeMedals, medalTitle: 'Poomsae medal standings', medalHint: 'Ranked divisions give 1st, 2nd and 3rd, shared on equal scores. In a bracket, each losing semifinalist gets bronze.' }) %><% } %>
 </section>

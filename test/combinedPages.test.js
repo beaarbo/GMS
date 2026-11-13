@@ -122,6 +122,9 @@ test('the Results page records kyorugi bouts and poomsae scores together', async
   assert.match(poomsaeOnly, /Poomsae: 1 of 1 divisions decided/);
   assert.doesNotMatch(poomsaeOnly, /Kyorugi bouts/);
   assert.match(poomsaeOnly, /Poomsae scores and winners/);
+  // Like kyorugi: the division's medallists, then the event's medal standings.
+  assert.match(poomsaeOnly, /<strong>Gold:<\/strong> Ana X/);
+  assert.match(poomsaeOnly, /Poomsae medal standings[\s\S]*Tigers/);
   assert.doesNotMatch((await admin.get(`/admin/competitions/${id}/results?event=kyorugi`)).text, /Poomsae scores and winners/);
   const tabCsrf = await csrfFrom(admin, `/admin/competitions/${id}/results?event=poomsae`);
   const onTab = await admin.post(`/admin/competitions/${id}/poomsae/${entryId}/score`).type('form').send({ _csrf: tabCsrf, score: '8', back: 'results', event: 'poomsae' });

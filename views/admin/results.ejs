@@ -32,106 +32,118 @@
   <% } %>
 </nav>
 
-<%# Kyorugi bouts first, then poomsae scores and winners. %>
+<%# Kyorugi first, then poomsae. Both are laid out the same way: one card per division with its medallists and bouts, then the event's medal standings. %>
 <% if (showKyorugi) { %>
-<div class="division-head">
-  <h2 class="event-heading"><%= poomsaeDivisions ? 'Kyorugi bouts' : 'Bouts' %></h2>
-  <div class="actions">
-    <% if (total > 0 && day && court) { %><a class="btn small" href="/admin/competitions/<%= competition.id %>/mat/<%= day %>/<%= court %>">Open mat view</a><% } %>
-    <% if (isAdmin && done > 0) { %>
-      <form method="post" action="/admin/competitions/<%= competition.id %>/results/clear-all" data-confirm="Clear every recorded kyorugi result? This cannot be undone.">
-        <input type="hidden" name="_csrf" value="<%= csrf %>">
-        <input type="hidden" name="event" value="<%= event || '' %>">
-        <button class="btn danger small" type="submit">Clear all <%= poomsaeDivisions ? 'kyorugi ' : '' %>results</button>
-      </form>
-    <% } %>
-  </div>
-</div>
-<% if (total === 0) { %>
-  <section class="card"><p class="empty">There are no bouts to record. <% if (isAdmin) { %><a href="/admin/competitions/<%= competition.id %>/bouts">Generate the bout list</a> first.<% } else { %>The organiser needs to draw the bout list first.<% } %></p></section>
-<% } else { %>
-  <section class="card">
-    <form method="get" class="filters">
-      <% if (event) { %><input type="hidden" name="event" value="<%= event %>"><% } %>
-      <div>
-        <label for="f-day">Day</label>
-        <select id="f-day" name="day">
-          <option value="">All</option>
-          <% days.forEach(([value, label]) => { %><option value="<%= value %>" <%= day === String(value) ? 'selected' : '' %>><%= label %></option><% }) %>
-        </select>
-      </div>
-      <div>
-        <label for="f-court">Court</label>
-        <select id="f-court" name="court">
-          <option value="">All</option>
-          <% courts.forEach(([value]) => { %><option value="<%= value %>" <%= court === String(value) ? 'selected' : '' %>><%= value %></option><% }) %>
-        </select>
-      </div>
-      <div class="actions"><button class="btn secondary" type="submit">Filter</button></div>
-    </form>
-  </section>
-
-  <section class="card">
-    <p class="sub">Click the winner. They move into their next bout automatically. Choosing how it was won and the score is optional.</p>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Bout</th><th>When</th><th>Division</th><th>Athletes</th><th></th></tr></thead>
-        <tbody>
-          <% bouts.forEach((bout) => { %>
-            <tr class="<%= bout.winner || bout.noContest ? 'result-row-done' : '' %>">
-              <td class="num"><strong><%= bout.number %></strong></td>
-              <td class="nowrap">Day <%= bout.day %>, Court <%= bout.court %><br><span class="hint"><%= bout.time %></span></td>
-              <td><%= bout.title %></td>
-              <td>
-                <form method="post" action="/admin/competitions/<%= competition.id %>/results/<%= bout.id %>">
-                  <input type="hidden" name="_csrf" value="<%= csrf %>">
-                  <input type="hidden" name="day" value="<%= day %>">
-                  <input type="hidden" name="court" value="<%= court %>">
-                  <input type="hidden" name="event" value="<%= event || '' %>">
-                  <% if (bout.noContest) { %><p><span class="badge closed">No contest</span> <span class="hint">Both athletes were out at the weigh-in.</span></p><% } %>
-                  <% [['blue', bout.blue, bout.bluePlaceholder], ['red', bout.red, bout.redPlaceholder]].forEach(([color, fighter, placeholder]) => { %>
-                    <% if (!fighter) { %>
-                      <div class="hint"><%= placeholder %></div>
-                    <% } else if (bout.winner) { %>
-                      <div><% if (bout.winner.registrationId === fighter.registrationId) { %><span class="badge approved"><%= bout.walkover ? 'Walkover' : 'Winner' %></span> <strong><%= fighter.name %></strong><% if (bout.winType || bout.score) { %> <span class="hint"><%= [bout.winType, bout.score].filter(Boolean).join(' ') %></span><% } %><% } else { %><%= fighter.name %><% } %> <span class="hint"><%= fighter.club %></span></div>
-                    <% } else if (bout.blue && bout.red) { %>
-                      <p><button class="btn secondary small winner-choice" type="submit" name="winner" value="<%= color %>" aria-label="<%= fighter.name %> wins bout <%= bout.number %>"><%= fighter.name %> <span class="hint"><%= fighter.club %></span></button></p>
-                    <% } else { %>
-                      <div><%= fighter.name %> <span class="hint"><%= fighter.club %></span></div>
-                    <% } %>
-                  <% }) %>
-                  <% if (!bout.winner && !bout.noContest && bout.blue && bout.red) { %>
-                    <div class="win-details">
-                      <label>How <select name="win_type" aria-label="How bout <%= bout.number %> was won"><option value="">Not recorded</option><% Object.entries(WIN_TYPES).forEach(([code, label]) => { %><option value="<%= code %>"><%= code %>: <%= label %></option><% }) %></select></label>
-                      <label>Score <input name="score" inputmode="numeric" autocomplete="off" placeholder="2-1" maxlength="7" aria-label="Score of bout <%= bout.number %>"></label>
-                    </div>
-                  <% } %>
-                </form>
-              </td>
-              <td>
-                <% if (bout.walkover || bout.noContest) { %>
-                  <span class="hint">After the weigh-in</span>
-                <% } else if (bout.winner) { %>
-                  <form method="post" action="/admin/competitions/<%= competition.id %>/results/<%= bout.id %>">
-                    <input type="hidden" name="_csrf" value="<%= csrf %>">
-                    <input type="hidden" name="action" value="clear">
-                    <input type="hidden" name="day" value="<%= day %>">
-                    <input type="hidden" name="court" value="<%= court %>">
-                  <input type="hidden" name="event" value="<%= event || '' %>">
-                    <button class="btn danger small" type="submit">Undo</button>
-                  </form>
-                <% } %>
-              </td>
-            </tr>
-          <% }) %>
-        </tbody>
-      </table>
+<section id="kyorugi">
+  <div class="division-head">
+    <h2 class="event-heading"><%= poomsaeDivisions ? 'Kyorugi bouts' : 'Bouts' %></h2>
+    <div class="actions">
+      <% if (total > 0 && day && court) { %><a class="btn small" href="/admin/competitions/<%= competition.id %>/mat/<%= day %>/<%= court %>">Open mat view</a><% } %>
+      <% if (isAdmin && done > 0) { %>
+        <form method="post" action="/admin/competitions/<%= competition.id %>/results/clear-all" data-confirm="Clear every recorded kyorugi result? This cannot be undone.">
+          <input type="hidden" name="_csrf" value="<%= csrf %>">
+          <input type="hidden" name="event" value="<%= event || '' %>">
+          <button class="btn danger small" type="submit">Clear all <%= poomsaeDivisions ? 'kyorugi ' : '' %>results</button>
+        </form>
+      <% } %>
     </div>
-  </section>
+  </div>
+  <% if (total === 0) { %>
+    <section class="card"><p class="empty">There are no bouts to record. <% if (isAdmin) { %><a href="/admin/competitions/<%= competition.id %>/bouts">Generate the bout list</a> first.<% } else { %>The organiser needs to draw the bout list first.<% } %></p></section>
+  <% } else { %>
+    <p class="hint">Click the winner. They move into their next bout automatically. Choosing how it was won and the score is optional.</p>
+    <section class="card">
+      <form method="get" class="filters">
+        <% if (event) { %><input type="hidden" name="event" value="<%= event %>"><% } %>
+        <div>
+          <label for="f-day">Day</label>
+          <select id="f-day" name="day">
+            <option value="">All</option>
+            <% days.forEach(([value, label]) => { %><option value="<%= value %>" <%= day === String(value) ? 'selected' : '' %>><%= label %></option><% }) %>
+          </select>
+        </div>
+        <div>
+          <label for="f-court">Court</label>
+          <select id="f-court" name="court">
+            <option value="">All</option>
+            <% courts.forEach(([value]) => { %><option value="<%= value %>" <%= court === String(value) ? 'selected' : '' %>><%= value %></option><% }) %>
+          </select>
+        </div>
+        <div class="actions"><button class="btn secondary" type="submit">Filter</button></div>
+      </form>
+    </section>
 
-  <%- include('../partials/medals') %>
-<% } %>
+    <% if (kyorugiDivisions.length === 0) { %><section class="card"><p class="empty">No bouts on this day and court.</p></section><% } %>
+    <% kyorugiDivisions.forEach((d) => { %>
+      <section class="card" id="result-kyorugi-<%= d.key %>">
+        <div class="division-head">
+          <h2><%= d.title %></h2>
+          <p class="stats"><span>Day <strong><%= d.dayLabel %></strong></span><span>Court <strong><%= d.court %></strong></span></p>
+        </div>
+        <% const medalLine = [['Gold', d.medalists.gold ? [d.medalists.gold] : []], ['Silver', d.medalists.silver ? [d.medalists.silver] : []], ['Bronze', d.medalists.bronze]].filter(([, list]) => list.length > 0); %>
+        <% if (medalLine.length > 0) { %>
+          <p class="stats"><% medalLine.forEach(([medal, list]) => { %><span><strong><%= medal %>:</strong> <%= list.map((f) => f.name).join(', ') %></span><% }) %></p>
+        <% } %>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Bout</th><th>When</th><th>Athletes</th><th></th></tr></thead>
+            <tbody>
+              <% d.bouts.forEach((bout) => { %>
+                <tr class="<%= bout.winner || bout.noContest ? 'result-row-done' : '' %>">
+                  <td class="num"><strong><%= bout.number %></strong></td>
+                  <td class="nowrap"><%= bout.time %></td>
+                  <td>
+                    <form method="post" action="/admin/competitions/<%= competition.id %>/results/<%= bout.id %>">
+                      <input type="hidden" name="_csrf" value="<%= csrf %>">
+                      <input type="hidden" name="day" value="<%= day %>">
+                      <input type="hidden" name="court" value="<%= court %>">
+                      <input type="hidden" name="event" value="<%= event || '' %>">
+                      <% if (bout.noContest) { %><p><span class="badge closed">No contest</span> <span class="hint">Both athletes were out at the weigh-in.</span></p><% } %>
+                      <% [['blue', bout.blue, bout.bluePlaceholder], ['red', bout.red, bout.redPlaceholder]].forEach(([color, fighter, placeholder]) => { %>
+                        <% if (!fighter) { %>
+                          <div class="hint"><%= placeholder %></div>
+                        <% } else if (bout.winner) { %>
+                          <div><% if (bout.winner.registrationId === fighter.registrationId) { %><span class="badge approved"><%= bout.walkover ? 'Walkover' : 'Winner' %></span> <strong><%= fighter.name %></strong><% if (bout.winType || bout.score) { %> <span class="hint"><%= [bout.winType, bout.score].filter(Boolean).join(' ') %></span><% } %><% } else { %><%= fighter.name %><% } %> <span class="hint"><%= fighter.club %></span></div>
+                        <% } else if (bout.blue && bout.red) { %>
+                          <p><button class="btn secondary small winner-choice" type="submit" name="winner" value="<%= color %>" aria-label="<%= fighter.name %> wins bout <%= bout.number %>"><%= fighter.name %> <span class="hint"><%= fighter.club %></span></button></p>
+                        <% } else { %>
+                          <div><%= fighter.name %> <span class="hint"><%= fighter.club %></span></div>
+                        <% } %>
+                      <% }) %>
+                      <% if (!bout.winner && !bout.noContest && bout.blue && bout.red) { %>
+                        <div class="win-details">
+                          <label>How <select name="win_type" aria-label="How bout <%= bout.number %> was won"><option value="">Not recorded</option><% Object.entries(WIN_TYPES).forEach(([code, label]) => { %><option value="<%= code %>"><%= code %>: <%= label %></option><% }) %></select></label>
+                          <label>Score <input name="score" inputmode="numeric" autocomplete="off" placeholder="2-1" maxlength="7" aria-label="Score of bout <%= bout.number %>"></label>
+                        </div>
+                      <% } %>
+                    </form>
+                  </td>
+                  <td>
+                    <% if (bout.walkover || bout.noContest) { %>
+                      <span class="hint">After the weigh-in</span>
+                    <% } else if (bout.winner) { %>
+                      <form method="post" action="/admin/competitions/<%= competition.id %>/results/<%= bout.id %>">
+                        <input type="hidden" name="_csrf" value="<%= csrf %>">
+                        <input type="hidden" name="action" value="clear">
+                        <input type="hidden" name="day" value="<%= day %>">
+                        <input type="hidden" name="court" value="<%= court %>">
+                        <input type="hidden" name="event" value="<%= event || '' %>">
+                        <button class="btn danger small" type="submit">Undo</button>
+                      </form>
+                    <% } %>
+                  </td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    <% }) %>
+
+    <%- include('../partials/medals', { medals, medalTitle: poomsaeDivisions ? 'Kyorugi medal standings' : 'Medal standings' }) %>
+  <% } %>
+</section>
 <% } %>
 
-<% if (showPoomsae) { %><%- include('../partials/poomsae_results', { poomsaeDivisions, marks }) %><% } %>
+<% if (showPoomsae) { %><%- include('../partials/poomsae_results', { poomsaeDivisions, poomsaeMedals, marks }) %><% } %>
 <%- include('../partials/bottom') %>

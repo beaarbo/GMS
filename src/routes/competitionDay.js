@@ -263,25 +263,32 @@ router.get('/competitions/:id(\\d+)/results', (req, res) => {
         .map((bout) => ({ ...bout, title: division.title, day: division.day, dayLabel: division.dayLabel, court: division.court }))
     )
     .sort((a, b) => a.day - b.day || a.court - b.court || a.number - b.number);
-  const shown = bouts.filter((b) => (!day || String(b.day) === day) && (!court || String(b.court) === court));
   const uniqueBy = (key, label) => [...new Map(bouts.map((b) => [b[key], b[label]])).entries()].sort((a, b) => a[0] - b[0]);
   const bothEvents = hasKyorugi(req.competition) && hasPoomsae(req.competition);
+  const medals = computeMedals(divisions);
+  // Kyorugi divisions on the chosen day and court, in running order, each with its medallists, like poomsae's.
+  const kyorugiDivisions = divisions
+    .map((division, i) => ({ ...division, medalists: medals.divisions[i], bouts: division.bouts.filter((b) => !b.isBye) }))
+    .filter((d) => d.bouts.length > 0 && (!day || String(d.day) === day) && (!court || String(d.court) === court))
+    .sort((a, b) => a.day - b.day || a.court - b.court || a.bouts[0].number - b.bouts[0].number);
+  const poomsaeDivisions = hasPoomsae(req.competition) ? poomsaeOverview(req.app.locals.db, req.competition).divisions : null;
   res.render('admin/results', {
     title: 'Results',
     competition: req.competition,
     bothEvents,
     // One event at a time (?event=kyorugi or poomsae), or both.
     event: bothEvents && ['kyorugi', 'poomsae'].includes(req.query.event) ? req.query.event : null,
-    bouts: shown,
+    kyorugiDivisions,
     day,
     court,
     days: uniqueBy('day', 'dayLabel'),
     courts: uniqueBy('court', 'court'),
     done: bouts.filter((b) => b.winner || b.noContest).length,
     total: bouts.length,
-    medals: computeMedals(divisions),
+    medals,
     // Poomsae scores and bracket winners, on the same page.
-    poomsaeDivisions: hasPoomsae(req.competition) ? poomsaeOverview(req.app.locals.db, req.competition).divisions : null,
+    poomsaeDivisions,
+    poomsaeMedals: poomsaeDivisions ? { table: poomsaeMedalTable(poomsaeDivisions.filter((d) => d.approved > 0)) } : null,
     marks: hasPoomsae(req.competition) ? loadJudgeMarks(req.app.locals.db, req.competition.id) : null,
   });
 });
