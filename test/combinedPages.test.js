@@ -88,3 +88,36 @@ test('one Review registrations page and one Bout list page cover kyorugi and poo
   assert.equal(deleted.headers.location, `/admin/competitions/${id}/bouts#poomsae`);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM poomsae_bouts').get().n, 0);
 });
+
+test('the Results page records kyorugi bouts and poomsae scores together', async () => {
+  const db = openDb(':memory:');
+  await ensureAdmin(db, 'admin@test.test', PASSWORD);
+  saveSettings(db, { require_document: '0' });
+  const clubId = createClub(db, { name: 'Tigers' });
+  const id = createCompetition(db, { name: 'Both Cup', event_date: `${YEAR}-12-01`, registration_deadline: `${YEAR}-11-01`, venue: 'Hall', status: 'open', events: 'both', poomsae_format: 'score' });
+  const competition = db.prepare('SELECT * FROM competitions WHERE id = ?').get(id);
+  const ana = db.prepare('SELECT * FROM fighters WHERE id = ?').get(
+    db.prepare("INSERT INTO fighters (club_id, first_name, last_name, gender, date_of_birth, belt_rank) VALUES (?, 'Ana', 'X', 'F', ?, 3)").run(clubId, `${YEAR - 16}-03-01`).lastInsertRowid
+  );
+  assert.ok(enterPoomsae(db, competition, clubId, 'individual', [ana]).ok);
+  db.prepare("UPDATE poomsae_entries SET status = 'approved'").run();
+  db.prepare("UPDATE competitions SET status = 'closed' WHERE id = ?").run(id);
+  const entryId = db.prepare('SELECT id FROM poomsae_entries').get().id;
+
+  const app = createApp({ db, sessionSecret: 'test-secret', mailer: { configured: true, send: async () => {} } });
+  const admin = request.agent(app);
+  const loginCsrf = await csrfFrom(admin, '/login');
+  await admin.post('/login').type('form').send({ _csrf: loginCsrf, email: 'admin@test.test', password: PASSWORD });
+
+  const page = (await admin.get(`/admin/competitions/${id}/results`)).text;
+  assert.ok(page.indexOf('Kyorugi bouts') < page.indexOf('Poomsae scores and winners'));
+  assert.match(page, new RegExp(`action="/admin/competitions/${id}/poomsae/${entryId}/score"`));
+  const scoreCsrf = await csrfFrom(admin, `/admin/competitions/${id}/results`);
+  const saved = await admin.post(`/admin/competitions/${id}/poomsae/${entryId}/score`).type('form').send({ _csrf: scoreCsrf, score: '7.5', back: 'results' });
+  assert.equal(saved.headers.location, `/admin/competitions/${id}/results#result-entry-${entryId}`);
+  assert.equal(db.prepare('SELECT score FROM poomsae_entries WHERE id = ?').get(entryId).score, 7.5);
+
+  const list = (await admin.get('/admin/competitions')).text;
+  assert.equal((list.match(/>Results</g) || []).length, 1, 'one Results button');
+  assert.doesNotMatch(list, /Poomsae scores/);
+});

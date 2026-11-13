@@ -4,11 +4,11 @@
 <div class="page-head">
   <div>
     <h1>Results</h1>
-    <p class="sub"><%= competition.name %> · <%= done %> of <%= total %> bouts recorded</p>
+    <p class="sub"><%= competition.name %><% if (hasKyorugi(competition)) { %> · <%= done %> of <%= total %> <%= poomsaeDivisions ? 'kyorugi ' : '' %>bouts recorded<% } %></p>
   </div>
   <div class="actions">
     <% if (total > 0 && day && court) { %><a class="btn" href="/admin/competitions/<%= competition.id %>/mat/<%= day %>/<%= court %>">Open mat view</a><% } %>
-    <% if (total > 0) { %><a class="btn secondary" href="/screens/<%= competition.id %>">Court screens</a><a class="btn secondary" href="/competitions/<%= competition.id %>/results">Overall results</a><a class="btn secondary" href="/admin/competitions/<%= competition.id %>/results/export.xlsx">Download results (Excel)</a><% } %>
+    <% if (total > 0 || poomsaeDivisions) { %><a class="btn secondary" href="/screens/<%= competition.id %>">Court screens</a><a class="btn secondary" href="/competitions/<%= competition.id %>/results">Overall results</a><a class="btn secondary" href="/admin/competitions/<%= competition.id %>/results/export.xlsx">Download results (Excel)</a><% } %>
     <% if (isAdmin && done > 0) { %>
       <form method="post" action="/admin/competitions/<%= competition.id %>/results/clear-all" data-confirm="Clear every recorded result? This cannot be undone.">
         <input type="hidden" name="_csrf" value="<%= csrf %>">
@@ -18,6 +18,9 @@
   </div>
 </div>
 
+<%# Kyorugi bouts first, then poomsae scores and winners. %>
+<% if (hasKyorugi(competition)) { %>
+<% if (poomsaeDivisions) { %><h2 class="event-heading">Kyorugi bouts</h2><% } %>
 <% if (total === 0) { %>
   <section class="card"><p class="empty">There are no bouts to record. <% if (isAdmin) { %><a href="/admin/competitions/<%= competition.id %>/bouts">Generate the bout list</a> first.<% } else { %>The organiser needs to draw the bout list first.<% } %></p></section>
 <% } else { %>
@@ -99,4 +102,7 @@
 
   <%- include('../partials/medals') %>
 <% } %>
+<% } %>
+
+<% if (poomsaeDivisions) { %><%- include('../partials/poomsae_results', { poomsaeDivisions, marks }) %><% } %>
 <%- include('../partials/bottom') %>

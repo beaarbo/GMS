@@ -1,0 +1,100 @@
+<%# Poomsae's part of the shared Results page: each division's scores (one box per judge when there are several), places and medals, and its bracket winners. Pass competition, poomsaeDivisions and marks. Each form comes back here, to its entry or division. %>
+<section id="poomsae">
+  <h2 class="event-heading">Poomsae scores and winners</h2>
+  <% const decided = poomsaeDivisions.filter((d) => d.approved > 0); %>
+  <% if (decided.length === 0) { %>
+    <section class="card"><p class="empty">No approved poomsae entries yet.</p></section>
+  <% } %>
+  <% decided.forEach((d) => { %>
+    <% const scoring = d.mode === 'score' || (d.mode === 'cut' && !d.bouts); %>
+    <% const names = new Map(d.entries.map((e) => [e.id, e.names])); %>
+    <section class="card" id="result-division-<%= d.key %>">
+      <div class="division-head">
+        <h2><%= d.title %></h2>
+        <p class="stats"><span>Format: <strong><%= d.mode === 'score' ? 'Ranked by score' : d.mode === 'cut' ? `Score round, top ${d.cut}` : 'Single elimination' %></strong></span></p>
+      </div>
+      <% const medalLine = ['gold', 'silver', 'bronze'].filter((m) => d.medalists[m].length > 0); %>
+      <% if (medalLine.length > 0) { %>
+        <p class="stats"><% medalLine.forEach((m) => { %><span><strong><%= m[0].toUpperCase() + m.slice(1) %>:</strong> <%= d.medalists[m].map((id) => names.get(id)).join(', ') %></span><% }) %></p>
+      <% } %>
+
+      <% if (d.mode !== 'bracket') { %>
+        <% const ranked = [...d.entries.filter((e) => e.status === 'approved')].sort((a, b) => (a.place || 999) - (b.place || 999) || (a.perform_order || 999) - (b.perform_order || 999)); %>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Place</th><th>#</th><th>Athletes</th><th>Club</th><th>Score</th></tr></thead>
+            <tbody>
+              <% ranked.forEach((e) => { %>
+                <tr id="result-entry-<%= e.id %>">
+                  <td class="nowrap"><% if (e.place) { %><strong><%= placeText(e.place) %></strong><% if (d.mode === 'cut') { %><div class="hint"><%= e.place <= d.cut ? 'Qualified' : 'Out' %></div><% } %><% } %></td>
+                  <td class="num"><%= e.perform_order || '' %></td>
+                  <td><strong><%= e.names %></strong></td>
+                  <td><%= e.club_label || e.club_name %></td>
+                  <td class="nowrap">
+                    <% if (scoring) { %>
+                      <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/<%= e.id %>/score" class="inline-form">
+                        <input type="hidden" name="_csrf" value="<%= csrf %>">
+                        <input type="hidden" name="back" value="results">
+                        <% if (competition.poomsae_judges === 1) { %>
+                          <input class="score-input" name="score" inputmode="decimal" autocomplete="off" value="<%= e.score === null ? '' : formatScore(e.score) %>" aria-label="Score of <%= e.names %>">
+                        <% } else { const own = marks.get(e.id) || []; %>
+                          <span class="judge-inputs">
+                            <% for (let j = 1; j <= competition.poomsae_judges; j += 1) { %><input class="score-input judge" name="judge_<%= j %>" inputmode="decimal" autocomplete="off" value="<%= own[j - 1] === undefined ? '' : formatScore(own[j - 1]) %>" placeholder="J<%= j %>" aria-label="Judge <%= j %> score for <%= e.names %>"><% } %>
+                          </span>
+                          <% if (e.score !== null) { %><strong class="judge-total"><%= formatScore(e.score) %></strong><% } %>
+                        <% } %>
+                        <button class="btn secondary small" type="submit">Save</button>
+                      </form>
+                    <% } else if (e.score !== null) { %><%= formatScore(e.score) %><% } %>
+                  </td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      <% } %>
+
+      <% if (d.bouts) { %>
+        <% const played = d.bouts.filter((b) => !b.isBye); %>
+        <h3><%= d.mode === 'cut' ? 'Final round' : 'Bracket' %></h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Bout</th><th>When</th><th>Blue</th><th>Red</th><th></th></tr></thead>
+            <tbody>
+              <% played.forEach((b) => { %>
+                <tr class="<%= b.winner ? 'result-row-done' : '' %>">
+                  <td class="num"><strong><%= b.number %></strong></td>
+                  <td class="nowrap"><%= b.time %></td>
+                  <% [['blue', b.blue, b.bluePlaceholder], ['red', b.red, b.redPlaceholder]].forEach(([color, side, placeholder]) => { %>
+                    <td>
+                      <% if (!side) { %><span class="hint"><%= placeholder %></span>
+                      <% } else if (b.winner) { %><% if (b.winner.registrationId === side.registrationId) { %><span class="badge approved">Winner</span> <strong><%= side.name %></strong><% } else { %><%= side.name %><% } %> <span class="hint"><%= side.club %></span>
+                      <% } else if (b.blue && b.red) { %>
+                        <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/bouts/<%= b.id %>">
+                          <input type="hidden" name="_csrf" value="<%= csrf %>">
+                          <input type="hidden" name="back" value="results">
+                          <button class="btn secondary small winner-choice" name="winner" value="<%= color %>" type="submit" aria-label="<%= side.name %> wins bout <%= b.number %>"><%= side.name %> <span class="hint"><%= side.club %></span></button>
+                        </form>
+                      <% } else { %><%= side.name %> <span class="hint"><%= side.club %></span><% } %>
+                    </td>
+                  <% }) %>
+                  <td>
+                    <% if (b.winner) { %>
+                      <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/bouts/<%= b.id %>">
+                        <input type="hidden" name="_csrf" value="<%= csrf %>">
+                        <input type="hidden" name="back" value="results">
+                        <button class="btn danger small" name="action" value="clear" type="submit">Undo</button>
+                      </form>
+                    <% } %>
+                  </td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      <% } else if (d.mode !== 'score') { %>
+        <p class="hint"><%= d.mode === 'cut' ? 'The final-round bracket is drawn once the score round is complete, on the Bout list.' : 'The bracket is drawn on the Bout list.' %></p>
+      <% } %>
+    </section>
+  <% }) %>
+</section>

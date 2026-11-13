@@ -275,6 +275,9 @@ router.get('/competitions/:id(\\d+)/results', (req, res) => {
     done: bouts.filter((b) => b.winner || b.noContest).length,
     total: bouts.length,
     medals: computeMedals(divisions),
+    // Poomsae scores and bracket winners, on the same page.
+    poomsaeDivisions: hasPoomsae(req.competition) ? poomsaeOverview(req.app.locals.db, req.competition).divisions : null,
+    marks: hasPoomsae(req.competition) ? loadJudgeMarks(req.app.locals.db, req.competition.id) : null,
   });
 });
 
@@ -457,10 +460,11 @@ router.post('/competitions/:id(\\d+)/poomsae/judge/:day(\\d+)/:court(\\d+)/:judg
 const poomsaePath = (competition, entryId = null, divisionKey = null) =>
   `/admin/competitions/${competition.id}/poomsae${entryId ? `#entry-${entryId}` : divisionKey ? `#division-${divisionKey}` : ''}`;
 
-// The shared Review registrations and Bout list pages post here too, with
-// back=registrations or back=bouts, and go back there afterwards.
-function sharedPageReturn(req) {
-  return ['registrations', 'bouts'].includes(req.body.back) ? `/admin/competitions/${req.competition.id}/${req.body.back}#poomsae` : null;
+// The shared Review registrations, Bout list and Results pages post here too,
+// with back=registrations, bouts or results, and go back there afterwards (to
+// anchor, when given, else the poomsae section).
+function sharedPageReturn(req, anchor = 'poomsae') {
+  return ['registrations', 'bouts', 'results'].includes(req.body.back) ? `/admin/competitions/${req.competition.id}/${req.body.back}#${anchor}` : null;
 }
 
 // What the shared Bout list page needs about poomsae: its divisions and what's ready.
@@ -696,7 +700,7 @@ router.post('/competitions/:id(\\d+)/poomsae/bouts/:boutId(\\d+)', (req, res) =>
     const winner = req.body.winner === 'blue' ? before.blue : before.red;
     req.logActivity('poomsae.bout_won', `${winner.name} won poomsae Bout ${bout.bout_number} in ${division.title}, ${before.blue.name} vs ${before.red.name}`, competition.id);
   }
-  return res.redirect(poomsaeMatReturn(req) || poomsaePath(competition, null, bout.division_key));
+  return res.redirect(poomsaeMatReturn(req) || sharedPageReturn(req, `result-division-${bout.division_key}`) || poomsaePath(competition, null, bout.division_key));
 });
 
 router.post('/competitions/:id(\\d+)/poomsae/review', requireRole('admin'), (req, res) => {
@@ -748,7 +752,7 @@ router.post('/competitions/:id(\\d+)/poomsae/:entryId(\\d+)/score', (req, res) =
       : `Poomsae score ${formatScore(parsed.score)}${judges} for ${entry.names} (${entry.club_name}) in ${poomsaeDivisionTitle(entry)}${was}`;
     req.logActivity(parsed.score === null ? 'poomsae.score_cleared' : 'poomsae.scored', summary, req.competition.id);
   }
-  return res.redirect(poomsaeMatReturn(req) || poomsaePath(req.competition, entry.id));
+  return res.redirect(poomsaeMatReturn(req) || sharedPageReturn(req, `result-entry-${entry.id}`) || poomsaePath(req.competition, entry.id));
 });
 
 // One final score (judge_1 alone, or "score"), or one mark per judge. Every
