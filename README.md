@@ -165,6 +165,12 @@ Everyone can change their name, email, password and theme, and choose which emai
 
 Coaches can add a photo of each athlete from the club dashboard (**Add photo**, or click the athlete's name): JPG or PNG, up to 1 MB. WebP isn't accepted because the card PDF can't print it. Photos are optional; athletes without one show a plain person icon. The photo shows on the club's athlete list, the weigh-in list, the officials' athlete page and the printed athlete card. Only the club, admins and officials can see it, and officials only for athletes entered in that competition. It never appears on public pages.
 
+## Admins and sub-admins
+
+The first admin (the one made from `ADMIN_EMAIL` when the site first starts) is the **main admin**. Only they can add or remove other admins, on **Accounts → Add an admin**: enter a name and email, and the site emails that person a one-time password. When they first log in, they must choose their own password before they can use anything else.
+
+Sub-admins can do everything else an admin can, except: add or remove admins, remove the main admin, turn off the main admin's two-step login, download backups, or change the security settings (requiring two-step login for admins, and the off-site backup address). The main admin can remove a sub-admin at any time; they're logged out at once. Sending the invite needs email set up on the live site.
+
 ## Link previews
 
 A competition's link pasted into WhatsApp, Facebook, Telegram and similar apps shows a preview with its logo, name, dates, venue and, while entries are open, the deadline. Other pages show the site's name, footer text and organiser logo. The links in previews use `PUBLIC_URL`. Apps keep a preview for a while, so a changed logo can take time to show.

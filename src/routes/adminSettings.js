@@ -33,7 +33,12 @@ router.get('/', (req, res) => settingsPage(req, res));
 router.post('/', (req, res) => {
   const { db } = req.app.locals;
   const { values, errors } = readSiteSettings(req.body);
-  if (values.require_2fa_admins === '1' && !req.user.two_step) {
+  // Only the main admin changes these; for anyone else they stay as they are.
+  if (!req.user.owner) {
+    values.require_2fa_admins = req.site.raw.require_2fa_admins;
+    values.offsite_backup_email = req.site.raw.offsite_backup_email;
+  }
+  if (values.require_2fa_admins === '1' && !req.user.two_step && req.user.owner) {
     errors.push('Set up two-step login on My account first, so requiring it can\'t lock you out.');
   }
   if (errors.length > 0) return settingsPage(req, res, { status: 400, values, errors });

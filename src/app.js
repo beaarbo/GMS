@@ -108,6 +108,7 @@ function createApp({
 }) {
   const app = express();
   app.locals.backups = backups;
+  app.locals.production = production;
   const live = createLiveUpdates();
   app.locals.live = live;
   app.set('views', path.join(__dirname, '..', 'views'));
@@ -266,7 +267,7 @@ function createApp({
       const user = db
         .prepare(
           `SELECT u.id, u.email, u.role, u.full_name, u.club_id, c.name AS club_name, u.theme,
-             u.totp_secret IS NOT NULL AS two_step
+             u.totp_secret IS NOT NULL AS two_step, u.owner, u.must_change_password
            FROM users u LEFT JOIN clubs c ON c.id = u.club_id WHERE u.id = ?`
         )
         .get(req.session.userId);
@@ -323,6 +324,15 @@ function createApp({
     res.setHeader('Content-Type', logo.content_type);
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     return res.send(logo.data);
+  });
+
+  // A sub-admin who logged in with their emailed one-time password must choose
+  // their own before anything else.
+  app.use((req, res, next) => {
+    if (!req.user || !req.user.must_change_password) return next();
+    if (req.path === '/account' || req.path === '/account/password' || req.path === '/logout') return next();
+    // The account page explains why.
+    return res.redirect('/account#password');
   });
 
   // When the Settings page requires it, an admin without two-step login can only

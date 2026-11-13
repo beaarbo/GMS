@@ -6,6 +6,10 @@
   </div>
 </div>
 
+<% if (account.must_change_password) { %>
+  <div class="notice info" role="status">Welcome. You logged in with a one-time password, so choose your own under <a href="#password">Password</a> before using the rest of the site.</div>
+<% } %>
+
 <%# One settings row per topic: its title and a short note, then the form. %>
 <div class="settings-page">
   <section class="settings-row" id="details">

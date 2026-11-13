@@ -33,6 +33,27 @@
   </form>
 </section>
 
+<% if (user.owner) { %>
+  <section class="card">
+    <h2>Add an admin</h2>
+    <p class="sub">Admins can do everything you can, except add or remove admins, download backups and change the security settings. A one-time password is emailed to them, and they must choose their own when they first log in.</p>
+    <form method="post" action="/admin/accounts/admins">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <div class="form-row">
+        <div class="field">
+          <label for="a-name">Name</label>
+          <input id="a-name" name="full_name" maxlength="100" required>
+        </div>
+        <div class="field">
+          <label for="a-email">Email</label>
+          <input id="a-email" name="email" type="email" required>
+        </div>
+      </div>
+      <button class="btn" type="submit">Add admin and email their password</button>
+    </form>
+  </section>
+<% } %>
+
 <section class="card">
   <h2>Add a coach</h2>
   <p class="sub"><%= site.coachSignup ? 'Coaches can also sign up themselves and apply to a club.' : 'Coach sign-up is off on the Settings page, so coaches are added here.' %> Choosing a club approves them for it straight away.</p>
@@ -108,7 +129,14 @@
               <td><%= a.email %></td>
               <td class="nowrap"><%= a.phone || '–' %></td>
               <td>
-                <% if (a.type === 'admin') { %><span class="badge open">Admin</span>
+                <% if (a.type === 'admin') { %><span class="badge open"><%= a.owner ? 'Main admin' : 'Admin' %></span>
+                  <% if (a.must_change_password) { %><span class="badge pending">Hasn't logged in yet</span><% } %>
+                  <% if (user.owner && !a.owner) { %>
+                    <form class="inline-form" method="post" action="/admin/accounts/admins/<%= a.id %>/remove" data-confirm="Remove <%= a.full_name || a.email %> as an admin? Their account is deleted and they're logged out.">
+                      <input type="hidden" name="_csrf" value="<%= csrf %>">
+                      <button class="btn danger small" type="submit">Remove</button>
+                    </form>
+                  <% } %>
                 <% } else if (a.type === 'official') { %><span class="badge open">Official</span>
                   <form class="inline-form" method="post" action="/admin/accounts/officials/<%= a.id %>/remove" data-confirm="Remove <%= a.full_name %>'s official account? They'll be logged out.">
                     <input type="hidden" name="_csrf" value="<%= csrf %>">
@@ -128,7 +156,7 @@
               <td><%= a.club || (a.pending_club ? `Applied to ${a.pending_club}` : '–') %></td>
               <td class="nowrap">
                 <% if (a.two_step) { %>On
-                  <% if (a.id !== user.id) { %>
+                  <% if (a.id !== user.id && !a.owner) { %>
                     <form class="inline-form" method="post" action="/admin/accounts/<%= a.id %>/two-step/off" data-confirm="Turn off two-step login for <%= a.full_name || a.email %>? Do this only once you're sure it's them, for example if they lost their phone.">
                       <input type="hidden" name="_csrf" value="<%= csrf %>">
                       <input type="hidden" name="type" value="<%= type %>">

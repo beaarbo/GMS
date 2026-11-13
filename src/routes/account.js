@@ -36,7 +36,7 @@ const kindsFor = (role) => Object.entries(EMAIL_KINDS).filter(([, kind]) => kind
 
 function render(req, res, status = 200, errors = {}, values = {}, extra = {}) {
   const { db } = req.app.locals;
-  const user = db.prepare('SELECT id, email, full_name, phone, role, club_id, theme, email_opt_out, totp_secret IS NOT NULL AS two_step, totp_recovery FROM users WHERE id = ?').get(req.user.id);
+  const user = db.prepare('SELECT id, email, full_name, phone, role, club_id, theme, email_opt_out, must_change_password, totp_secret IS NOT NULL AS two_step, totp_recovery FROM users WHERE id = ?').get(req.user.id);
   const setupSecret = !user.two_step && req.session.totpSetup;
   const pending =
     db
@@ -119,7 +119,8 @@ router.post(
     const { db, notify } = req.app.locals;
     const password = typeof req.body.new_password === 'string' ? req.body.new_password : '';
     const problem =
-      passwordError(password) || (password !== req.body.confirm_password ? 'The new passwords do not match.' : null);
+      passwordError(password) || (password !== req.body.confirm_password ? 'The new passwords do not match.' : null)
+      || (password === req.body.current_password ? 'Choose a new password, different from your current one.' : null);
     if (problem) return render(req, res, 400, { password: problem });
     if (!(await checkCurrentPassword(req, req.body.current_password))) {
       return render(req, res, 401, { password: 'Your current password is incorrect.' });
@@ -127,7 +128,7 @@ router.post(
 
     const hash = await bcrypt.hash(password, 12);
     db.transaction(() => {
-      db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, req.user.id);
+      db.prepare('UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?').run(hash, req.user.id);
       // Logs out every other device, in case the old password was known to someone.
       db.prepare("DELETE FROM sessions WHERE json_extract(sess, '$.userId') = ? AND sid != ?").run(req.user.id, req.sessionID);
       db.prepare('DELETE FROM password_resets WHERE user_id = ?').run(req.user.id);

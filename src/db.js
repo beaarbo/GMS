@@ -28,7 +28,11 @@ CREATE TABLE IF NOT EXISTS users (
   email_opt_out TEXT NOT NULL DEFAULT '[]',
   -- Two-step login: the authenticator secret, and hashes of one-time recovery codes.
   totp_secret TEXT,
-  totp_recovery TEXT NOT NULL DEFAULT '[]'
+  totp_recovery TEXT NOT NULL DEFAULT '[]',
+  -- The one main admin: only they add or remove other admins, and no one else can remove them.
+  owner INTEGER NOT NULL DEFAULT 0,
+  -- Set for a new sub-admin, whose emailed one-time password must be replaced at first login.
+  must_change_password INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS club_applications (
@@ -769,6 +773,16 @@ function migrateClubCountry(db) {
   })();
 }
 
+// Version 25: the first admin becomes the owner; any other admins become sub-admins.
+function migrateOwner(db) {
+  db.transaction(() => {
+    addColumnIfMissing(db, 'users', 'owner', 'INTEGER NOT NULL DEFAULT 0');
+    addColumnIfMissing(db, 'users', 'must_change_password', 'INTEGER NOT NULL DEFAULT 0');
+    db.prepare("UPDATE users SET owner = 1 WHERE id = (SELECT MIN(id) FROM users WHERE role = 'admin') AND NOT EXISTS (SELECT 1 FROM users WHERE owner = 1)").run();
+    db.pragma('user_version = 25');
+  })();
+}
+
 function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 1) migrateBelts(db);
   if (db.pragma('user_version', { simple: true }) < 2) migrateSchedule(db);
@@ -794,6 +808,7 @@ function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 22) migrateDropJudgeLinks(db);
   if (db.pragma('user_version', { simple: true }) < 23) migrateSettings(db);
   if (db.pragma('user_version', { simple: true }) < 24) migrateClubCountry(db);
+  if (db.pragma('user_version', { simple: true }) < 25) migrateOwner(db);
 }
 
 // Safe on old databases: only tables that don't exist yet are created.

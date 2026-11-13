@@ -1783,16 +1783,44 @@ async function completePasswordReset(db, token, password) {
   if (!reset) return false;
   const hash = await bcrypt.hash(password, 12);
   db.transaction(() => {
-    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, reset.user_id);
+    db.prepare('UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?').run(hash, reset.user_id);
     db.prepare('DELETE FROM password_resets WHERE user_id = ?').run(reset.user_id);
     db.prepare("DELETE FROM sessions WHERE json_extract(sess, '$.userId') = ?").run(reset.user_id);
   })();
   return true;
 }
 
+// The site's first admin, made at start-up, is its owner.
 async function createAdmin(db, email, password) {
   const hash = await bcrypt.hash(password, 12);
-  db.prepare("INSERT INTO users (email, password_hash, role) VALUES (?, ?, 'admin')").run(email, hash);
+  const owner = db.prepare('SELECT 1 FROM users WHERE owner = 1').get() ? 0 : 1;
+  db.prepare("INSERT INTO users (email, password_hash, role, owner) VALUES (?, ?, 'admin', ?)").run(email, hash, owner);
+}
+
+// A one-time password for an emailed invite: 12 letters and digits, without
+// look-alikes (0/O, 1/l/I), so it can be typed from the email.
+function oneTimePassword() {
+  const alphabet = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return Array.from(crypto.randomBytes(12), (byte) => alphabet[byte % alphabet.length]).join('');
+}
+
+// A sub-admin: the same powers as an admin, minus the owner's few. They log in
+// with the emailed one-time password and must choose their own straight away.
+// Returns { id, password }.
+async function createSubAdmin(db, { full_name, email }) {
+  const password = oneTimePassword();
+  const hash = await bcrypt.hash(password, 12);
+  const id = Number(db.prepare("INSERT INTO users (email, password_hash, role, full_name, must_change_password) VALUES (?, ?, 'admin', ?, 1)")
+    .run(email, hash, full_name).lastInsertRowid);
+  return { id, password };
+}
+
+// Removes a sub-admin, never the owner. Returns them, or null.
+function removeSubAdmin(db, userId) {
+  const admin = db.prepare("SELECT id, full_name, email FROM users WHERE id = ? AND role = 'admin' AND owner = 0").get(userId);
+  if (!admin) return null;
+  db.prepare('DELETE FROM users WHERE id = ?').run(admin.id);
+  return admin;
 }
 
 async function ensureAdmin(db, email, password) {
@@ -1948,6 +1976,8 @@ function cleanUpDocuments(db, days) {
 }
 
 module.exports = {
+  createSubAdmin,
+  removeSubAdmin,
   saveFighterPhoto,
   getFighterPhoto,
   deleteFighterPhoto,

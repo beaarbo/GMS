@@ -2,7 +2,7 @@
 const express = require('express');
 const { listBackups, backupPath, createBackup, pruneBackups } = require('../backups');
 const { backupKeep } = require('../settings');
-const { requireRole, notFound, wrap } = require('./helpers');
+const { requireRole, requireOwner, notFound, wrap } = require('./helpers');
 
 const router = express.Router();
 router.use(requireRole('admin'));
@@ -40,7 +40,8 @@ router.post('/', wrap(async (req, res) => {
 }));
 
 // A backup holds everyone's personal data and password hashes, so each download is logged.
-router.get('/:name', (req, res) => {
+// Only the main admin downloads: a backup holds every password hash.
+router.get('/:name', requireOwner, (req, res) => {
   const file = backupPath(req.app.locals.backups.dir, req.params.name);
   if (!file) return notFound(res);
   req.logActivity('backup.downloaded', `Downloaded the backup ${req.params.name}`);

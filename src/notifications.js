@@ -59,6 +59,17 @@ function notifyAdminsOfApplication(ctx, userId, clubId) {
   );
 }
 
+// A new sub-admin's invite, with their one-time password. Sent to them alone;
+// the password works until they replace it, which the site makes them do first.
+function sendAdminInvite(ctx, { email, name, password, invitedBy }) {
+  const site = loadSettings(ctx.db).siteName;
+  return ctx.mailer.send({
+    to: email,
+    subject: `You've been made an admin of ${site}`,
+    text: `Hello ${name},\n\n${invitedBy} has made you an admin of ${site}.\n\nLog in at ${ctx.publicUrl}/login with:\n\nEmail: ${email}\nOne-time password: ${password}\n\nWhen you log in, you'll be asked to choose your own password straight away. Until you do, the one-time password is the only way in, so don't share this email.\n\nIf you weren't expecting this, ignore it and tell ${invitedBy}.`,
+  });
+}
+
 // A security notice for changes the account holder should know about.
 function notifyAccountChange(ctx, email, what) {
   return ctx.mailer.send({
@@ -249,6 +260,7 @@ async function emailBackup(ctx, dir, backup) {
 }
 
 module.exports = {
+  sendAdminInvite,
   EMAIL_KINDS,
   MAX_EMAILED_BACKUP_BYTES,
   emailBackup,

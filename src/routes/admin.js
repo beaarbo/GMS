@@ -40,6 +40,8 @@ const {
   deleteCompetitionFile,
   createOfficialAccount,
   createCoachAccount,
+  createSubAdmin,
+  removeSubAdmin,
   removeOfficial,
   today,
   listNews,
@@ -59,12 +61,12 @@ const {
 } = require('../services');
 const { sendDocument, detectIconType, detectAttachmentType, safeFilename, MAX_ICON_BYTES, MAX_NEW_COMPETITION_FILES } = require('../documents');
 const { ACTIVITY_CATEGORIES, listActivity, countActivity, formatActivityTime } = require('../activity');
-const { notifyRegistrationDecisions, notifyBoutListPublished, notifyDivisionMerged, notifyAccountChange } = require('../notifications');
+const { notifyRegistrationDecisions, notifyBoutListPublished, notifyDivisionMerged, notifyAccountChange, sendAdminInvite } = require('../notifications');
 const { layoutBracket, computeMedals } = require('../bracket');
 const { writeBoutListPdf } = require('../boutlistPdf');
 const { entriesSheets, sendXlsx } = require('../exports');
 const { cardAthletes, writeAthleteCards } = require('../athleteCards');
-const { clean, toArray, requireRole, notFound, wrap, passwordError, readSetup, readPoomsaeAges } = require('./helpers');
+const { clean, toArray, requireRole, requireOwner, notFound, wrap, passwordError, readSetup, readPoomsaeAges } = require('./helpers');
 const { resultsPath } = require('./competitionDay');
 const { createBackup, pruneBackups, listBackups } = require('../backups');
 const { readMapLocation } = require('../maps');
@@ -1167,10 +1169,42 @@ router.post('/accounts/coaches', wrap(async (req, res) => {
   return res.redirect('/admin/accounts?type=coach');
 }));
 
-// For someone who lost their phone and their recovery codes.
+// Sub-admins: only the owner adds them. Their one-time password goes to them
+// by email and is never shown here, and they must replace it at first login.
+router.post('/accounts/admins', requireOwner, wrap(async (req, res) => {
+  const { db, notify } = req.app.locals;
+  const values = { full_name: clean(req.body.full_name, 100), email: clean(req.body.email).toLowerCase() };
+  const errors = [];
+  if (!values.full_name) errors.push('Enter the new admin\'s name.');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.email)) errors.push('Enter a valid email address.');
+  else if (db.prepare('SELECT 1 FROM users WHERE email = ?').get(values.email)) errors.push('An account with this email already exists.');
+  // In development an unset mailer prints the email to the console instead.
+  if (!notify.mailer.configured && req.app.locals.production) errors.push('Email isn\'t set up, so the one-time password can\'t be sent. Set it up first (see the Email page).');
+  if (errors.length > 0) {
+    errors.forEach((error) => req.flash('error', error));
+    return res.redirect('/admin/accounts?type=admin');
+  }
+  const { password } = await createSubAdmin(db, values);
+  await sendAdminInvite(notify, { email: values.email, name: values.full_name, password, invitedBy: req.user.full_name || req.user.email });
+  req.logActivity('account.admin_added', `Added the admin ${values.full_name} (${values.email})`);
+  req.flash('success', `${values.full_name} is now an admin. Their one-time password was emailed to ${values.email}; they'll choose their own when they first log in.`);
+  return res.redirect('/admin/accounts?type=admin');
+}));
+
+router.post('/accounts/admins/:userId(\\d+)/remove', requireOwner, (req, res) => {
+  const admin = removeSubAdmin(req.app.locals.db, Number(req.params.userId));
+  if (admin) {
+    req.logActivity('account.admin_removed', `Removed the admin ${admin.full_name || admin.email} (${admin.email})`);
+    req.flash('success', `${admin.full_name || admin.email} is no longer an admin, and has been logged out.`);
+  }
+  return res.redirect('/admin/accounts?type=admin');
+});
+
+// For someone who lost their phone and their recovery codes. The owner's own
+// two-step login is never turned off by anyone else.
 router.post('/accounts/:userId(\\d+)/two-step/off', (req, res) => {
   const { db } = req.app.locals;
-  const account = db.prepare('SELECT id, email, full_name FROM users WHERE id = ? AND totp_secret IS NOT NULL').get(Number(req.params.userId));
+  const account = db.prepare('SELECT id, email, full_name FROM users WHERE id = ? AND totp_secret IS NOT NULL AND owner = 0').get(Number(req.params.userId));
   if (account) {
     db.prepare("UPDATE users SET totp_secret = NULL, totp_recovery = '[]' WHERE id = ?").run(account.id);
     req.logActivity('account.two_step_reset', `Turned off two-step login for ${account.full_name || account.email}`);
@@ -1235,7 +1269,7 @@ router.get('/accounts', (req, res) => {
   }
   const accounts = db
     .prepare(
-      `SELECT u.id, u.email, u.full_name, u.phone, u.role, u.club_id, u.created_at, c.name AS club, u.totp_secret IS NOT NULL AS two_step,
+      `SELECT u.id, u.email, u.full_name, u.phone, u.role, u.club_id, u.created_at, c.name AS club, u.totp_secret IS NOT NULL AS two_step, u.owner, u.must_change_password,
          (SELECT pc.name FROM club_applications a JOIN clubs pc ON pc.id = a.club_id
           WHERE a.user_id = u.id AND a.status = 'pending') AS pending_club
        FROM users u LEFT JOIN clubs c ON c.id = u.club_id

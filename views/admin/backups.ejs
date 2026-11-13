@@ -36,7 +36,7 @@
                 <td class="nowrap"><strong><%= formatDate(b.createdAt.slice(0, 10)) %></strong> <%= b.createdAt.slice(11) %></td>
                 <td><%= b.kind === 'daily' ? 'Daily' : 'Made by an admin' %></td>
                 <td class="num nowrap"><%= fileSize(b.size) %></td>
-                <td><a class="btn secondary small" href="/admin/backups/<%= b.name %>">Download</a></td>
+                <td><% if (user.owner) { %><a class="btn secondary small" href="/admin/backups/<%= b.name %>">Download</a><% } else { %><span class="hint">Main admin only</span><% } %></td>
               </tr>
             <% }) %>
           </tbody>

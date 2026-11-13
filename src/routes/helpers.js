@@ -29,6 +29,13 @@ function requireRole(role) {
   };
 }
 
+// Only the site's owner (the main admin): adding and removing admins, backup
+// downloads and the security settings.
+function requireOwner(req, res, next) {
+  if (req.user && req.user.role === 'admin' && req.user.owner) return next();
+  return res.status(403).render('error', { title: 'Not allowed', message: 'Only the main admin can do this.' });
+}
+
 const MIN_PASSWORD_LENGTH = 10;
 const MAX_PASSWORD_LENGTH = 72;
 
@@ -94,4 +101,4 @@ function readPoomsaeAges(body) {
     .map((g) => ({ ...g, min_age: g.minRaw === '' ? NaN : Number(g.minRaw), max_age: g.maxRaw === '' ? NaN : Number(g.maxRaw) }));
 }
 
-module.exports = { clean, toArray, requireRole, homeFor, afterLogin, passwordError, notFound, wrap, readSetup, readPoomsaeAges };
+module.exports = { clean, toArray, requireRole, requireOwner, homeFor, afterLogin, passwordError, notFound, wrap, readSetup, readPoomsaeAges };

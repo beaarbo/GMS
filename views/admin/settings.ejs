@@ -104,7 +104,7 @@
       </div>
     </div>
     <label class="check"><input type="checkbox" name="public_club_icons" value="1" <%= values.public_club_icons === '1' ? 'checked' : '' %>> Show club icons to visitors without an account</label>
-    <label class="check"><input type="checkbox" name="require_2fa_admins" value="1" <%= values.require_2fa_admins === '1' ? 'checked' : '' %>> Admins must use two-step login</label>
+    <label class="check"><input type="checkbox" name="require_2fa_admins" value="1" <%= values.require_2fa_admins === '1' ? 'checked' : '' %> <%= user.owner ? '' : 'disabled' %>> Admins must use two-step login<%= user.owner ? '' : ' (main admin only)' %></label>
     <p class="hint"><%= user.two_step ? 'You have two-step login on.' : 'Set up two-step login on My account before turning this on.' %> An admin without it can only reach My account until they set it up.</p>
   </section>
 
@@ -122,7 +122,8 @@
       </div>
       <div class="field">
         <label for="offsite_backup_email">Email each daily backup to <span class="hint">(optional)</span></label>
-        <input id="offsite_backup_email" name="offsite_backup_email" type="email" maxlength="200" value="<%= values.offsite_backup_email %>">
+        <input id="offsite_backup_email" name="offsite_backup_email" type="email" maxlength="200" value="<%= values.offsite_backup_email %>" <%= user.owner ? '' : 'disabled' %>>
+        <% if (!user.owner) { %><p class="hint">Only the main admin can change this.</p><% } %>
       </div>
     </div>
     <p class="hint">An emailed copy survives if the server's disk is lost. A backup holds everyone's personal data and password hashes, so use an address only organisers can read. Backups over <%= maxEmailedMb %> MB are too big to email; download those from <a href="/admin/backups">Backups</a>.<% if (!mailConfigured) { %> <strong>Email isn't set up, so nothing can be sent yet.</strong><% } %></p>
