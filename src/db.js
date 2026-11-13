@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const Database = require('better-sqlite3');
 const { DEFAULT_BELT_GROUPS } = require('./divisions');
-const { DEFAULT_POOMSAE_AGE_GROUPS } = require('./poomsae');
+const { DEFAULT_POOMSAE_AGE_GROUPS, defaultDesignated } = require('./poomsae');
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS clubs (
@@ -305,7 +305,9 @@ CREATE TABLE IF NOT EXISTS poomsae_age_groups (
   competition_id INTEGER NOT NULL REFERENCES competitions(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   min_age INTEGER NOT NULL,
-  max_age INTEGER NOT NULL
+  max_age INTEGER NOT NULL,
+  -- The designated poomsae this age group draws from, a JSON list of names.
+  designated TEXT NOT NULL DEFAULT '[]'
 );
 
 -- Poomsae entries: one athlete (individual), two (pair) or three (team) from
@@ -382,6 +384,9 @@ CREATE TABLE IF NOT EXISTS poomsae_divisions (
   bracket_seq INTEGER,
   list_day INTEGER,
   list_court INTEGER,
+  -- The two poomsae drawn for the performance list and for the bracket (JSON lists).
+  list_draw TEXT,
+  bracket_draw TEXT,
   PRIMARY KEY (competition_id, division_key)
 );
 
@@ -794,6 +799,20 @@ function migrateOwner(db) {
   })();
 }
 
+// Version 26: designated poomsae per age group (filled from the World Taekwondo
+// lists by name) and the poomsae drawn for each division. Nothing is drawn yet.
+function migrateDesignatedPoomsae(db) {
+  db.transaction(() => {
+    addColumnIfMissing(db, 'poomsae_age_groups', 'designated', "TEXT NOT NULL DEFAULT '[]'");
+    addColumnIfMissing(db, 'poomsae_divisions', 'list_draw', 'TEXT');
+    addColumnIfMissing(db, 'poomsae_divisions', 'bracket_draw', 'TEXT');
+    const fill = db.prepare('UPDATE poomsae_age_groups SET designated = ? WHERE id = ?');
+    db.prepare("SELECT id, name FROM poomsae_age_groups WHERE designated = '[]'").all()
+      .forEach((g) => fill.run(JSON.stringify(defaultDesignated(g.name)), g.id));
+    db.pragma('user_version = 26');
+  })();
+}
+
 function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 1) migrateBelts(db);
   if (db.pragma('user_version', { simple: true }) < 2) migrateSchedule(db);
@@ -820,6 +839,7 @@ function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 23) migrateSettings(db);
   if (db.pragma('user_version', { simple: true }) < 24) migrateClubCountry(db);
   if (db.pragma('user_version', { simple: true }) < 25) migrateOwner(db);
+  if (db.pragma('user_version', { simple: true }) < 26) migrateDesignatedPoomsae(db);
 }
 
 // Safe on old databases: only tables that don't exist yet are created.

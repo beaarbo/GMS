@@ -200,3 +200,151 @@ document.addEventListener('change', (event) => {
     grid.hidden = files.length === 0;
   });
 }());
+
+// Poomsae draw wheel. The server makes the random pick and records it; the wheel
+// only shows it, spinning to each poomsae drawn. Without JavaScript (or fetch)
+// the form posts normally and the page shows the result.
+(function () {
+  const SPIN_MS = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 400 : 3200;
+  const token = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+  function drawWheel(canvas, names, rotation) {
+    const ctx = canvas.getContext('2d');
+    const size = canvas.width;
+    const r = size / 2 - 6;
+    const seg = (Math.PI * 2) / names.length;
+    // Fill colours made for white text, in both themes; the two greens never touch.
+    const colours = ['--chung-fill', '--ok-fill', '--hong-fill', '--ok-fill-hover'].map(token);
+    ctx.clearRect(0, 0, size, size);
+    ctx.save();
+    ctx.translate(size / 2, size / 2);
+    names.forEach((name, i) => {
+      const start = rotation + i * seg;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.arc(0, 0, r, start, start + seg);
+      ctx.closePath();
+      // Neighbours never share a colour, nor do the first and last.
+      ctx.fillStyle = colours[(i % colours.length === 0 && i === names.length - 1) ? 1 : i % colours.length];
+      ctx.fill();
+      ctx.strokeStyle = token('--surface');
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.save();
+      ctx.rotate(start + seg / 2);
+      ctx.fillStyle = token('--on-photo');
+      ctx.font = `600 ${Math.max(10, Math.min(16, 220 / names.length))}px ${token('--font')}`;
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(name, r - 10, 0, r - 30);
+      ctx.restore();
+    });
+    ctx.beginPath();
+    ctx.arc(0, 0, 18, 0, Math.PI * 2);
+    ctx.fillStyle = token('--surface');
+    ctx.fill();
+    ctx.restore();
+    // The pointer, at the top.
+    ctx.beginPath();
+    ctx.moveTo(size / 2 - 12, 0);
+    ctx.lineTo(size / 2 + 12, 0);
+    ctx.lineTo(size / 2, 26);
+    ctx.closePath();
+    ctx.fillStyle = token('--ink');
+    ctx.fill();
+  }
+
+  // Turns from the current angle to land the chosen slice under the pointer, after a few full turns.
+  function spinTo(canvas, names, from, index) {
+    const seg = (Math.PI * 2) / names.length;
+    let target = -Math.PI / 2 - (index + 0.5) * seg;
+    while (target < from + Math.PI * 8) target += Math.PI * 2;
+    const started = performance.now();
+    return new Promise((resolve) => {
+      const frame = (now) => {
+        const t = Math.min(1, (now - started) / SPIN_MS);
+        const eased = 1 - (1 - t) ** 3;
+        drawWheel(canvas, names, from + (target - from) * eased);
+        if (t < 1) requestAnimationFrame(frame);
+        else resolve(target % (Math.PI * 2));
+      };
+      requestAnimationFrame(frame);
+    });
+  }
+
+  function wheelDialog(title, names) {
+    const dialog = document.createElement('dialog');
+    dialog.className = 'wheel-dialog';
+    const heading = document.createElement('h2');
+    heading.textContent = title;
+    const canvas = document.createElement('canvas');
+    canvas.width = 340;
+    canvas.height = 340;
+    canvas.className = 'wheel-canvas';
+    canvas.setAttribute('role', 'img');
+    canvas.setAttribute('aria-label', `A wheel of ${names.length} poomsae: ${names.join(', ')}`);
+    const status = document.createElement('p');
+    status.className = 'wheel-status';
+    status.setAttribute('aria-live', 'polite');
+    status.textContent = 'Spinning…';
+    const picked = document.createElement('ol');
+    picked.className = 'wheel-picked';
+    const done = document.createElement('button');
+    done.type = 'button';
+    done.className = 'btn';
+    done.textContent = 'Done';
+    done.disabled = true;
+    dialog.append(heading, canvas, status, picked, done);
+    drawWheel(canvas, names, -Math.PI / 2);
+    return { dialog, canvas, status, picked, done };
+  }
+
+  document.addEventListener('submit', async (event) => {
+    const form = event.target;
+    if (event.defaultPrevented || !form.matches('[data-poomsae-wheel]') || !window.fetch || !window.HTMLDialogElement) return;
+    let names;
+    try { names = JSON.parse(form.dataset.list); } catch (error) { return; }
+    event.preventDefault();
+    const ui = wheelDialog(form.dataset.title, names);
+    document.body.append(ui.dialog);
+    ui.dialog.showModal();
+    let result;
+    try {
+      const response = await fetch(form.action, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams(new FormData(form)),
+      });
+      result = await response.json();
+    } catch (error) {
+      result = { ok: false, error: 'The draw could not be made. Check the connection and try again.' };
+    }
+    const finish = () => {
+      const target = new URL(result.back || window.location.href, window.location.href);
+      if (target.pathname + target.search === window.location.pathname + window.location.search) {
+        window.location.hash = target.hash;
+        window.location.reload();
+      } else window.location.assign(target.href);
+    };
+    ui.done.addEventListener('click', finish);
+    ui.dialog.addEventListener('close', finish);
+    if (!result.ok) {
+      ui.status.textContent = result.error || 'The draw could not be made.';
+      ui.done.disabled = false;
+      return;
+    }
+    const wheel = result.list && result.list.length >= 2 ? result.list : names;
+    let angle = -Math.PI / 2;
+    for (const [i, name] of result.names.entries()) {
+      ui.status.textContent = `Spinning for poomsae ${i + 1} of ${result.names.length}…`;
+      angle = await spinTo(ui.canvas, wheel, angle, Math.max(0, wheel.indexOf(name)));
+      const item = document.createElement('li');
+      item.textContent = name;
+      ui.picked.append(item);
+    }
+    ui.status.textContent = `Drawn: ${result.names.join(' and ')}.`;
+    ui.done.disabled = false;
+    ui.done.focus();
+  });
+}());

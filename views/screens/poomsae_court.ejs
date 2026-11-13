@@ -27,10 +27,12 @@
     <% if (now && now.kind === 'perform') { %>
       <h1 class="screen-label">Now performing</h1>
       <p class="screen-bout"><%= now.time %> · <%= now.title %> · <%= now.place %> of <%= now.of %></p>
+      <% if (now.poomsae) { %><p class="screen-poomsae">Poomsae: <strong><%= now.poomsae.join(' · ') %></strong></p><% } %>
       <div class="screen-corner screen-performer"><% if (photos && photos.performer) { %><span class="screen-photos"><% photos.performer.forEach((p) => { %><%- include('../partials/athlete_photo', { url: p.url, name: p.name, size: 'xl' }) %><% }) %></span><% } %><strong><%= now.name %></strong><span><%= now.club %></span></div>
     <% } else if (now) { const blue = side(now, 'blue'); const red = side(now, 'red'); %>
       <h1 class="screen-label">Now competing</h1>
       <p class="screen-bout">Bout <%= now.number %> · <%= now.time %> · <%= now.title %></p>
+      <% if (now.poomsae) { %><p class="screen-poomsae">Poomsae: <strong><%= now.poomsae.join(' · ') %></strong></p><% } %>
       <div class="screen-versus">
         <div class="screen-corner blue"><span class="screen-corner-label">Blue</span><% if (photos && photos.blue) { %><span class="screen-photos"><% photos.blue.forEach((p) => { %><%- include('../partials/athlete_photo', { url: p.url, name: p.name, size: 'xl' }) %><% }) %></span><% } %><strong><%= blue.name %></strong><span><%= blue.club %></span></div>
         <div class="screen-vs">vs</div>

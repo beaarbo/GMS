@@ -13,6 +13,7 @@ const {
 const { buildBracket, roundsFromSlots, seededSlots, slotsAreValid, assignCourts, scheduleCourt, formatTime, layoutBracket, computeMedals } = require('./bracket');
 const {
   placeEntry, POOMSAE_EVENTS, POOMSAE_GENDERS, poomsaeDivisionTitle, rankEntries, divisionMode, bracketEntrants, poomsaeMedalists, schedulePoomsae, hasKyorugi, hasPoomsae, judgesScore,
+  defaultDesignated, pickPoomsae,
 } = require('./poomsae');
 const { logActivity } = require('./activity');
 const { documentLabel, documentTypeFor } = require('./documents');
@@ -121,9 +122,62 @@ function savePoomsaeAgeGroups(db, competitionId, groups) {
   db.transaction(() => {
     if (countRegistrations(db, competitionId) > 0) throw new Error('Division setup is locked once registrations exist.');
     db.prepare('DELETE FROM poomsae_age_groups WHERE competition_id = ?').run(competitionId);
-    const insert = db.prepare('INSERT INTO poomsae_age_groups (competition_id, name, min_age, max_age) VALUES (?, ?, ?, ?)');
-    groups.forEach((g) => insert.run(competitionId, g.name, g.min_age, g.max_age));
+    const insert = db.prepare('INSERT INTO poomsae_age_groups (competition_id, name, min_age, max_age, designated) VALUES (?, ?, ?, ?, ?)');
+    groups.forEach((g) => insert.run(competitionId, g.name, g.min_age, g.max_age, JSON.stringify(g.designated || defaultDesignated(g.name))));
   })();
+}
+
+// Each poomsae age group with its designated poomsae, as [{ id, name, designated: [names] }].
+function listDesignatedPoomsae(db, competitionId) {
+  return db.prepare('SELECT id, name, designated FROM poomsae_age_groups WHERE competition_id = ? ORDER BY min_age').all(competitionId)
+    .map((g) => ({ id: g.id, name: g.name, designated: JSON.parse(g.designated) }));
+}
+
+// Lists stay editable after a draw: a draw keeps the names it picked.
+function saveDesignatedPoomsae(db, competitionId, ageGroupId, names) {
+  return db.prepare('UPDATE poomsae_age_groups SET designated = ? WHERE id = ? AND competition_id = ?')
+    .run(JSON.stringify(names), ageGroupId, competitionId).changes > 0;
+}
+
+// The drawn poomsae of one stage of a division: 'list' (the performance list or
+// score round) or 'bracket'. Each stage draws once, from the division's age
+// group's list, and can be drawn again or cleared until that stage has a score
+// or a result. names: the two to keep, for clearing pass null.
+const DRAW_COLUMNS = { list: 'list_draw', bracket: 'bracket_draw' };
+
+function poomsaeDrawDivision(db, competition, key) {
+  const entries = listPoomsaeEntries(db, competition.id);
+  return poomsaeDivisions(entries, competition, loadPoomsaeBrackets(db, competition.id, entries), loadPoomsaeSettings(db, competition.id))
+    .find((d) => d.key === key && d.approved > 0) || null;
+}
+
+function poomsaeDrawProblem(division, stage) {
+  if (!division) return 'That division has no approved entries.';
+  if (stage === 'list' && !['score', 'cut'].includes(division.mode)) return 'This division has no performance list: it goes straight to a bracket.';
+  if (stage === 'bracket' && !['bracket', 'cut'].includes(division.mode)) return 'This division is ranked by score, so it has no bracket.';
+  if (stage === 'list' && division.scored > 0) return 'Scoring has started, so the poomsae stay as drawn.';
+  if (stage === 'bracket' && division.bouts && division.bouts.some((b) => b.winner)) return 'The bracket has results, so the poomsae stay as drawn.';
+  return null;
+}
+
+function drawDivisionPoomsae(db, competition, key, stage, { clear = false, randomInt = crypto.randomInt } = {}) {
+  if (!DRAW_COLUMNS[stage]) return { ok: false, error: 'Choose the performance list or the bracket.' };
+  const division = poomsaeDrawDivision(db, competition, key);
+  const problem = poomsaeDrawProblem(division, stage);
+  if (problem) return { ok: false, error: problem };
+  let names = null;
+  if (!clear) {
+    const group = db.prepare('SELECT name, designated FROM poomsae_age_groups WHERE id = ? AND competition_id = ?').get(division.ageGroupId, competition.id);
+    const list = group ? JSON.parse(group.designated) : [];
+    names = pickPoomsae(list, randomInt);
+    if (!names) return { ok: false, error: `Add at least two designated poomsae for ${group ? group.name : 'this age group'} on the Divisions page first.`, list };
+  }
+  const column = DRAW_COLUMNS[stage];
+  db.prepare(
+    `INSERT INTO poomsae_divisions (competition_id, division_key, ${column}) VALUES (?, ?, ?)
+     ON CONFLICT (competition_id, division_key) DO UPDATE SET ${column} = excluded.${column}`
+  ).run(competition.id, key, names ? JSON.stringify(names) : null);
+  return { ok: true, names, title: division.title, list: names ? JSON.parse(db.prepare('SELECT designated FROM poomsae_age_groups WHERE id = ?').get(division.ageGroupId).designated) : null };
 }
 
 function getEventDates(db, competitionId) {
@@ -639,6 +693,10 @@ function poomsaeDivisions(entries, competition, brackets = new Map(), settings =
       order,
       listDay: setting ? setting.list_day : null,
       listCourt: setting ? setting.list_court : null,
+      // The two poomsae drawn for each stage (null until drawn), and the age group they're drawn from.
+      listPoomsae: setting && setting.list_draw ? JSON.parse(setting.list_draw) : null,
+      bracketPoomsae: setting && setting.bracket_draw ? JSON.parse(setting.bracket_draw) : null,
+      ageGroupId: d.entries[0].age_group_id,
       canOrder: mode !== 'score' && mode !== 'cut' ? false : !approved.some((e) => e.score !== null) && d.entries.every((e) => e.status !== 'pending') && approved.length > 0,
       layout: bouts ? layoutBracket(bouts, { slotHeight: 30, top: 4 }) : null,
       drawProblem: draw && !draw.ok ? draw.error : null,
@@ -803,7 +861,7 @@ function poomsaeBoutList(db, competition, { clubId = null, published = false } =
       if (d.order.length > 0) {
         pages.push({
           kind: 'list', key: d.key, title: boutListTitle(d), day: d.listDay, court: d.listCourt, start: d.order[0].perform_time || '',
-          meta: [`Day: ${dayLabel(d.listDay)}`, `Poomsae court: ${d.listCourt || '-'}`, `Entries: ${d.order.length}`, `Starts: ${d.order[0].perform_time || '-'}`],
+          meta: [`Day: ${dayLabel(d.listDay)}`, `Poomsae court: ${d.listCourt || '-'}`, `Entries: ${d.order.length}`, `Starts: ${d.order[0].perform_time || '-'}`, ...(d.listPoomsae ? [`Poomsae: ${d.listPoomsae.join(' · ')}`] : [])],
           performers: d.order.map((e) => ({ id: e.id, name: e.names, club: e.club_label, clubId: e.club_id, time: e.perform_time })),
           dayLabel: dayLabel(d.listDay),
         });
@@ -813,7 +871,7 @@ function poomsaeBoutList(db, competition, { clubId = null, published = false } =
         const times = d.bouts.map((b) => b.time).filter(Boolean).sort();
         pages.push({
           kind: 'bracket', key: d.key, title: `${boutListTitle(d)}${d.mode === 'cut' ? ' - FINAL ROUND' : ''}`, day: d.day, court: d.court, start: times[0] || '',
-          meta: [`Day: ${dayLabel(d.day)}`, `Poomsae court: ${d.court || '-'}`, `Entries: ${d.bouts.filter((b) => b.round === 1).reduce((n, b) => n + (b.blue ? 1 : 0) + (b.red ? 1 : 0), 0)}`, `Bouts: ${matches}`],
+          meta: [`Day: ${dayLabel(d.day)}`, `Poomsae court: ${d.court || '-'}`, `Entries: ${d.bouts.filter((b) => b.round === 1).reduce((n, b) => n + (b.blue ? 1 : 0) + (b.red ? 1 : 0), 0)}`, `Bouts: ${matches}`, ...(d.bracketPoomsae ? [`Poomsae: ${d.bracketPoomsae.join(' · ')}`] : [])],
           bouts: d.bouts, matches, layout: d.layout, dayLabel: dayLabel(d.day),
         });
       }
@@ -834,11 +892,11 @@ function poomsaeCourtItems(db, competition, { published = false } = {}) {
     if (showLists && d.listCourt) {
       d.order.forEach((e) => items.push({
         kind: 'perform', id: e.id, day: d.listDay, court: d.listCourt, time: e.perform_time || '', title: d.title,
-        name: e.names, club: e.club_label, score: e.score, done: e.score !== null, place: e.perform_order, of: d.order.length,
+        name: e.names, club: e.club_label, score: e.score, done: e.score !== null, place: e.perform_order, of: d.order.length, poomsae: d.listPoomsae,
       }));
     }
     if (showBrackets && d.bouts && d.court) {
-      d.bouts.filter((b) => !b.isBye).forEach((b) => items.push({ ...b, kind: 'bout', day: d.day, court: d.court, title: d.title, done: Boolean(b.winner) }));
+      d.bouts.filter((b) => !b.isBye).forEach((b) => items.push({ ...b, kind: 'bout', day: d.day, court: d.court, title: d.title, done: Boolean(b.winner), poomsae: d.bracketPoomsae }));
     }
   });
   return items.sort((a, b) => a.day - b.day || a.court - b.court || a.time.localeCompare(b.time) || (a.number || 0) - (b.number || 0));
@@ -2009,6 +2067,9 @@ module.exports = {
   countRegistrations,
   saveDivisionSetup,
   savePoomsaeAgeGroups,
+  listDesignatedPoomsae,
+  saveDesignatedPoomsae,
+  drawDivisionPoomsae,
   getEventDates,
   saveEventDates,
   createCompetition,

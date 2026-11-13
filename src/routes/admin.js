@@ -62,6 +62,7 @@ const {
   listPoomsaeEntries,
   REGISTRATION_SELECT,
   DIVISION_ORDER,
+  listDesignatedPoomsae,
 } = require('../services');
 const { sendDocument, detectIconType, detectAttachmentType, safeFilename, MAX_ICON_BYTES, MAX_NEW_COMPETITION_FILES, MAX_COMPETITION_PHOTOS, MAX_COMPETITION_PHOTO_BYTES } = require('../documents');
 const { ACTIVITY_CATEGORIES, listActivity, countActivity, formatActivityTime } = require('../activity');
@@ -817,6 +818,7 @@ router.get('/competitions/:id(\\d+)/divisions', (req, res) => {
     locked: hasBoutList(db, req.competition.id),
     // Poomsae divisions on the same page, each with its own format, cut and day.
     poomsae: hasPoomsae(req.competition) ? poomsaeDrawSummary(db, req.competition) : null,
+    designated: hasPoomsae(req.competition) ? listDesignatedPoomsae(db, req.competition.id) : [],
     dayOptions: getEventDates(db, req.competition.id).map((date, i) => ({ value: i + 1, label: `Day ${i + 1} (${formatDay(date)})` })),
   });
 });
@@ -910,6 +912,7 @@ router.get('/competitions/:id(\\d+)/bouts', (req, res) => {
     event: hasKyorugi(req.competition) && hasPoomsae(req.competition) && eventQuery(req.query.event) ? req.query.event : null,
     bothEvents: hasKyorugi(req.competition) && hasPoomsae(req.competition),
     poomsae: hasPoomsae(req.competition) ? poomsaeDrawSummary(db, req.competition) : null,
+    designated: hasPoomsae(req.competition) ? listDesignatedPoomsae(db, req.competition.id) : [],
     cardClubs: cardClubs(db, req.competition.id),
     divisions,
     dayCount: eventDates.length,

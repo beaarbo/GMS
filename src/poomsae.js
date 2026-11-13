@@ -32,6 +32,47 @@ const DEFAULT_POOMSAE_AGE_GROUPS = [
   { name: 'Over 65', min_age: 66, max_age: 99 },
 ];
 
+// The designated poomsae each age group draws from, after World Taekwondo's
+// recognised poomsae (Kids is a local list). Each competition keeps its own
+// copy, which the admin can edit on the Divisions page; a group whose name
+// isn't here starts with an empty list.
+const DESIGNATED_POOMSAE = {
+  'Kids (U12)': ['Taegeuk 1', 'Taegeuk 2', 'Taegeuk 3', 'Taegeuk 4', 'Taegeuk 5', 'Taegeuk 6', 'Taegeuk 7', 'Taegeuk 8'],
+  'Cadet (U15)': ['Taegeuk 4', 'Taegeuk 5', 'Taegeuk 6', 'Taegeuk 7', 'Taegeuk 8', 'Koryo', 'Keumgang', 'Taebaek'],
+  'Junior (U18)': ['Taegeuk 4', 'Taegeuk 5', 'Taegeuk 6', 'Taegeuk 7', 'Taegeuk 8', 'Koryo', 'Keumgang', 'Taebaek', 'Pyongwon', 'Sipjin'],
+  'Senior (U30)': ['Taegeuk 6', 'Taegeuk 7', 'Taegeuk 8', 'Koryo', 'Keumgang', 'Taebaek', 'Pyongwon', 'Sipjin', 'Jitae'],
+  U40: ['Taegeuk 6', 'Taegeuk 7', 'Taegeuk 8', 'Koryo', 'Keumgang', 'Taebaek', 'Pyongwon', 'Sipjin', 'Jitae', 'Chonkwon'],
+  U50: ['Taegeuk 8', 'Koryo', 'Keumgang', 'Taebaek', 'Pyongwon', 'Sipjin', 'Jitae', 'Chonkwon', 'Hansu'],
+  U60: ['Koryo', 'Keumgang', 'Taebaek', 'Pyongwon', 'Sipjin', 'Jitae', 'Chonkwon', 'Hansu'],
+  U65: ['Koryo', 'Keumgang', 'Taebaek', 'Pyongwon', 'Sipjin', 'Jitae', 'Chonkwon', 'Hansu'],
+  'Over 65': ['Koryo', 'Keumgang', 'Taebaek', 'Pyongwon', 'Sipjin', 'Jitae', 'Chonkwon', 'Hansu'],
+};
+const MAX_DESIGNATED = 30;
+const POOMSAE_PER_DRAW = 2;
+
+const defaultDesignated = (name) => [...(DESIGNATED_POOMSAE[name] || [])];
+
+// A typed list (one per line, or separated by commas) to clean names: trimmed,
+// each at most 40 characters, no repeats (ignoring case), at most 30.
+function parseDesignated(text) {
+  const seen = new Set();
+  return String(text || '')
+    .split(/[\n,]/)
+    .map((name) => name.trim().replace(/\s+/g, ' ').slice(0, 40))
+    .filter((name) => name && !seen.has(name.toLowerCase()) && seen.add(name.toLowerCase()))
+    .slice(0, MAX_DESIGNATED);
+}
+
+// Two different poomsae from the list at random, kept in the list's order so the
+// easier one comes first. randomInt(n) gives 0..n-1 (crypto.randomInt in use).
+function pickPoomsae(list, randomInt) {
+  if (list.length < POOMSAE_PER_DRAW) return null;
+  const pool = list.map((name, i) => ({ name, i }));
+  const picked = [];
+  while (picked.length < POOMSAE_PER_DRAW) picked.push(...pool.splice(randomInt(pool.length), 1));
+  return picked.sort((a, b) => a.i - b.i).map((p) => p.name);
+}
+
 // Every group needs a name and a valid range, and no age may fit two groups.
 function validatePoomsaeAgeGroups(groups) {
   const errors = [];
@@ -261,6 +302,11 @@ module.exports = {
   POOMSAE_GENDERS,
   MAX_SCORE,
   DEFAULT_POOMSAE_AGE_GROUPS,
+  DESIGNATED_POOMSAE,
+  POOMSAE_PER_DRAW,
+  defaultDesignated,
+  parseDesignated,
+  pickPoomsae,
   validatePoomsaeAgeGroups,
   POOMSAE_FORMATS,
   MAX_CUT,

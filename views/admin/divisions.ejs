@@ -100,6 +100,33 @@
       <span>Competition format: <strong><%= POOMSAE_FORMATS[competition.poomsae_format] %><%= competition.poomsae_format === 'cut' ? ` (top ${competition.poomsae_cut})` : '' %></strong></span>
     </p>
   </div>
+  <section class="card" id="designated-poomsae">
+    <h2>Designated poomsae</h2>
+    <p class="sub">Each division draws two poomsae at random from its age group's list: one draw for the performance list, and another for the bracket if it has one. Draw them on the Bout list. Changing a list doesn't change poomsae already drawn.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Age group</th><th>Poomsae to draw from <span class="hint">(separate with commas)</span></th></tr></thead>
+        <tbody>
+          <% designated.forEach((g) => { %>
+            <tr>
+              <td class="nowrap"><strong><%= g.name %></strong><div class="hint"><%= g.designated.length %> poomsae</div></td>
+              <td>
+                <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/designated" class="designated-form">
+                  <input type="hidden" name="_csrf" value="<%= csrf %>">
+                  <input type="hidden" name="event" value="<%= event || '' %>">
+                  <input type="hidden" name="back" value="divisions">
+                  <input type="hidden" name="age_group" value="<%= g.id %>">
+                  <textarea name="names" rows="2" aria-label="Designated poomsae for <%= g.name %>"><%= g.designated.join(', ') %></textarea>
+                  <button class="btn secondary small" type="submit">Save</button>
+                </form>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
   <div class="notice info">Each division uses the competition's format unless you change it here. A format is fixed once the division has a performance list, scores or a bracket; its day can still change.</div>
 
   <% if (poomsaeList.length === 0) { %>

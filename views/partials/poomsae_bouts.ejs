@@ -2,6 +2,7 @@
 <% const ready = poomsae.divisions.filter((d) => d.approved > 0); %>
 <% const lists = ready.filter((d) => d.order.length > 0).length; const brackets = ready.filter((d) => d.bouts).length; %>
 <% const closed = competition.status === 'closed'; %>
+<% const designatedFor = new Map(designated.map((g) => [g.id, g.designated])); %>
 <%# "1 (Fri 8 Jan)", as on the kyorugi cards. %>
 <% const dayLabel = (day) => { const found = dayOptions.find((o) => o.value === day); return found ? found.label.replace(/^Day /, '') : day || '–'; }; %>
 <%# event is checked by the route: kyorugi, poomsae or empty. %>
@@ -95,6 +96,38 @@
             <span>Entries: <strong><%= d.approved %></strong></span>
             <% if (played.length > 0) { %><span>Matches: <strong><%= played.length %></strong></span><% } %>
           </p>
+        </div>
+
+        <%# The two poomsae for each stage, drawn at random from the age group's designated list. %>
+        <% const pool = designatedFor.get(d.ageGroupId) || []; %>
+        <% const stages = [
+          ['list', d.mode === 'cut' ? 'Score round' : 'Performance list', ['score', 'cut'].includes(d.mode), d.listPoomsae, d.scored === 0],
+          ['bracket', 'Bracket', ['bracket', 'cut'].includes(d.mode), d.bracketPoomsae, !(d.bouts && d.bouts.some((b) => b.winner))],
+        ].filter(([, , applies]) => applies); %>
+        <div class="poomsae-draws">
+          <% stages.forEach(([stage, label, , names, open]) => { %>
+            <div class="poomsae-draw" id="poomsae-draw-<%= d.key %>-<%= stage %>">
+              <span><%= label %> poomsae:</span>
+              <% if (names) { %><strong><%= names.join(' · ') %></strong><% } else { %><span class="hint">not drawn yet</span><% } %>
+              <% if (open && pool.length >= 2) { %>
+                <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/draw-poomsae" class="inline-form" data-poomsae-wheel data-list="<%= JSON.stringify(pool) %>" data-title="<%= d.title %> · <%= label %>"<%- names ? ' data-confirm="Draw these poomsae again? The current ones will be replaced."' : '' %>>
+                  <input type="hidden" name="_csrf" value="<%= csrf %>"><%- back %>
+                  <input type="hidden" name="division" value="<%= d.key %>">
+                  <input type="hidden" name="stage" value="<%= stage %>">
+                  <button class="btn secondary small" type="submit"><%= names ? 'Spin again' : 'Spin the wheel' %></button>
+                </form>
+              <% } %>
+              <% if (open && names) { %>
+                <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/draw-poomsae" class="inline-form">
+                  <input type="hidden" name="_csrf" value="<%= csrf %>"><%- back %>
+                  <input type="hidden" name="division" value="<%= d.key %>">
+                  <input type="hidden" name="stage" value="<%= stage %>">
+                  <button class="btn danger small" name="action" value="clear" type="submit">Clear</button>
+                </form>
+              <% } %>
+            </div>
+          <% }) %>
+          <% if (pool.length < 2) { %><p class="hint">Add at least two designated poomsae for this age group on the <a href="/admin/competitions/<%= competition.id %>/divisions#designated-poomsae">Divisions</a> page to draw.</p><% } %>
         </div>
 
         <% if (hasList) { %>

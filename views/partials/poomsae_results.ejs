@@ -17,6 +17,8 @@
         <h2><%= d.title %></h2>
         <p class="stats"><span>Format: <strong><%= d.mode === 'score' ? 'Ranked by score' : d.mode === 'cut' ? `Score round, top ${d.cut}` : 'Single elimination' %></strong></span></p>
       </div>
+      <% const drawn = [[d.mode === 'cut' ? 'Score round' : 'Performance list', d.listPoomsae], ['Bracket', d.bracketPoomsae]].filter(([, names]) => names); %>
+      <% if (drawn.length > 0) { %><p class="stats"><% drawn.forEach(([label, names]) => { %><span><%= label %> poomsae: <strong><%= names.join(' · ') %></strong></span><% }) %></p><% } %>
       <% const medalLine = ['gold', 'silver', 'bronze'].filter((m) => d.medalists[m].length > 0); %>
       <% if (medalLine.length > 0) { %>
         <p class="stats"><% medalLine.forEach((m) => { %><span><strong><%= m[0].toUpperCase() + m.slice(1) %>:</strong> <%= d.medalists[m].map((id) => names.get(id)).join(', ') %></span><% }) %></p>

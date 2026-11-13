@@ -21,6 +21,8 @@ const {
   loadPoomsaeSettings,
   savePoomsaeSchedule,
   savePoomsaeDivision,
+  saveDesignatedPoomsae,
+  drawDivisionPoomsae,
   generatePoomsaeOrder,
   clearPoomsaeOrder,
   poomsaeBoutList,
@@ -34,7 +36,7 @@ const {
   hasPoomsaeScores,
   loadJudgeMarks,
 } = require('../services');
-const { hasKyorugi, hasPoomsae, parseScore, formatScore, poomsaeDivisionTitle, poomsaeMedalTable, POOMSAE_FORMATS, MAX_CUT, JUDGE_COUNTS, judgesScore } = require('../poomsae');
+const { parseDesignated, hasKyorugi, hasPoomsae, parseScore, formatScore, poomsaeDivisionTitle, poomsaeMedalTable, POOMSAE_FORMATS, MAX_CUT, JUDGE_COUNTS, judgesScore } = require('../poomsae');
 const { notifyPoomsaeDecisions, notifyPoomsaePublished } = require('../notifications');
 const { writeBoutListPdf } = require('../boutlistPdf');
 const { computeMedals, WIN_TYPES, readBoutScore } = require('../bracket');
@@ -563,6 +565,41 @@ router.post('/competitions/:id(\\d+)/poomsae/division', requireRole('admin'), (r
     }
   }
   return res.redirect(sharedPageReturn(req, `division-${key}`) || poomsaePath(competition, null, key));
+});
+
+// One age group's designated poomsae, from the Divisions page.
+router.post('/competitions/:id(\\d+)/poomsae/designated', requireRole('admin'), (req, res) => {
+  const { db } = req.app.locals;
+  const names = parseDesignated(req.body.names);
+  const group = db.prepare('SELECT id, name FROM poomsae_age_groups WHERE id = ? AND competition_id = ?').get(Number(req.body.age_group), req.competition.id);
+  if (!group) return notFound(res);
+  saveDesignatedPoomsae(db, req.competition.id, group.id, names);
+  req.logActivity('poomsae.designated', `Set the designated poomsae for ${group.name} to ${names.join(', ') || 'none'}: ${req.competition.name}`, req.competition.id);
+  req.flash('success', `Designated poomsae for ${group.name} saved.${names.length < 2 ? ' Add at least two before drawing.' : ''}`);
+  return res.redirect(sharedPageReturn(req, 'designated-poomsae') || poomsaePath(req.competition));
+});
+
+// Draws (or clears) the two poomsae of one stage of a division: its performance
+// list ('list') or its bracket. The Bout list's wheel posts here with
+// Accept: application/json and spins to the names the server picked.
+router.post('/competitions/:id(\\d+)/poomsae/draw-poomsae', requireRole('admin'), (req, res) => {
+  const { db } = req.app.locals;
+  const key = clean(req.body.division, 60);
+  const stage = req.body.stage === 'bracket' ? 'bracket' : 'list';
+  const result = drawDivisionPoomsae(db, req.competition, key, stage, { clear: req.body.action === 'clear' });
+  const stageName = stage === 'bracket' ? 'bracket' : 'performance list';
+  if (result.ok) {
+    req.logActivity('poomsae.drawn', result.names
+      ? `Drew ${result.names.join(' and ')} for the ${stageName} of ${result.title}: ${req.competition.name}`
+      : `Cleared the poomsae drawn for the ${stageName} of ${result.title}: ${req.competition.name}`, req.competition.id);
+  }
+  const back = sharedPageReturn(req, `division-${key}`) || poomsaePath(req.competition, null, key);
+  if (req.get('Accept') === 'application/json') {
+    return res.status(result.ok ? 200 : 400).json(result.ok ? { ok: true, names: result.names, list: result.list, back } : { ok: false, error: result.error });
+  }
+  if (!result.ok) req.flash('error', result.error);
+  else req.flash('success', result.names ? `${result.title}, ${stageName}: ${result.names.join(' and ')}.` : `Poomsae cleared for the ${stageName} of ${result.title}.`);
+  return res.redirect(back);
 });
 
 // The old poomsae page: its parts now live on the shared Divisions, Bout list
