@@ -28,9 +28,9 @@
     <% if (now) { const blue = side(now, 'blue'); const red = side(now, 'red'); %>
       <p class="screen-bout">Bout <%= now.number %> · <%= now.time %> · <%= now.title %></p>
       <div class="screen-versus">
-        <div class="screen-corner blue"><span class="screen-corner-label">Blue</span><strong><%= blue.name %></strong><span><%= blue.club %></span></div>
+        <div class="screen-corner blue"><span class="screen-corner-label">Blue</span><% if (photos && photos.blue) { %><span class="screen-photos"><% photos.blue.forEach((p) => { %><%- include('../partials/athlete_photo', { url: p.url, name: p.name, size: 'xl' }) %><% }) %></span><% } %><strong><%= blue.name %></strong><span><%= blue.club %></span></div>
         <div class="screen-vs">vs</div>
-        <div class="screen-corner red"><span class="screen-corner-label">Red</span><strong><%= red.name %></strong><span><%= red.club %></span></div>
+        <div class="screen-corner red"><span class="screen-corner-label">Red</span><% if (photos && photos.red) { %><span class="screen-photos"><% photos.red.forEach((p) => { %><%- include('../partials/athlete_photo', { url: p.url, name: p.name, size: 'xl' }) %><% }) %></span><% } %><strong><%= red.name %></strong><span><%= red.club %></span></div>
       </div>
     <% } else if (next.length > 0) { %>
       <p class="screen-empty">Waiting for earlier results.</p>

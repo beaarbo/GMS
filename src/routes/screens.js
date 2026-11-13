@@ -34,6 +34,31 @@ function screenCompetition(kind) {
   };
 }
 
+// Photos of the athletes on now, as { url, name } (url null: no photo yet). Staff
+// screens only: coaches can open screens too, and must not see other clubs'
+// athletes' photos. Kyorugi sides are registrations; poomsae sides are entries,
+// with one photo per athlete in a pair or team.
+function sidePhotos(db, competitionId, kind, id) {
+  if (!id) return null;
+  const sql = kind === 'kyorugi'
+    ? 'SELECT f.id, f.first_name, f.last_name, p.uploaded_at FROM registrations r JOIN fighters f ON f.id = r.fighter_id LEFT JOIN fighter_photos p ON p.fighter_id = f.id WHERE r.id = ?'
+    : 'SELECT f.id, f.first_name, f.last_name, p.uploaded_at FROM poomsae_members m JOIN fighters f ON f.id = m.fighter_id LEFT JOIN fighter_photos p ON p.fighter_id = f.id WHERE m.entry_id = ? ORDER BY f.last_name, f.first_name';
+  return db.prepare(sql).all(id).map((f) => ({
+    name: `${f.first_name} ${f.last_name}`,
+    url: f.uploaded_at ? `/admin/competitions/${competitionId}/athletes/${f.id}/photo?v=${encodeURIComponent(f.uploaded_at)}` : null,
+  }));
+}
+
+function nowPhotos(req, kind, now) {
+  if (!now || !isStaff(req.user)) return null;
+  const { db } = req.app.locals;
+  if (now.kind === 'perform') return { performer: sidePhotos(db, req.competition.id, 'poomsae', now.id) };
+  return {
+    blue: sidePhotos(db, req.competition.id, kind, now.blue && now.blue.registrationId),
+    red: sidePhotos(db, req.competition.id, kind, now.red && now.red.registrationId),
+  };
+}
+
 const dayLabelOf = (dates, day) => (dates[day - 1] ? `Day ${day} · ${formatDay(dates[day - 1])}` : `Day ${day}`);
 const updatedAt = () => new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
@@ -79,6 +104,7 @@ router.get('/:id(\\d+)/:day(\\d+)/:court(\\d+)', screenCompetition('kyorugi'), (
     day,
     dayLabel: dayLabelOf(getEventDates(db, req.competition.id), day),
     now,
+    photos: nowPhotos(req, 'kyorugi', now),
     next,
     recent,
     done: bouts.length - waiting.length,
@@ -101,6 +127,7 @@ router.get('/:id(\\d+)/poomsae/:day(\\d+)/:court(\\d+)', screenCompetition('poom
     day,
     dayLabel: dayLabelOf(getEventDates(db, req.competition.id), day),
     ...queue,
+    photos: nowPhotos(req, 'poomsae', queue.now),
     total: queue.items.length,
     refreshSeconds: REFRESH_SECONDS,
     updatedAt: updatedAt(),

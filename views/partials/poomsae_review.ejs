@@ -28,7 +28,7 @@
         <tbody>
           <% [...entries].sort((a, b) => (a.status === 'pending' ? 0 : 1) - (b.status === 'pending' ? 0 : 1)).forEach((e) => { %>
             <tr id="entry-<%= e.id %>">
-              <td><strong><%= e.names %></strong><div class="hint"><%= e.athletes.map((a) => `${beltName(a.belt_rank)}, ${a.age_at_event}`).join(' · ') %></div></td>
+              <td><span class="athlete-name"><% e.athletes.forEach((a) => { %><%- include('athlete_photo', { url: a.photo_at ? `/admin/competitions/${competition.id}/athletes/${a.id}/photo?v=${encodeURIComponent(a.photo_at)}` : null, name: `${a.first_name} ${a.last_name}`, size: 'sm' }) %><% }) %><strong><%= e.names %></strong></span><div class="hint"><%= e.athletes.map((a) => `${beltName(a.belt_rank)}, ${a.age_at_event}`).join(' · ') %></div></td>
               <td><%= e.club_name %></td>
               <td><%= poomsaeDivisionTitle(e) %></td>
               <td>

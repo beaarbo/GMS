@@ -90,7 +90,7 @@
             <% registrations.forEach((r) => { %>
               <tr>
                 <td><input type="checkbox" name="ids" value="<%= r.id %>" aria-label="Tick <%= r.first_name %> <%= r.last_name %>"></td>
-                <td><strong><%= r.last_name %>, <%= r.first_name %></strong></td>
+                <td><span class="athlete-name"><%- include('../partials/athlete_photo', { url: r.photo_at ? `/admin/competitions/${competition.id}/athletes/${r.fighter_id}/photo?v=${encodeURIComponent(r.photo_at)}` : null, name: `${r.first_name} ${r.last_name}`, size: 'sm' }) %><strong><%= r.last_name %>, <%= r.first_name %></strong></span></td>
                 <td><%= r.club_name %></td>
                 <td><%= GENDERS[r.gender] %> · <%= r.age_group %> · <%= r.belt_group %> · <%= r.weight_class %></td>
                 <td class="hint">Age <%= r.age_at_event %> (born <%= formatDate(r.date_of_birth) %>)<br><%= beltName(r.belt_rank) %> belt<br>

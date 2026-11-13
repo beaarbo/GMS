@@ -802,3 +802,6 @@ body.mat { background: var(--page); }
 }
 .cards-download { display: inline-flex; align-items: center; gap: var(--space-2); margin-left: 0; }
 .cards-download select { width: auto; }
+.athlete-photo.xl { width: 140px; height: 140px; }
+.screen-photos { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: var(--space-2) 0; }
+.screen-corner .screen-photos, .screen-corner .athlete-photo { opacity: 1; }

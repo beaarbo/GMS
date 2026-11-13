@@ -425,7 +425,8 @@ function listPoomsaeEntries(db, competitionId, { clubId = null } = {}) {
     .all(...[competitionId, clubId].filter(Boolean));
   const members = db.prepare(
     `SELECT m.entry_id, m.age_at_event, f.id, f.first_name, f.last_name, f.gender, f.belt_rank,
-            (SELECT d.doc_type FROM fighter_documents d WHERE d.fighter_id = f.id) AS document_type
+            (SELECT d.doc_type FROM fighter_documents d WHERE d.fighter_id = f.id) AS document_type,
+            (SELECT p.uploaded_at FROM fighter_photos p WHERE p.fighter_id = f.id) AS photo_at
      FROM poomsae_members m JOIN fighters f ON f.id = m.fighter_id
      WHERE m.entry_id = ? ORDER BY f.last_name, f.first_name`
   );
@@ -1024,7 +1025,8 @@ const REGISTRATION_SELECT = `
   SELECT r.*, f.first_name, f.last_name, f.gender, f.date_of_birth, f.belt_rank,
          c.name AS club_name, c.country AS club_country, a.name AS age_group, a.min_age,
          b.name AS belt_group, b.min_rank, w.label AS weight_class, w.max_kg,
-         (SELECT d.doc_type FROM fighter_documents d WHERE d.fighter_id = r.fighter_id) AS document_type
+         (SELECT d.doc_type FROM fighter_documents d WHERE d.fighter_id = r.fighter_id) AS document_type,
+         (SELECT p.uploaded_at FROM fighter_photos p WHERE p.fighter_id = r.fighter_id) AS photo_at
   FROM registrations r
   JOIN fighters f ON f.id = r.fighter_id
   JOIN clubs c ON c.id = r.club_id
@@ -1164,8 +1166,7 @@ const DRAWN = "r.status = 'approved' AND (r.weigh_status IS NULL OR r.weigh_stat
 function listWeighIns(db, competitionId) {
   return db
     .prepare(
-      `${REGISTRATION_SELECT.replace('FROM registrations r', `, ew.label AS entered_weight_class,
-         (SELECT p.uploaded_at FROM fighter_photos p WHERE p.fighter_id = r.fighter_id) AS photo_at FROM registrations r`)}
+      `${REGISTRATION_SELECT.replace('FROM registrations r', ', ew.label AS entered_weight_class FROM registrations r')}
        LEFT JOIN weight_classes ew ON ew.id = r.entered_weight_class_id
        WHERE r.competition_id = ? AND r.status = 'approved' ORDER BY ${DIVISION_ORDER}`
     )
