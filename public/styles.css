@@ -463,6 +463,9 @@ tbody tr.result-row-done:hover td { background: var(--ok-soft); }
 .photo-grid a:hover img { border-color: var(--line-hover); }
 .photo-tile { display: flex; flex-direction: column; gap: var(--space-2); }
 
+/* "Kyorugi" above its part of a page that covers both events. */
+.event-heading { margin: var(--space-6) 0 var(--space-3); }
+
 /* Log in and Sign up, side by side at the top of both forms. */
 .auth-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-1); padding: var(--space-1); margin-bottom: var(--space-5); background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); }
 .auth-tabs a { display: flex; align-items: center; justify-content: center; min-height: var(--control-height-sm); border-radius: var(--radius-sm); color: var(--ink-2); font-weight: 600; text-decoration: none; }

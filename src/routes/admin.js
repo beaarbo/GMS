@@ -59,6 +59,7 @@ const {
   mergeDivision,
   unmergeRegistration,
   hasPoomsaeResults,
+  listPoomsaeEntries,
   REGISTRATION_SELECT,
   DIVISION_ORDER,
 } = require('../services');
@@ -70,7 +71,7 @@ const { writeBoutListPdf } = require('../boutlistPdf');
 const { entriesSheets, sendXlsx } = require('../exports');
 const { cardAthletes, writeAthleteCards } = require('../athleteCards');
 const { clean, toArray, requireRole, requireOwner, notFound, wrap, passwordError, readSetup, readPoomsaeAges } = require('./helpers');
-const { resultsPath } = require('./competitionDay');
+const { resultsPath, poomsaeDrawSummary } = require('./competitionDay');
 const { createBackup, pruneBackups, listBackups } = require('../backups');
 const { readMapLocation } = require('../maps');
 const { EVENT_TYPES, POOMSAE_FORMATS, MAX_CUT, hasKyorugi, hasPoomsae, validatePoomsaeAgeGroups } = require('../poomsae');
@@ -654,6 +655,7 @@ router.get('/competitions/:id(\\d+)/registrations', (req, res) => {
   res.render('admin/registrations', {
     title: 'Registrations',
     competition,
+    poomsaeEntries: hasPoomsae(competition) ? listPoomsaeEntries(db, competition.id) : null,
     filters,
     query: new URLSearchParams(filters).toString(),
     registrations: db
@@ -895,6 +897,7 @@ router.get('/competitions/:id(\\d+)/bouts', (req, res) => {
   res.render('admin/bouts', {
     title: 'Bout list',
     competition: req.competition,
+    poomsae: hasPoomsae(req.competition) ? poomsaeDrawSummary(db, req.competition) : null,
     divisions,
     dayCount: eventDates.length,
     dayOptions: eventDates.map((date, i) => ({ value: i + 1, label: `Day ${i + 1} (${formatDay(date)})` })),

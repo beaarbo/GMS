@@ -8,15 +8,15 @@
   <% if (divisions.length > 0) { %>
     <div class="actions">
 <% if (competition.bouts_published_at) { %>
-        <span class="badge approved">Published for everyone</span> <a href="/competitions/<%= competition.id %>/bouts?event=kyorugi">Public page</a>
+        <span class="badge approved"><%= poomsae ? 'Kyorugi published' : 'Published for everyone' %></span> <a href="/competitions/<%= competition.id %>/bouts?event=kyorugi">Public page</a>
         <form method="post" action="/admin/competitions/<%= competition.id %>/bouts/unpublish">
           <input type="hidden" name="_csrf" value="<%= csrf %>">
-          <button class="btn secondary" type="submit">Hide bout list</button>
+          <button class="btn secondary" type="submit">Hide <%= poomsae ? 'kyorugi ' : '' %>bout list</button>
         </form>
       <% } else { %>
         <form method="post" action="/admin/competitions/<%= competition.id %>/bouts/publish" data-confirm="Publish this bout list? Coaches with athletes in it will be emailed.">
           <input type="hidden" name="_csrf" value="<%= csrf %>">
-          <button class="btn approve" type="submit">Publish bout list</button>
+          <button class="btn approve" type="submit">Publish <%= poomsae ? 'kyorugi ' : '' %>bout list</button>
         </form>
       <% } %>
       <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/results">Record results</a>
@@ -31,6 +31,11 @@
   <% } %>
 </div>
 
+<% if (poomsae) { %><%- include('../partials/poomsae_draws', { poomsae }) %><% } %>
+
+<%# Everything below is kyorugi. %>
+<% if (hasKyorugi(competition)) { %>
+<% if (poomsae) { %><h2 class="event-heading">Kyorugi bouts</h2><% } %>
 <% if (competition.status !== 'closed' && divisions.length === 0) { %>
   <section class="card">
     <h2>Registration is still open</h2>
@@ -208,4 +213,5 @@
     </details>
   </section>
 <% }) %>
+<% } %>
 <%- include('../partials/bottom') %>

@@ -1,0 +1,55 @@
+<%# Poomsae's part of the shared Bout list page: make the performance lists, draw the brackets and publish each stage. Pass competition and poomsae (from poomsaeOverview, with counts). Each form comes back here. %>
+<section class="card" id="poomsae">
+  <div class="section-head">
+    <h2>Poomsae lists and brackets</h2>
+    <a href="/admin/competitions/<%= competition.id %>/poomsae">Divisions, scores and brackets</a>
+  </div>
+  <% const lists = poomsae.divisions.filter((d) => d.order.length > 0).length; const brackets = poomsae.divisions.filter((d) => d.bouts).length; %>
+  <p class="stats">
+    <span><strong><%= poomsae.divisions.length %></strong> division<%= poomsae.divisions.length === 1 ? '' : 's' %></span>
+    <span><strong><%= lists %></strong> performance list<%= lists === 1 ? '' : 's' %></span>
+    <span><strong><%= brackets %></strong> bracket<%= brackets === 1 ? '' : 's' %></span>
+    <% if (poomsae.pending > 0) { %><span><strong><%= poomsae.pending %></strong> entr<%= poomsae.pending === 1 ? 'y' : 'ies' %> still pending</span><% } %>
+  </p>
+  <% if (competition.status !== 'closed') { %>
+    <p class="empty">Close registration to make the performance lists and draw the brackets.</p>
+  <% } else { %>
+    <p class="sub">Ranked divisions and score rounds get a performance list in a random order; head-to-head divisions get a bracket. Both are timed on the poomsae courts.</p>
+    <div class="actions">
+      <% if (poomsae.orderable > 0) { %>
+        <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/order">
+          <input type="hidden" name="_csrf" value="<%= csrf %>">
+          <input type="hidden" name="back" value="bouts">
+          <button class="btn" name="division" value="all" type="submit">Make <%= poomsae.orderable %> performance list<%= poomsae.orderable === 1 ? '' : 's' %></button>
+        </form>
+      <% } %>
+      <% if (poomsae.drawable > 0) { %>
+        <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/draw">
+          <input type="hidden" name="_csrf" value="<%= csrf %>">
+          <input type="hidden" name="back" value="bouts">
+          <button class="btn" name="division" value="all" type="submit">Draw <%= poomsae.drawable %> ready bracket<%= poomsae.drawable === 1 ? '' : 's' %></button>
+        </form>
+      <% } %>
+      <% [['lists', 'performance lists', 'Lists', lists > 0, competition.poomsae_published_at], ['brackets', 'brackets', 'Brackets', brackets > 0, competition.poomsae_brackets_published_at]].forEach(([stage, label, badge, ready, published]) => { %>
+        <% if (published) { %>
+          <span class="badge approved"><%= badge %> published</span>
+          <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/unpublish">
+            <input type="hidden" name="_csrf" value="<%= csrf %>">
+            <input type="hidden" name="back" value="bouts">
+            <button class="btn secondary" name="stage" value="<%= stage %>" type="submit">Hide <%= label %></button>
+          </form>
+        <% } else if (ready) { %>
+          <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/publish" data-confirm="Publish the poomsae <%= label %>? Everyone can see them, and coaches with entries will be emailed.">
+            <input type="hidden" name="_csrf" value="<%= csrf %>">
+            <input type="hidden" name="back" value="bouts">
+            <button class="btn approve" name="stage" value="<%= stage %>" type="submit">Publish <%= label %></button>
+          </form>
+        <% } %>
+      <% }) %>
+      <% if (lists > 0 || brackets > 0) { %><a class="btn secondary" href="/admin/competitions/<%= competition.id %>/poomsae.pdf">Poomsae PDF</a><% } %>
+    </div>
+    <% if (poomsae.orderable === 0 && poomsae.drawable === 0 && lists === 0 && brackets === 0) { %>
+      <p class="empty">Nothing to make yet: approve poomsae entries first, or check each division's format on the poomsae page.</p>
+    <% } %>
+  <% } %>
+</section>

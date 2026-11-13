@@ -1,0 +1,61 @@
+<%# Poomsae entries to approve or reject, on the shared Review registrations page. Pass competition and entries (listPoomsaeEntries). Posts to the poomsae review route, which comes back here. %>
+<% const pendingCount = entries.filter((e) => e.status === 'pending').length; %>
+<section class="card" id="poomsae">
+  <div class="section-head">
+    <h2>Poomsae entries</h2>
+    <div class="actions">
+      <% if (pendingCount > 0) { %>
+        <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/review" data-confirm="Approve all <%= pendingCount %> pending poomsae entries?">
+          <input type="hidden" name="_csrf" value="<%= csrf %>">
+          <input type="hidden" name="back" value="registrations">
+          <button class="btn approve small" name="bulk" value="approve-pending" type="submit">Approve all <%= pendingCount %> pending</button>
+        </form>
+      <% } %>
+      <a href="/admin/competitions/<%= competition.id %>/poomsae">By division</a>
+    </div>
+  </div>
+  <p class="stats">
+    <span><strong><%= pendingCount %></strong> pending</span>
+    <span><strong><%= entries.filter((e) => e.status === 'approved').length %></strong> approved</span>
+    <span><strong><%= entries.filter((e) => e.status === 'rejected').length %></strong> rejected</span>
+  </p>
+  <% if (entries.length === 0) { %>
+    <p class="empty">No poomsae entries yet.</p>
+  <% } else { %>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Athletes</th><th>Club</th><th>Division</th><th>Status</th><th>Review</th></tr></thead>
+        <tbody>
+          <% [...entries].sort((a, b) => (a.status === 'pending' ? 0 : 1) - (b.status === 'pending' ? 0 : 1)).forEach((e) => { %>
+            <tr id="entry-<%= e.id %>">
+              <td><strong><%= e.names %></strong><div class="hint"><%= e.athletes.map((a) => `${beltName(a.belt_rank)}, ${a.age_at_event}`).join(' · ') %></div></td>
+              <td><%= e.club_name %></td>
+              <td><%= poomsaeDivisionTitle(e) %></td>
+              <td>
+                <span class="badge <%= e.status %>"><%= statusLabel(e.status) %></span>
+                <% if (e.status === 'rejected' && e.review_note) { %><div class="hint"><%= e.review_note %></div><% } %>
+              </td>
+              <td>
+                <% if (e.score !== null) { %><span class="hint">Scored</span>
+                <% } else if (e.perform_order !== null) { %><span class="hint">In the performance list</span>
+                <% } else { %>
+                  <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/review" class="inline-form">
+                    <input type="hidden" name="_csrf" value="<%= csrf %>">
+                    <input type="hidden" name="back" value="registrations">
+                    <% if (e.status !== 'approved') { %><button class="btn approve small" name="single" value="approved:<%= e.id %>" type="submit">Approve</button><% } %>
+                    <% if (e.status !== 'rejected') { %>
+                      <input class="note-input" name="note_<%= e.id %>" maxlength="300" placeholder="Reason to reject" aria-label="Reason to reject <%= e.names %>">
+                      <button class="btn danger small" name="single" value="rejected:<%= e.id %>" type="submit">Reject</button>
+                    <% } else { %>
+                      <button class="btn secondary small" name="single" value="pending:<%= e.id %>" type="submit">Back to pending</button>
+                    <% } %>
+                  </form>
+                <% } %>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</section>

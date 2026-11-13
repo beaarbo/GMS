@@ -457,6 +457,23 @@ router.post('/competitions/:id(\\d+)/poomsae/judge/:day(\\d+)/:court(\\d+)/:judg
 const poomsaePath = (competition, entryId = null, divisionKey = null) =>
   `/admin/competitions/${competition.id}/poomsae${entryId ? `#entry-${entryId}` : divisionKey ? `#division-${divisionKey}` : ''}`;
 
+// The shared Review registrations and Bout list pages post here too, with
+// back=registrations or back=bouts, and go back there afterwards.
+function sharedPageReturn(req) {
+  return ['registrations', 'bouts'].includes(req.body.back) ? `/admin/competitions/${req.competition.id}/${req.body.back}#poomsae` : null;
+}
+
+// What the shared Bout list page needs about poomsae: its divisions and what's ready.
+function poomsaeDrawSummary(db, competition) {
+  const { entries, divisions } = poomsaeOverview(db, competition);
+  return {
+    divisions,
+    pending: entries.filter((e) => e.status === 'pending').length,
+    drawable: divisions.filter((d) => d.mode !== 'score' && !d.bouts && !d.drawProblem && d.pending === 0).length,
+    orderable: divisions.filter((d) => d.canOrder && d.order.length === 0).length,
+  };
+}
+
 function poomsaeOverview(db, competition) {
   const entries = listPoomsaeEntries(db, competition.id);
   return {
@@ -564,7 +581,7 @@ router.post('/competitions/:id(\\d+)/poomsae/order', requireRole('admin'), (req,
     result.titles.forEach((title) => req.logActivity('poomsae.order', `Drew the poomsae performance order for ${title}: ${req.competition.name}`, req.competition.id));
     req.flash('success', `${result.titles.length} performance list${result.titles.length === 1 ? '' : 's'} made in a random order and timed.`);
   }
-  return res.redirect(poomsaePath(req.competition, null, key === 'all' ? null : key));
+  return res.redirect(sharedPageReturn(req) || poomsaePath(req.competition, null, key === 'all' ? null : key));
 });
 
 router.post('/competitions/:id(\\d+)/poomsae/clear-order', requireRole('admin'), (req, res) => {
@@ -592,13 +609,13 @@ router.post('/competitions/:id(\\d+)/poomsae/publish', requireRole('admin'), (re
   if (!stage) return notFound(res);
   if (!poomsaeBoutList(db, req.competition).some((p) => p.kind === stage.kind)) {
     req.flash('error', stage.kind === 'list' ? 'Make a performance list first.' : 'Draw a bracket first.');
-    return res.redirect(poomsaePath(req.competition));
+    return res.redirect(sharedPageReturn(req) || poomsaePath(req.competition));
   }
   db.prepare(`UPDATE competitions SET ${stage.column} = datetime('now') WHERE id = ?`).run(req.competition.id);
   notifyPoomsaePublished(notify, req.competition, stage.what);
   req.logActivity('poomsae.published', `Published the poomsae ${stage.what} for ${req.competition.name}`, req.competition.id);
   req.flash('success', `Poomsae ${stage.what} published for everyone to see. Coaches with entries have been emailed.`);
-  return res.redirect(poomsaePath(req.competition));
+  return res.redirect(sharedPageReturn(req) || poomsaePath(req.competition));
 });
 
 router.post('/competitions/:id(\\d+)/poomsae/unpublish', requireRole('admin'), (req, res) => {
@@ -607,7 +624,7 @@ router.post('/competitions/:id(\\d+)/poomsae/unpublish', requireRole('admin'), (
   req.app.locals.db.prepare(`UPDATE competitions SET ${stage.column} = NULL WHERE id = ?`).run(req.competition.id);
   req.logActivity('poomsae.unpublished', `Hid the poomsae ${stage.what} for ${req.competition.name}`, req.competition.id);
   req.flash('success', `Poomsae ${stage.what} hidden.`);
-  return res.redirect(poomsaePath(req.competition));
+  return res.redirect(sharedPageReturn(req) || poomsaePath(req.competition));
 });
 
 // Every performance list and bracket, one page each, in running order.
@@ -628,7 +645,7 @@ router.post('/competitions/:id(\\d+)/poomsae/draw', requireRole('admin'), (req, 
   const competition = req.competition;
   if (competition.status !== 'closed') {
     req.flash('error', 'Close registration before drawing poomsae brackets.');
-    return res.redirect(poomsaePath(competition));
+    return res.redirect(sharedPageReturn(req) || poomsaePath(competition));
   }
   const key = clean(req.body.division, 60);
   const { divisions } = poomsaeOverview(db, competition);
@@ -644,7 +661,7 @@ router.post('/competitions/:id(\\d+)/poomsae/draw', requireRole('admin'), (req, 
     } else req.flash('error', result.error);
   });
   if (drawn > 0) req.flash('success', `${drawn} bracket${drawn === 1 ? '' : 's'} drawn.`);
-  return res.redirect(poomsaePath(competition, null, key === 'all' ? null : key));
+  return res.redirect(sharedPageReturn(req) || poomsaePath(competition, null, key === 'all' ? null : key));
 });
 
 router.post('/competitions/:id(\\d+)/poomsae/delete-bracket', requireRole('admin'), (req, res) => {
@@ -689,7 +706,7 @@ router.post('/competitions/:id(\\d+)/poomsae/review', requireRole('admin'), (req
   // One row's button ("approved:12"), or approving every pending entry at once.
   const single = clean(req.body.single, 40).match(/^(approved|rejected|pending):(\d+)$/);
   const decision = single ? single[1] : req.body.bulk === 'approve-pending' ? 'approved' : null;
-  if (!decision) return res.redirect(poomsaePath(competition));
+  if (!decision) return res.redirect(sharedPageReturn(req) || poomsaePath(competition));
   const targets = single ? all.filter((e) => e.id === Number(single[2])) : all.filter((e) => e.status === 'pending');
 
   const changed = [];
@@ -712,7 +729,7 @@ router.post('/competitions/:id(\\d+)/poomsae/review', requireRole('admin'), (req
     const verb = { approved: 'approved', rejected: 'rejected', pending: 'moved back to pending' }[decision];
     req.flash('success', `${changed.length} poomsae entr${changed.length === 1 ? 'y' : 'ies'} ${verb}.`);
   }
-  return res.redirect(poomsaePath(competition, single ? single[2] : null));
+  return res.redirect(sharedPageReturn(req) || poomsaePath(competition, single ? single[2] : null));
 });
 
 router.post('/competitions/:id(\\d+)/poomsae/:entryId(\\d+)/score', (req, res) => {
@@ -754,4 +771,4 @@ function poomsaeMatReturn(req) {
   return ok ? `/admin/competitions/${req.competition.id}/poomsae/mat/${req.body.day}/${req.body.court}` : null;
 }
 
-module.exports = { router, resultsPath };
+module.exports = { router, resultsPath, poomsaeDrawSummary };

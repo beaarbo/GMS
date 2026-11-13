@@ -3,16 +3,21 @@
 <div class="page-head">
   <div>
     <h1>Registrations</h1>
-    <p class="sub"><%= competition.name %></p>
+    <p class="sub"><%= competition.name %><%= hasKyorugi(competition) && hasPoomsae(competition) ? ' · kyorugi and poomsae' : '' %></p>
   </div>
   <div class="actions">
-    <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/divisions">View divisions</a>
-    <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/export.csv">Export approved (CSV)</a>
+    <% if (hasKyorugi(competition)) { %>
+      <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/divisions">View divisions</a>
+      <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/export.csv">Export approved (CSV)</a>
+    <% } %>
     <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/entries.xlsx">All entries (Excel)</a>
     <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/cards.pdf">Athlete cards (PDF)</a>
   </div>
 </div>
 
+<%# Both events on one page: kyorugi registrations, then poomsae entries. %>
+<% if (hasKyorugi(competition)) { %>
+<% if (hasPoomsae(competition)) { %><h2 class="event-heading">Kyorugi</h2><% } %>
 <p class="stats">
   <span><strong><%= counts.pending %></strong> pending</span>
   <span><strong><%= counts.approved %></strong> approved</span>
@@ -111,4 +116,7 @@
     </form>
   <% } %>
 </section>
+<% } %>
+
+<% if (poomsaeEntries) { %><%- include('../partials/poomsae_review', { entries: poomsaeEntries }) %><% } %>
 <%- include('../partials/bottom') %>
