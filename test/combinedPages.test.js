@@ -59,5 +59,32 @@ test('one Review registrations page and one Bout list page cover kyorugi and poo
     .send({ _csrf: boutsCsrf, division: 'all', back: 'bouts' });
   assert.equal(made.headers.location, `/admin/competitions/${id}/bouts#poomsae`);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM poomsae_entries WHERE perform_order IS NOT NULL').get().n, 2);
-  assert.match((await admin.get(`/admin/competitions/${id}/bouts`)).text, /Publish performance lists/);
+  const withOrders = (await admin.get(`/admin/competitions/${id}/bouts`)).text;
+  assert.match(withOrders, /Publish performance lists/);
+  // The performance orders show on the bout list too, after the kyorugi brackets.
+  const orders = withOrders.slice(withOrders.indexOf('id="poomsae-orders"'));
+  assert.ok(withOrders.indexOf('Kyorugi bouts') < withOrders.indexOf('id="poomsae-orders"'));
+  assert.match(orders, /Ana X/);
+  assert.match(orders, /Mia X/);
+  const key = db.prepare('SELECT event, gender, age_group_id, belt_group_id FROM poomsae_entries LIMIT 1').get();
+  const clearCsrf = await csrfFrom(admin, `/admin/competitions/${id}/bouts`);
+  const cleared = await admin.post(`/admin/competitions/${id}/poomsae/clear-order`).type('form')
+    .send({ _csrf: clearCsrf, division: `${key.event}-${key.gender}-${key.age_group_id}-${key.belt_group_id}`, back: 'bouts' });
+  assert.equal(cleared.headers.location, `/admin/competitions/${id}/bouts#poomsae`);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM poomsae_entries WHERE perform_order IS NOT NULL').get().n, 0);
+
+  // Head-to-head poomsae: its bracket is drawn and shown on the same page.
+  db.prepare("UPDATE competitions SET poomsae_format = 'elimination' WHERE id = ?").run(id);
+  const drawCsrf = await csrfFrom(admin, `/admin/competitions/${id}/bouts`);
+  const drawn = await admin.post(`/admin/competitions/${id}/poomsae/draw`).type('form').send({ _csrf: drawCsrf, division: 'all', back: 'bouts' });
+  assert.equal(drawn.headers.location, `/admin/competitions/${id}/bouts#poomsae`);
+  const withBracket = (await admin.get(`/admin/competitions/${id}/bouts`)).text;
+  const bracketPart = withBracket.slice(withBracket.indexOf('id="poomsae-brackets"'));
+  assert.match(bracketPart, /<svg class="bracket"/);
+  assert.match(bracketPart, /Ana X/);
+  const deleteCsrf = await csrfFrom(admin, `/admin/competitions/${id}/bouts`);
+  const deleted = await admin.post(`/admin/competitions/${id}/poomsae/delete-bracket`).type('form')
+    .send({ _csrf: deleteCsrf, division: `${key.event}-${key.gender}-${key.age_group_id}-${key.belt_group_id}`, back: 'bouts' });
+  assert.equal(deleted.headers.location, `/admin/competitions/${id}/bouts#poomsae`);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM poomsae_bouts').get().n, 0);
 });

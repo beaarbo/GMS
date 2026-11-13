@@ -46,6 +46,8 @@
           </form>
         <% } %>
       <% }) %>
+      <% if (lists > 0) { %><a class="btn secondary" href="#poomsae-orders">See the performance orders</a><% } %>
+      <% if (brackets > 0) { %><a class="btn secondary" href="#poomsae-brackets">See the brackets</a><% } %>
       <% if (lists > 0 || brackets > 0) { %><a class="btn secondary" href="/admin/competitions/<%= competition.id %>/poomsae.pdf">Poomsae PDF</a><% } %>
     </div>
     <% if (poomsae.orderable === 0 && poomsae.drawable === 0 && lists === 0 && brackets === 0) { %>

@@ -1,0 +1,72 @@
+<%# Poomsae on the shared Bout list page: the performance orders, then the brackets, one card each, like the kyorugi divisions. Pass competition, poomsae (poomsaeDrawSummary) and dayOptions. Their buttons come back here. %>
+<% const lists = poomsae.divisions.filter((d) => d.order.length > 0); %>
+<% const brackets = poomsae.divisions.filter((d) => d.bouts); %>
+<% const dayLabel = (day) => { const found = dayOptions.find((o) => o.value === day); return found ? found.label : day ? `Day ${day}` : '–'; }; %>
+<% if (lists.length > 0) { %>
+  <h2 class="event-heading" id="poomsae-orders">Poomsae performance orders</h2>
+  <% lists.forEach((d) => { %>
+    <section class="card" id="poomsae-<%= d.key %>">
+      <div class="division-head">
+        <h2><%= d.title %><%= d.mode === 'cut' ? ' · score round' : '' %></h2>
+        <p class="stats">
+          <% if (d.listCourt) { %><span>Day: <strong><%= dayLabel(d.listDay) %></strong></span><span>Poomsae court: <strong><%= d.listCourt %></strong></span><% } %>
+          <span>Performers: <strong><%= d.order.length %></strong></span>
+        </p>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>Athletes</th><th>Club</th><th>Time</th></tr></thead>
+          <tbody>
+            <% d.order.forEach((e) => { %><tr><td class="num"><%= e.perform_order %></td><td><strong><%= e.names %></strong></td><td><%= e.club_label || e.club_name %></td><td class="nowrap"><%= e.perform_time || '' %></td></tr><% }) %>
+          </tbody>
+        </table>
+      </div>
+      <% if (d.canOrder) { %>
+        <div class="actions">
+          <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/order" data-confirm="Draw a new random order for this division?">
+            <input type="hidden" name="_csrf" value="<%= csrf %>">
+            <input type="hidden" name="back" value="bouts">
+            <button class="btn secondary small" name="division" value="<%= d.key %>" type="submit">Redraw order</button>
+          </form>
+          <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/clear-order" data-confirm="Clear this performance list?">
+            <input type="hidden" name="_csrf" value="<%= csrf %>">
+            <input type="hidden" name="back" value="bouts">
+            <button class="btn danger small" name="division" value="<%= d.key %>" type="submit">Clear list</button>
+          </form>
+        </div>
+      <% } else { %>
+        <p class="hint">Scoring has started, so this order stays as it is.</p>
+      <% } %>
+    </section>
+  <% }) %>
+<% } %>
+
+<% if (brackets.length > 0) { %>
+  <h2 class="event-heading" id="poomsae-brackets">Poomsae brackets</h2>
+  <% brackets.forEach((d) => { %>
+    <% const played = d.bouts.filter((b) => !b.isBye); const entrants = d.bouts.filter((b) => b.round === 1).reduce((n, b) => n + (b.blue ? 1 : 0) + (b.red ? 1 : 0), 0); %>
+    <section class="card" id="poomsae-bracket-<%= d.key %>">
+      <div class="division-head">
+        <h2><%= d.title %><%= d.mode === 'cut' ? ' · final round' : '' %></h2>
+        <p class="stats">
+          <% if (d.court) { %><span>Day: <strong><%= dayLabel(d.day) %></strong></span><span>Poomsae court: <strong><%= d.court %></strong></span><% } %>
+          <span>Entries: <strong><%= entrants %></strong></span>
+          <span>Bouts: <strong><%= played.length %></strong></span>
+        </p>
+      </div>
+      <%- include('bracket', { division: d, highlightClubId: null }) %>
+      <div class="actions">
+        <a class="btn secondary small" href="/admin/competitions/<%= competition.id %>/poomsae#division-<%= d.key %>">Record winners</a>
+        <% if (!d.bouts.some((b) => b.winner)) { %>
+          <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/delete-bracket" data-confirm="Delete this bracket so it can be drawn again?">
+            <input type="hidden" name="_csrf" value="<%= csrf %>">
+            <input type="hidden" name="back" value="bouts">
+            <button class="btn danger small" name="division" value="<%= d.key %>" type="submit">Delete bracket</button>
+          </form>
+        <% } else { %>
+          <span class="hint">Results are in, so this bracket stays as it is.</span>
+        <% } %>
+      </div>
+    </section>
+  <% }) %>
+<% } %>

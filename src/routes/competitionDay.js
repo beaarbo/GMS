@@ -592,7 +592,7 @@ router.post('/competitions/:id(\\d+)/poomsae/clear-order', requireRole('admin'),
     req.logActivity('poomsae.order_cleared', `Cleared the poomsae performance order for ${result.title}: ${req.competition.name}`, req.competition.id);
     req.flash('success', 'Performance list cleared.');
   }
-  return res.redirect(poomsaePath(req.competition, null, key));
+  return res.redirect(sharedPageReturn(req) || poomsaePath(req.competition, null, key));
 });
 
 // Two stages, published apart: the performance lists (the first draw), then the
@@ -674,7 +674,7 @@ router.post('/competitions/:id(\\d+)/poomsae/delete-bracket', requireRole('admin
     req.logActivity('poomsae.bracket_deleted', `Deleted the poomsae bracket for ${division ? division.title : key}: ${req.competition.name}`, req.competition.id);
     req.flash('success', 'Bracket deleted. You can draw it again.');
   }
-  return res.redirect(poomsaePath(req.competition, null, key));
+  return res.redirect(sharedPageReturn(req) || poomsaePath(req.competition, null, key));
 });
 
 // A bracket winner, or "clear" to undo one. Admins and officials.
