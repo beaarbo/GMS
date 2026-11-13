@@ -964,7 +964,7 @@ router.post('/competitions/:id(\\d+)/results/clear-all', (req, res) => {
   clearAllResults(req.app.locals.db, req.competition.id);
   req.logActivity('result.cleared_all', `Cleared all results for ${req.competition.name}`, req.competition.id);
   req.flash('success', 'All results cleared.');
-  return res.redirect(resultsPath(req.competition));
+  return res.redirect(resultsPath(req.competition, null, null, req.body.event));
 });
 
 // Manual changes to one division of a drawn bout list.

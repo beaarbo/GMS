@@ -1,31 +1,58 @@
 <%- include('../partials/top') %>
 <% const isAdmin = user.role === 'admin'; %>
+<% const showKyorugi = hasKyorugi(competition) && event !== 'poomsae'; %>
+<% const showPoomsae = Boolean(poomsaeDivisions) && event !== 'kyorugi'; %>
+<% const poomsaeOpen = poomsaeDivisions ? poomsaeDivisions.filter((d) => d.approved > 0) : []; %>
+<% const poomsaeDone = poomsaeOpen.filter((d) => d.medalists.gold.length > 0).length; %>
+<% const tab = (value) => `/admin/competitions/${competition.id}/results${value ? `?event=${value}` : ''}`; %>
+<% const current = (on) => (on ? ' class="current-filter" aria-current="page"' : ''); %>
 <p class="breadcrumb"><% if (isAdmin) { %><a href="/admin/competitions/<%= competition.id %>/bouts">Bout list</a><% } else { %><a href="/official">Competition day</a><% } %></p>
 <div class="page-head">
   <div>
     <h1>Results</h1>
-    <p class="sub"><%= competition.name %><% if (hasKyorugi(competition)) { %> · <%= done %> of <%= total %> <%= poomsaeDivisions ? 'kyorugi ' : '' %>bouts recorded<% } %></p>
+    <p class="sub"><%= competition.name %></p>
   </div>
   <div class="actions">
-    <% if (total > 0 && day && court) { %><a class="btn" href="/admin/competitions/<%= competition.id %>/mat/<%= day %>/<%= court %>">Open mat view</a><% } %>
     <% if (total > 0 || poomsaeDivisions) { %><a class="btn secondary" href="/screens/<%= competition.id %>">Court screens</a><a class="btn secondary" href="/competitions/<%= competition.id %>/results">Overall results</a><a class="btn secondary" href="/admin/competitions/<%= competition.id %>/results/export.xlsx">Download results (Excel)</a><% } %>
+  </div>
+</div>
+
+<%# Each event's progress, and a switch to show one event at a time. %>
+<nav class="card programme-nav" aria-label="Results by event">
+  <p class="stats">
+    <% if (hasKyorugi(competition)) { %><span>Kyorugi: <%= done %> of <%= total %> bouts recorded</span><% } %>
+    <% if (poomsaeDivisions) { %><span>Poomsae: <%= poomsaeDone %> of <%= poomsaeOpen.length %> divisions decided</span><% } %>
+  </p>
+  <% if (bothEvents) { %>
+    <p class="stats">
+      <a href="<%= tab(null) %>"<%- current(!event) %>>Both events</a>
+      <a href="<%= tab('kyorugi') %>"<%- current(event === 'kyorugi') %>>Kyorugi</a>
+      <a href="<%= tab('poomsae') %>"<%- current(event === 'poomsae') %>>Poomsae</a>
+    </p>
+  <% } %>
+</nav>
+
+<%# Kyorugi bouts first, then poomsae scores and winners. %>
+<% if (showKyorugi) { %>
+<div class="division-head">
+  <h2 class="event-heading"><%= poomsaeDivisions ? 'Kyorugi bouts' : 'Bouts' %></h2>
+  <div class="actions">
+    <% if (total > 0 && day && court) { %><a class="btn small" href="/admin/competitions/<%= competition.id %>/mat/<%= day %>/<%= court %>">Open mat view</a><% } %>
     <% if (isAdmin && done > 0) { %>
-      <form method="post" action="/admin/competitions/<%= competition.id %>/results/clear-all" data-confirm="Clear every recorded result? This cannot be undone.">
+      <form method="post" action="/admin/competitions/<%= competition.id %>/results/clear-all" data-confirm="Clear every recorded kyorugi result? This cannot be undone.">
         <input type="hidden" name="_csrf" value="<%= csrf %>">
-        <button class="btn danger" type="submit">Clear all results</button>
+        <input type="hidden" name="event" value="<%= event || '' %>">
+        <button class="btn danger small" type="submit">Clear all <%= poomsaeDivisions ? 'kyorugi ' : '' %>results</button>
       </form>
     <% } %>
   </div>
 </div>
-
-<%# Kyorugi bouts first, then poomsae scores and winners. %>
-<% if (hasKyorugi(competition)) { %>
-<% if (poomsaeDivisions) { %><h2 class="event-heading">Kyorugi bouts</h2><% } %>
 <% if (total === 0) { %>
   <section class="card"><p class="empty">There are no bouts to record. <% if (isAdmin) { %><a href="/admin/competitions/<%= competition.id %>/bouts">Generate the bout list</a> first.<% } else { %>The organiser needs to draw the bout list first.<% } %></p></section>
 <% } else { %>
   <section class="card">
     <form method="get" class="filters">
+      <% if (event) { %><input type="hidden" name="event" value="<%= event %>"><% } %>
       <div>
         <label for="f-day">Day</label>
         <select id="f-day" name="day">
@@ -60,6 +87,7 @@
                   <input type="hidden" name="_csrf" value="<%= csrf %>">
                   <input type="hidden" name="day" value="<%= day %>">
                   <input type="hidden" name="court" value="<%= court %>">
+                  <input type="hidden" name="event" value="<%= event || '' %>">
                   <% if (bout.noContest) { %><p><span class="badge closed">No contest</span> <span class="hint">Both athletes were out at the weigh-in.</span></p><% } %>
                   <% [['blue', bout.blue, bout.bluePlaceholder], ['red', bout.red, bout.redPlaceholder]].forEach(([color, fighter, placeholder]) => { %>
                     <% if (!fighter) { %>
@@ -89,6 +117,7 @@
                     <input type="hidden" name="action" value="clear">
                     <input type="hidden" name="day" value="<%= day %>">
                     <input type="hidden" name="court" value="<%= court %>">
+                  <input type="hidden" name="event" value="<%= event || '' %>">
                     <button class="btn danger small" type="submit">Undo</button>
                   </form>
                 <% } %>
@@ -104,5 +133,5 @@
 <% } %>
 <% } %>
 
-<% if (poomsaeDivisions) { %><%- include('../partials/poomsae_results', { poomsaeDivisions, marks }) %><% } %>
+<% if (showPoomsae) { %><%- include('../partials/poomsae_results', { poomsaeDivisions, marks }) %><% } %>
 <%- include('../partials/bottom') %>

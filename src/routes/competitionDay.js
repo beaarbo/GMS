@@ -34,7 +34,7 @@ const {
   hasPoomsaeScores,
   loadJudgeMarks,
 } = require('../services');
-const { hasPoomsae, parseScore, formatScore, poomsaeDivisionTitle, poomsaeMedalTable, POOMSAE_FORMATS, MAX_CUT, JUDGE_COUNTS, judgesScore } = require('../poomsae');
+const { hasKyorugi, hasPoomsae, parseScore, formatScore, poomsaeDivisionTitle, poomsaeMedalTable, POOMSAE_FORMATS, MAX_CUT, JUDGE_COUNTS, judgesScore } = require('../poomsae');
 const { notifyPoomsaeDecisions, notifyPoomsaePublished } = require('../notifications');
 const { writeBoutListPdf } = require('../boutlistPdf');
 const { computeMedals, WIN_TYPES, readBoutScore } = require('../bracket');
@@ -243,8 +243,9 @@ router.post('/competitions/:id(\\d+)/weigh-in/:regId(\\d+)', (req, res) => {
   return res.redirect(back);
 });
 
-function resultsPath(competition, day, court) {
+function resultsPath(competition, day, court, event) {
   const query = new URLSearchParams();
+  if (['kyorugi', 'poomsae'].includes(event)) query.set('event', event);
   if (/^\d+$/.test(day || '')) query.set('day', day);
   if (/^\d+$/.test(court || '')) query.set('court', court);
   const text = query.toString();
@@ -264,9 +265,13 @@ router.get('/competitions/:id(\\d+)/results', (req, res) => {
     .sort((a, b) => a.day - b.day || a.court - b.court || a.number - b.number);
   const shown = bouts.filter((b) => (!day || String(b.day) === day) && (!court || String(b.court) === court));
   const uniqueBy = (key, label) => [...new Map(bouts.map((b) => [b[key], b[label]])).entries()].sort((a, b) => a[0] - b[0]);
+  const bothEvents = hasKyorugi(req.competition) && hasPoomsae(req.competition);
   res.render('admin/results', {
     title: 'Results',
     competition: req.competition,
+    bothEvents,
+    // One event at a time (?event=kyorugi or poomsae), or both.
+    event: bothEvents && ['kyorugi', 'poomsae'].includes(req.query.event) ? req.query.event : null,
     bouts: shown,
     day,
     court,
@@ -331,7 +336,7 @@ router.post('/competitions/:id(\\d+)/results/:boutId(\\d+)', (req, res) => {
     applyWalkovers(db, req.competition.id).forEach((item) => logWalkover(req, db, item));
   }
   const fromMat = req.body.back === 'mat' && /^\d+$/.test(req.body.day || '') && /^\d+$/.test(req.body.court || '');
-  return res.redirect(fromMat ? matPath(req.competition, req.body.day, req.body.court) : resultsPath(req.competition, req.body.day, req.body.court));
+  return res.redirect(fromMat ? matPath(req.competition, req.body.day, req.body.court) : resultsPath(req.competition, req.body.day, req.body.court, req.body.event));
 });
 
 const matPath = (competition, day, court) => `/admin/competitions/${competition.id}/mat/${day}/${court}`;
@@ -464,7 +469,8 @@ const poomsaePath = (competition, entryId = null, divisionKey = null) =>
 // with back=registrations, bouts or results, and go back there afterwards (to
 // anchor, when given, else the poomsae section).
 function sharedPageReturn(req, anchor = 'poomsae') {
-  return ['registrations', 'bouts', 'results'].includes(req.body.back) ? `/admin/competitions/${req.competition.id}/${req.body.back}#${anchor}` : null;
+  if (req.body.back === 'results') return `${resultsPath(req.competition, null, null, req.body.event)}#${anchor}`;
+  return ['registrations', 'bouts'].includes(req.body.back) ? `/admin/competitions/${req.competition.id}/${req.body.back}#${anchor}` : null;
 }
 
 // What the shared Bout list page needs about poomsae: its divisions and what's ready.

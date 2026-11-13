@@ -117,6 +117,16 @@ test('the Results page records kyorugi bouts and poomsae scores together', async
   assert.equal(saved.headers.location, `/admin/competitions/${id}/results#result-entry-${entryId}`);
   assert.equal(db.prepare('SELECT score FROM poomsae_entries WHERE id = ?').get(entryId).score, 7.5);
 
+  // One event at a time: the poomsae tab hides the kyorugi bouts, and saving stays on that tab.
+  const poomsaeOnly = (await admin.get(`/admin/competitions/${id}/results?event=poomsae`)).text;
+  assert.match(poomsaeOnly, /Poomsae: 1 of 1 divisions decided/);
+  assert.doesNotMatch(poomsaeOnly, /Kyorugi bouts/);
+  assert.match(poomsaeOnly, /Poomsae scores and winners/);
+  assert.doesNotMatch((await admin.get(`/admin/competitions/${id}/results?event=kyorugi`)).text, /Poomsae scores and winners/);
+  const tabCsrf = await csrfFrom(admin, `/admin/competitions/${id}/results?event=poomsae`);
+  const onTab = await admin.post(`/admin/competitions/${id}/poomsae/${entryId}/score`).type('form').send({ _csrf: tabCsrf, score: '8', back: 'results', event: 'poomsae' });
+  assert.equal(onTab.headers.location, `/admin/competitions/${id}/results?event=poomsae#result-entry-${entryId}`);
+
   const list = (await admin.get('/admin/competitions')).text;
   assert.equal((list.match(/>Results</g) || []).length, 1, 'one Results button');
   assert.doesNotMatch(list, /Poomsae scores/);
