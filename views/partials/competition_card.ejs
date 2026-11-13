@@ -11,6 +11,14 @@
   <h3 class="card-title"><a class="title-link" href="/competitions/<%= c.id %>"><%= c.name %></a></h3>
   <p class="sub"><%= eventDatesText(c) %> · <%= c.venue %></p>
   <p class="sub">Registration deadline: <%= deadlineText(c) %></p>
+  <%# Up to four of the competition's photos; the last says how many more are on its page. %>
+  <% if (c.photos && c.photos.length > 0) { const shown = c.photos.slice(0, 4); const more = c.photos.length - shown.length; %>
+    <div class="card-photos">
+      <% shown.forEach((photo, i) => { %>
+        <% if (more > 0 && i === shown.length - 1) { %><a href="/competitions/<%= c.id %>#photos" class="more" data-more="+<%= more %>" aria-label="See all <%= c.photos.length %> photos of <%= c.name %>"><% } else { %><a href="/competitions/<%= c.id %>#photos"><% } %><img src="/competitions/<%= c.id %>/photos/<%= photo.id %>" alt="<%= c.name %>, photo <%= i + 1 %> of <%= c.photos.length %>" loading="lazy"></a>
+      <% }) %>
+    </div>
+  <% } %>
   <% if (clubCoach && e) { %>
     <p class="stats card-stats">
       <% if (entered === 0) { %>

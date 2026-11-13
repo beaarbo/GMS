@@ -1,6 +1,6 @@
 // The coach's main page: upcoming competitions first, then news.
 const express = require('express');
-const { today, isRegistrationOpen, listNews } = require('../services');
+const { today, isRegistrationOpen, listNews, listCompetitionPhotos } = require('../services');
 const { homeFor } = require('./helpers');
 
 const router = express.Router();
@@ -46,6 +46,7 @@ router.get('/', (req, res) => {
       ...c,
       open: isRegistrationOpen(c),
       entries: entries.get(c.id) || { pending: 0, approved: 0, rejected: 0 },
+      photos: listCompetitionPhotos(db, c.id),
     })),
     news: listNews(db, { signedIn: true, limit: 10 }),
   });

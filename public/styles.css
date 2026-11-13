@@ -41,6 +41,9 @@
   --ok-line: #abefc6;
   --danger-line: #fda29b;
   --line-hover: #98a2b3;
+  /* Text over a photo: the same in both themes, since the photo is. */
+  --photo-scrim: rgba(16, 24, 40, 0.55);
+  --on-photo: #ffffff;
 
   /* Type */
   --font: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Roboto, Arial, sans-serif;
@@ -781,3 +784,19 @@ body.mat { background: var(--page); }
 .photo-preview figcaption { overflow-wrap: anywhere; }
 .photo-preview .photo-problem img { opacity: 0.5; border-color: var(--hong); }
 .photo-preview .photo-problem figcaption { color: var(--hong); }
+.card-photos { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-2); margin: var(--space-3) 0; }
+.card-photos a { position: relative; display: block; }
+.card-photos img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface-2); }
+.card-photos a:hover img { border-color: var(--line-hover); }
+.card-photos .more::after {
+  content: attr(data-more);
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius);
+  background: var(--photo-scrim);
+  color: var(--on-photo);
+  font-weight: 600;
+}

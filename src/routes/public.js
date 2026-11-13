@@ -22,7 +22,8 @@ router.get('/', (req, res) => {
   const lastDay = '(SELECT MAX(d.event_date) FROM competition_dates d WHERE d.competition_id = c.id)';
   const competitions = db
     .prepare(`SELECT c.* FROM competitions c WHERE c.status IN ('open', 'closed') AND ${lastDay} >= ? ORDER BY c.status = 'closed', c.event_date`)
-    .all(today());
+    .all(today())
+    .map((c) => ({ ...c, photos: listCompetitionPhotos(db, c.id) }));
   // Finished ones, newest first, each with a link to its results once any are published.
   const past = db
     .prepare(`SELECT c.* FROM competitions c WHERE c.status IN ('open', 'closed') AND ${lastDay} < ? ORDER BY ${lastDay} DESC, c.id DESC`)
