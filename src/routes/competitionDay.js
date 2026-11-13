@@ -473,11 +473,11 @@ const poomsaePath = (competition, entryId = null, divisionKey = null) =>
   `/admin/competitions/${competition.id}/poomsae${entryId ? `#entry-${entryId}` : divisionKey ? `#division-${divisionKey}` : ''}`;
 
 // The shared Review registrations, Bout list and Results pages post here too,
-// with back=registrations, bouts or results, and go back there afterwards (to
+// with back=registrations, divisions, bouts or results, and go back there afterwards (to
 // anchor, when given, else the poomsae section).
 function sharedPageReturn(req, anchor = 'poomsae') {
   if (req.body.back === 'results') return `${resultsPath(req.competition, null, null, req.body.event)}#${anchor}`;
-  return ['registrations', 'bouts'].includes(req.body.back) ? `/admin/competitions/${req.competition.id}/${req.body.back}#${anchor}` : null;
+  return ['registrations', 'bouts', 'divisions'].includes(req.body.back) ? `/admin/competitions/${req.competition.id}/${req.body.back}#${anchor}` : null;
 }
 
 // What the shared Bout list page needs about poomsae: its divisions and what's ready.
@@ -530,7 +530,7 @@ router.post('/competitions/:id(\\d+)/poomsae/schedule', requireRole('admin'), (r
     );
     req.flash('success', 'Poomsae schedule saved. Every bracket has been timed again.');
   }
-  return res.redirect(poomsaePath(req.competition));
+  return res.redirect(sharedPageReturn(req) || poomsaePath(req.competition));
 });
 
 // One division's own format, cut and day. Blank keeps the competition's choice.
@@ -561,31 +561,15 @@ router.post('/competitions/:id(\\d+)/poomsae/division', requireRole('admin'), (r
       req.flash('success', `${result.title} saved.${result.kept ? ' Its format stays as it was, because it has a performance list, scores or a bracket.' : ''}`);
     }
   }
-  return res.redirect(poomsaePath(competition, null, key));
+  return res.redirect(sharedPageReturn(req, `division-${key}`) || poomsaePath(competition, null, key));
 });
 
+// The old poomsae page: its parts now live on the shared Divisions, Bout list
+// and Results pages, so old links and bookmarks land there.
 router.get('/competitions/:id(\\d+)/poomsae', (req, res) => {
-  const { db } = req.app.locals;
   if (!hasPoomsae(req.competition)) return notFound(res);
-  const { entries, divisions } = poomsaeOverview(db, req.competition);
-  return res.render('admin/poomsae', {
-    title: 'Poomsae',
-    competition: req.competition,
-    divisions,
-    medals: poomsaeMedalTable(divisions),
-    rejected: entries.filter((e) => e.status === 'rejected'),
-    marks: loadJudgeMarks(db, req.competition.id),
-    pending: entries.filter((e) => e.status === 'pending').length,
-    approved: entries.filter((e) => e.status === 'approved').length,
-    closed: req.competition.status === 'closed',
-    drawable: divisions.filter((d) => d.mode !== 'score' && !d.bouts && !d.drawProblem && d.pending === 0).length,
-    orderable: divisions.filter((d) => d.canOrder && d.order.length === 0).length,
-    hasPages: divisions.some((d) => d.order.length > 0 || d.bouts),
-    hasLists: divisions.some((d) => d.order.length > 0),
-    hasBrackets: divisions.some((d) => d.bouts),
-    // [number, label for the day list, short label like the kyorugi bout list's "1 (Fri 8 Jan)"]
-    days: getEventDates(db, req.competition.id).map((date, i) => [i + 1, `Day ${i + 1} · ${formatDay(date)}`, `${i + 1} (${formatDay(date)})`]),
-  });
+  const id = req.competition.id;
+  return res.redirect(req.user.role === 'admin' ? `/admin/competitions/${id}/divisions#poomsae` : `/admin/competitions/${id}/results?event=poomsae`);
 });
 
 // A random performance order for one ranked division or score round, or all that are ready.

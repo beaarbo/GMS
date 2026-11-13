@@ -60,7 +60,7 @@ async function setup() {
 }
 
 async function csrfFrom(agent, path) {
-  const page = await agent.get(path);
+  const page = await agent.get(path).redirects(2);
   const match = page.text.match(/name="_csrf" value="([^"]+)"/);
   assert.ok(match, `no CSRF token on ${path}`);
   return match[1];
@@ -2243,7 +2243,7 @@ test('poomsae: coaches enter individuals, pairs and teams, the admin approves, a
   // The admin reviews: a rejection needs a reason, then everything pending is approved.
   const admin = await login(app, 'admin@test.test');
   const review = `/admin/competitions/${compId}/poomsae`;
-  assert.match((await admin.get(review)).text, /Individual · Female · Junior \(U18\) · Black Belt/);
+  assert.match((await admin.get(review.replace(/poomsae$/, 'divisions'))).text, /Individual · Female · Junior \(U18\) · Black Belt/);
   await post(admin, `${review}/review`, { single: `rejected:${pair.id}` }, review);
   assert.equal(entries().find((e) => e.id === pair.id).status, 'pending');
   await post(admin, `${review}/review`, { bulk: 'approve-pending' }, review);
@@ -2258,7 +2258,7 @@ test('poomsae: coaches enter individuals, pairs and teams, the admin approves, a
   db.prepare("UPDATE competitions SET status = 'closed' WHERE id = ?").run(compId);
   assert.ok(await createOfficialAccount(db, { full_name: 'Olive', email: 'olive@test.test', password: PASSWORD }));
   const official = await login(app, 'olive@test.test');
-  assert.match((await official.get('/official')).text, new RegExp(`href="${review}">Poomsae scores`));
+  assert.match((await official.get('/official')).text, new RegExp(`href="${review.replace(/poomsae$/, 'results')}\\?event=poomsae">Poomsae scores`));
   await score(official, anaSolo, '8.5');
   await score(official, eveSolo, '8.9');
   await score(official, eveSolo, '11');
@@ -2270,7 +2270,7 @@ test('poomsae: coaches enter individuals, pairs and teams, the admin approves, a
   assert.equal(entries()[0].status, 'approved');
   await post(admin, `/admin/competitions/${compId}/status`, { status: 'open' }, '/admin/competitions');
   assert.equal(db.prepare('SELECT status FROM competitions WHERE id = ?').get(compId).status, 'closed');
-  assert.match((await admin.get(review)).text, /1st<\/strong>[\s\S]*Eve Reyes[\s\S]*2nd<\/strong>[\s\S]*Ana Reyes/);
+  assert.match((await admin.get(review.replace(/poomsae$/, 'results'))).text, /1st<\/strong>[\s\S]*Eve Reyes[\s\S]*2nd<\/strong>[\s\S]*Ana Reyes/);
 
   // The coach sees their places; a cleared score is logged and unplaces the entry.
   assert.match((await club.get(page)).text, /Ana Reyes<\/strong><\/td>[\s\S]*?<td>Silver<\/td>/, '2nd place in a ranked division is silver');
@@ -2365,13 +2365,13 @@ test('poomsae score round then bracket: the top entries are seeded in, and offic
   const draw = () => post(admin, `${review}/draw`, { division: key }, review);
 
   // Three entries and a cut of two: a score round first. Drawing waits for every score and no tie at the line.
-  assert.match((await admin.get(review)).text, /Format: <strong>Score round, top 2<\/strong>[\s\S]*Score every entry first: 3 still need a score/);
+  assert.match((await admin.get(review.replace(/poomsae$/, 'bouts'))).text, /Format: <strong>Score round, top 2<\/strong>[\s\S]*Score every entry first: 3 still need a score/);
   await score(ana, '8.5');
   await score(eve, '7');
   await score(fay, '7');
   await draw();
   assert.equal(bouts().length, 0);
-  assert.match((await admin.get(review)).text, /tied on 7.00 at the cut line/);
+  assert.match((await admin.get(review.replace(/poomsae$/, 'bouts'))).text, /tied on 7.00 at the cut line/);
   await score(eve, '7.2');
   await draw();
   const [final] = bouts();
@@ -2396,7 +2396,7 @@ test('poomsae score round then bracket: the top entries are seeded in, and offic
   assert.doesNotMatch(mine, /<svg class="bracket"/, 'brackets wait for publishing');
   await post(admin, `${review}/publish`, { stage: 'brackets' }, review);
   assert.match((await club.get(page)).text, /<svg class="bracket"/);
-  assert.match((await admin.get(review)).text, /Poomsae medal standings/);
+  assert.match((await admin.get(review.replace(/poomsae$/, 'results'))).text, /Poomsae medal standings/);
 
   // Results keep the bracket; undoing them lets the admin delete and redraw it.
   await post(admin, `${review}/delete-bracket`, { division: key }, review);
@@ -2421,7 +2421,7 @@ test('poomsae single elimination draws straight away, with byes and no scores', 
   const review = `/admin/competitions/${compId}/poomsae`;
   await post(admin, `${review}/review`, { bulk: 'approve-pending' }, review);
   db.prepare("UPDATE competitions SET status = 'closed' WHERE id = ?").run(compId);
-  const before = (await admin.get(review)).text;
+  const before = (await admin.get(review.replace(/poomsae$/, 'results'))).text;
   assert.doesNotMatch(before, /class="score-input"/);
   const [entry] = db.prepare('SELECT id FROM poomsae_entries WHERE competition_id = ?').all(compId);
   await post(admin, `${review}/${entry.id}/score`, { score: '8' }, review);
@@ -2429,7 +2429,7 @@ test('poomsae single elimination draws straight away, with byes and no scores', 
   await post(admin, `${review}/draw`, { division: 'all' }, review);
   const bouts = db.prepare('SELECT * FROM poomsae_bouts WHERE competition_id = ? ORDER BY round, position').all(compId);
   assert.deepEqual([bouts.length, bouts.filter((b) => b.is_bye).length, bouts.filter((b) => b.bout_number).length], [3, 1, 2], 'three entries: one bye, two bouts');
-  assert.match((await admin.get(review)).text, /<svg class="bracket"/);
+  assert.match((await admin.get(review.replace(/poomsae$/, 'bouts'))).text, /<svg class="bracket"/);
   assert.match((await request(app).get(`/competitions/${compId}`)).text, /single-elimination bracket/);
 });
 
@@ -2457,7 +2457,7 @@ test('poomsae divisions choose their own format and day, and brackets get courts
   // The competition ranks by score; the girls' division switches to single elimination on day 2.
   await post(admin, `${review}/schedule`, { courts: '2', start: '13:00', minutes: '6', rest: '0' }, review);
   await post(admin, `${review}/division`, { division: female, format: 'elimination', cut: '', day: '2' }, review);
-  const text = (await admin.get(review)).text;
+  const text = (await admin.get(review.replace(/poomsae$/, 'divisions'))).text;
   assert.match(text, new RegExp(`id="division-${female}".*?Format: <strong>Single elimination`, 's'));
   assert.match(text, new RegExp(`id="division-${male}".*?Format: <strong>Ranked by score`, 's'));
   await post(admin, `${review}/draw`, { division: 'all' }, review);
@@ -2505,14 +2505,14 @@ test('ranked poomsae gets a random performance order with times, published to co
   await post(admin, `${review}/order`, { division: 'all' }, review);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM poomsae_entries WHERE perform_order IS NOT NULL').get().n, 0);
   db.prepare("UPDATE competitions SET status = 'closed' WHERE id = ?").run(compId);
-  assert.match((await admin.get(review)).text, /Make 2 performance lists/);
+  assert.match((await admin.get(review.replace(/poomsae$/, 'bouts'))).text, /Make 2 performance lists/);
   await post(admin, `${review}/order`, { division: 'all' }, review);
   const lists = db.prepare('SELECT gender, perform_order, perform_time FROM poomsae_entries WHERE competition_id = ? ORDER BY perform_time').all(compId);
   assert.deepEqual(lists.map((e) => e.perform_time), ['09:00', '09:05', '09:10', '09:15', '09:20'], 'one court, five minutes each, one list after the other');
   ['M', 'F'].forEach((gender) => {
     assert.deepEqual(lists.filter((e) => e.gender === gender).map((e) => e.perform_order), gender === 'M' ? [1, 2] : [1, 2, 3]);
   });
-  assert.match((await admin.get(review)).text, /Day: <strong>1 \([^)]+\)<\/strong><\/span><span>Poomsae court: <strong>1<\/strong>[\s\S]*?Performance order/);
+  assert.match((await admin.get(review.replace(/poomsae$/, 'bouts'))).text, /Day: <strong>1 \([^)]+\)<\/strong><\/span><span>Poomsae court: <strong>1<\/strong>[\s\S]*?Performance order/);
 
   // An entry in a list can't be rejected, and a scored list can't be redrawn or cleared.
   const [first] = db.prepare("SELECT id, event, gender, age_group_id, belt_group_id FROM poomsae_entries WHERE gender = 'F' ORDER BY perform_order").all();
@@ -2595,7 +2595,7 @@ test('published bout lists are public: kyorugi, and poomsae order and brackets a
   assert.equal((await visitor.get(`/competitions/${formsId}/poomsae`)).headers.location, `${publicPage}?event=poomsae`, 'old links still work');
 
   // Publish the first draw (the score round order) on its own.
-  assert.doesNotMatch((await admin.get(review)).text, /Publish brackets/);
+  assert.doesNotMatch((await admin.get(review.replace(/poomsae$/, 'bouts'))).text, /Publish brackets/);
   await post(admin, `${review}/publish`, { stage: 'lists' }, review);
   let text = (await visitor.get(publicPage)).text;
   assert.match(text, /Performance order, drawn at random/);
@@ -2609,9 +2609,9 @@ test('published bout lists are public: kyorugi, and poomsae order and brackets a
   const e = db.prepare('SELECT event, gender, age_group_id, belt_group_id FROM poomsae_entries WHERE id = ?').get(entries[0].id);
   await post(admin, `${review}/draw`, { division: [e.event, e.gender, e.age_group_id, e.belt_group_id].join('-') }, review);
   // The admin page shows where each part runs: the list in the header, the bracket above it.
-  assert.match((await admin.get(review)).text, /Poomsae court: <strong>1<\/strong>[\s\S]*?<h3>Bracket<\/h3>\s*<p class="stats">[\s\S]*?Poomsae court: <strong>2<\/strong>/);
+  assert.match((await admin.get(review.replace(/poomsae$/, 'bouts'))).text, /Poomsae court: <strong>1<\/strong>[\s\S]*?<h3>Bracket<\/h3>\s*<p class="stats">[\s\S]*?Poomsae court: <strong>2<\/strong>/);
   assert.doesNotMatch((await visitor.get(publicPage)).text, /<svg class="bracket"/);
-  assert.match((await admin.get(review)).text, /Publish brackets/);
+  assert.match((await admin.get(review.replace(/poomsae$/, 'bouts'))).text, /Publish brackets/);
   await post(admin, `${review}/publish`, { stage: 'brackets' }, review);
   text = (await visitor.get(publicPage)).text;
   assert.match(text, /<svg class="bracket"/);

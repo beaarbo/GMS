@@ -172,7 +172,7 @@ function attentionItems(db, competitions, { emailConfigured, backupsDir }) {
       items.push({ level: 'info', text: `${c.pending} registration${c.pending === 1 ? '' : 's'} waiting for review in ${c.name}.`, href: `/admin/competitions/${c.id}/registrations?status=pending`, link: 'Review' });
     }
     if (c.poomsae_pending > 0) {
-      items.push({ level: 'info', text: `${c.poomsae_pending} poomsae entr${c.poomsae_pending === 1 ? 'y' : 'ies'} waiting for review in ${c.name}.`, href: `/admin/competitions/${c.id}/poomsae`, link: 'Review' });
+      items.push({ level: 'info', text: `${c.poomsae_pending} poomsae entr${c.poomsae_pending === 1 ? 'y' : 'ies'} waiting for review in ${c.name}.`, href: `/admin/competitions/${c.id}/registrations#poomsae`, link: 'Review' });
     }
     if (c.status === 'closed' && upcomingOrRunning(c) && c.approved > 0 && c.bout_count === 0) {
       items.push({ level: 'info', text: `${c.name} is closed: run the weigh-in, then draw the bout list.`, href: `/admin/competitions/${c.id}/bouts`, link: 'Bout list' });
@@ -812,6 +812,9 @@ router.get('/competitions/:id(\\d+)/divisions', (req, res) => {
     competition: req.competition,
     divisions: list,
     locked: hasBoutList(db, req.competition.id),
+    // Poomsae divisions on the same page, each with its own format, cut and day.
+    poomsae: hasPoomsae(req.competition) ? poomsaeDrawSummary(db, req.competition) : null,
+    dayOptions: getEventDates(db, req.competition.id).map((date, i) => ({ value: i + 1, label: `Day ${i + 1} (${formatDay(date)})` })),
   });
 });
 

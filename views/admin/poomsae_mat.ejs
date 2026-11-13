@@ -19,7 +19,7 @@
   </div>
   <nav class="actions" aria-label="Court">
     <span class="screen-status" id="screen-status" hidden></span>
-    <a class="btn secondary small" href="/admin/competitions/<%= competition.id %>/poomsae">All poomsae</a>
+    <a class="btn secondary small" href="/admin/competitions/<%= competition.id %>/results?event=poomsae">All poomsae</a>
     <a class="btn secondary small" href="/screens/<%= competition.id %>/poomsae/<%= day %>/<%= court %>">Court screen</a>
     <% if (user.role !== 'admin') { %><a class="btn secondary small" href="/official">Competition day</a><% } %>
   </nav>

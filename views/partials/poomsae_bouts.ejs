@@ -1,0 +1,173 @@
+<%# Poomsae's part of the shared Bout list page, laid out like the kyorugi part above it: a heading with publishing, a Draw and schedule card, then one card per division with its performance list and bracket. Pass competition, poomsae (poomsaeDrawSummary) and dayOptions. Every form comes back here. %>
+<% const ready = poomsae.divisions.filter((d) => d.approved > 0); %>
+<% const lists = ready.filter((d) => d.order.length > 0).length; const brackets = ready.filter((d) => d.bouts).length; %>
+<% const closed = competition.status === 'closed'; %>
+<%# "1 (Fri 8 Jan)", as on the kyorugi cards. %>
+<% const dayLabel = (day) => { const found = dayOptions.find((o) => o.value === day); return found ? found.label.replace(/^Day /, '') : day || '–'; }; %>
+<% const back = '<input type="hidden" name="back" value="bouts">'; %>
+<section id="poomsae">
+  <div class="division-head">
+    <h2 class="event-heading">Poomsae lists and brackets</h2>
+    <div class="actions">
+      <% [['lists', 'performance lists', 'Lists', lists > 0, competition.poomsae_published_at], ['brackets', 'brackets', 'Brackets', brackets > 0, competition.poomsae_brackets_published_at]].forEach(([stage, label, badge, isReady, published]) => { %>
+        <% if (published) { %>
+          <span class="badge approved"><%= badge %> published</span>
+          <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/unpublish">
+            <input type="hidden" name="_csrf" value="<%= csrf %>"><%- back %>
+            <button class="btn secondary small" name="stage" value="<%= stage %>" type="submit">Hide <%= label %></button>
+          </form>
+        <% } else if (isReady) { %>
+          <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/publish" data-confirm="Publish the poomsae <%= label %>? Everyone can see them, and coaches with entries will be emailed.">
+            <input type="hidden" name="_csrf" value="<%= csrf %>"><%- back %>
+            <button class="btn approve small" name="stage" value="<%= stage %>" type="submit">Publish <%= label %></button>
+          </form>
+        <% } %>
+      <% }) %>
+      <% if (competition.poomsae_published_at || competition.poomsae_brackets_published_at) { %><a class="btn secondary small" href="/competitions/<%= competition.id %>/bouts?event=poomsae">Public page</a><% } %>
+      <% if (lists > 0 || brackets > 0) { %><a class="btn secondary small" href="/admin/competitions/<%= competition.id %>/poomsae.pdf">Download PDF</a><% } %>
+    </div>
+  </div>
+
+  <% if (!closed) { %>
+    <section class="card">
+      <h2>Registration is still open</h2>
+      <p class="empty">Close registration on the <a href="/admin/competitions">Competitions</a> page to make the performance lists and draw the brackets.</p>
+    </section>
+  <% } else { %>
+    <section class="card">
+      <h2>Draw and schedule</h2>
+      <p class="stats">
+        <span><strong><%= ready.length %></strong> division<%= ready.length === 1 ? '' : 's' %></span>
+        <span><strong><%= lists %></strong> performance list<%= lists === 1 ? '' : 's' %></span>
+        <span><strong><%= brackets %></strong> bracket<%= brackets === 1 ? '' : 's' %></span>
+      </p>
+      <% if (poomsae.pending > 0) { %>
+        <div class="notice error"><%= poomsae.pending %> pending poomsae entr<%= poomsae.pending === 1 ? 'y is' : 'ies are' %> not included. <a href="/admin/competitions/<%= competition.id %>/registrations#poomsae">Review them first</a>.</div>
+      <% } %>
+      <p class="sub">Ranked divisions and score rounds get a performance list in a random order; head-to-head divisions get a single-elimination bracket, keeping entries from the same club apart where possible. Each division's format is set on the <a href="/admin/competitions/<%= competition.id %>/divisions#poomsae">Divisions</a> page.</p>
+      <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/schedule">
+        <input type="hidden" name="_csrf" value="<%= csrf %>"><%- back %>
+        <div class="form-row">
+          <div class="field"><label for="p-courts">Poomsae courts</label><input id="p-courts" name="courts" type="number" min="1" max="20" value="<%= competition.poomsae_courts %>" required></div>
+          <div class="field"><label for="p-start">Start time each day</label><input id="p-start" name="start" type="time" value="<%= competition.poomsae_start %>" required></div>
+          <div class="field"><label for="p-minutes">Minutes per bout</label><input id="p-minutes" name="minutes" type="number" min="1" max="60" value="<%= competition.poomsae_minutes %>" required></div>
+          <div class="field"><label for="p-rest">Minimum rest between bouts (minutes)</label><input id="p-rest" name="rest" type="number" min="0" max="120" value="<%= competition.poomsae_rest_minutes %>" required></div>
+          <div class="field">
+            <label for="p-judges">Judges</label>
+            <select id="p-judges" name="judges">
+              <% JUDGE_COUNTS.forEach((n) => { %><option value="<%= n %>" <%= competition.poomsae_judges === n ? 'selected' : '' %>><%= n === 1 ? '1: enter the final score' : `${n} judges` %></option><% }) %>
+            </select>
+          </div>
+        </div>
+        <p class="hint">Poomsae runs on its own courts, called Poomsae court 1 and up. Lists and brackets are timed when they're made, so times already given out stay put; saving here times every bracket again. With five or more judges, the highest and lowest scores are dropped.</p>
+        <div class="actions"><button class="btn secondary" type="submit">Save schedule</button></div>
+      </form>
+      <% if (poomsae.orderable > 0 || poomsae.drawable > 0) { %>
+        <div class="actions">
+          <% if (poomsae.orderable > 0) { %>
+            <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/order">
+              <input type="hidden" name="_csrf" value="<%= csrf %>"><%- back %>
+              <button class="btn" name="division" value="all" type="submit">Make <%= poomsae.orderable %> performance list<%= poomsae.orderable === 1 ? '' : 's' %></button>
+            </form>
+          <% } %>
+          <% if (poomsae.drawable > 0) { %>
+            <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/draw">
+              <input type="hidden" name="_csrf" value="<%= csrf %>"><%- back %>
+              <button class="btn" name="division" value="all" type="submit">Draw <%= poomsae.drawable %> ready bracket<%= poomsae.drawable === 1 ? '' : 's' %></button>
+            </form>
+          <% } %>
+        </div>
+      <% } %>
+    </section>
+
+    <% if (ready.length === 0) { %><section class="card"><p class="empty">No approved poomsae entries yet.</p></section><% } %>
+    <% ready.forEach((d) => { %>
+      <% const played = d.bouts ? d.bouts.filter((b) => !b.isBye) : []; %>
+      <% const hasList = d.mode === 'score' || d.mode === 'cut'; %>
+      <% const headDay = hasList ? d.listDay : d.day; const headCourt = hasList ? d.listCourt : d.court; %>
+      <section class="card" id="division-<%= d.key %>">
+        <div class="division-head">
+          <h2><%= d.title %></h2>
+          <p class="stats">
+            <% if (headCourt) { %><span>Day: <strong><%= dayLabel(headDay) %></strong></span><span>Poomsae court: <strong><%= headCourt %></strong></span><% } %>
+            <span>Format: <strong><%= d.mode === 'score' ? 'Ranked by score' : d.mode === 'cut' ? `Score round, top ${d.cut}` : 'Single elimination' %></strong></span>
+            <span>Entries: <strong><%= d.approved %></strong></span>
+            <% if (played.length > 0) { %><span>Matches: <strong><%= played.length %></strong></span><% } %>
+          </p>
+        </div>
+
+        <% if (hasList) { %>
+          <h3><%= d.mode === 'cut' ? 'Score round order' : 'Performance order' %></h3>
+          <% if (d.order.length > 0) { %>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>#</th><th>Athletes</th><th>Club</th><th>Time</th></tr></thead>
+                <tbody>
+                  <% d.order.forEach((e) => { %><tr><td class="num"><%= e.perform_order %></td><td><strong><%= e.names %></strong></td><td><%= e.club_label || e.club_name %></td><td class="nowrap"><%= e.perform_time || '' %></td></tr><% }) %>
+                </tbody>
+              </table>
+            </div>
+          <% } else if (d.pending > 0) { %>
+            <p class="empty">Approve or reject the pending entries, then make the list.</p>
+          <% } else if (d.canOrder) { %>
+            <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/order">
+              <input type="hidden" name="_csrf" value="<%= csrf %>"><%- back %>
+              <button class="btn secondary small" name="division" value="<%= d.key %>" type="submit">Make performance list</button>
+            </form>
+          <% } %>
+        <% } %>
+
+        <% if (d.mode !== 'score') { %>
+          <h3>Bracket</h3>
+          <% if (d.bouts) { %>
+            <% if (hasList && d.court) { %><p class="stats"><span>Day: <strong><%= dayLabel(d.day) %></strong></span><span>Poomsae court: <strong><%= d.court %></strong></span></p><% } %>
+            <%- include('bracket', { division: d, highlightClubId: null }) %>
+          <% } else if (d.pending > 0) { %>
+            <p class="empty">Approve or reject the pending entries, then draw the bracket.</p>
+          <% } else if (d.drawProblem) { %>
+            <p class="empty"><%= d.drawProblem %></p>
+          <% } else { %>
+            <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/draw">
+              <input type="hidden" name="_csrf" value="<%= csrf %>"><%- back %>
+              <button class="btn secondary small" name="division" value="<%= d.key %>" type="submit">Draw bracket</button>
+              <span class="hint"><%= d.mode === 'cut' ? `The top ${d.cut} are seeded by their rank: 1st meets the lowest seed.` : 'Drawn at random, keeping entries from the same club apart where possible.' %></span>
+            </form>
+          <% } %>
+        <% } %>
+
+        <% if (d.order.length > 0 || d.bouts) { %>
+          <details class="division-edit">
+            <summary>Change this division</summary>
+            <% if (d.order.length > 0) { %>
+              <% if (d.canOrder) { %>
+                <div class="division-edit-row">
+                  <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/order" data-confirm="Draw a new random order for this division?">
+                    <input type="hidden" name="_csrf" value="<%= csrf %>"><%- back %>
+                    <button class="btn secondary small" name="division" value="<%= d.key %>" type="submit">Redraw order</button>
+                  </form>
+                  <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/clear-order" data-confirm="Clear this performance list?">
+                    <input type="hidden" name="_csrf" value="<%= csrf %>"><%- back %>
+                    <button class="btn danger small" name="division" value="<%= d.key %>" type="submit">Clear list</button>
+                  </form>
+                </div>
+              <% } else { %>
+                <p class="hint">Scoring has started, so the performance order stays as it is.</p>
+              <% } %>
+            <% } %>
+            <% if (d.bouts) { %>
+              <% if (!d.bouts.some((b) => b.winner)) { %>
+                <form class="division-edit-row" method="post" action="/admin/competitions/<%= competition.id %>/poomsae/delete-bracket" data-confirm="Delete this bracket so it can be drawn again?">
+                  <input type="hidden" name="_csrf" value="<%= csrf %>"><%- back %>
+                  <button class="btn danger small" name="division" value="<%= d.key %>" type="submit">Delete bracket</button>
+                  <span class="hint">Then draw it again for a new random draw.</span>
+                </form>
+              <% } else { %>
+                <p class="hint">This bracket has results, so it can't change. Undo its results on the Results page first.</p>
+              <% } %>
+            <% } %>
+          </details>
+        <% } %>
+      </section>
+    <% }) %>
+  <% } %>
+</section>

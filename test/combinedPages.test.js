@@ -50,6 +50,18 @@ test('one Review registrations page and one Bout list page cover kyorugi and poo
   assert.equal(approveAll.headers.location, `/admin/competitions/${id}/registrations#poomsae`);
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM poomsae_entries WHERE status = 'approved'").get().n, 2);
 
+  // One Divisions page: kyorugi divisions, then poomsae's, each changed in place.
+  const divisionsPage = (await admin.get(`/admin/competitions/${id}/divisions`)).text;
+  assert.ok(divisionsPage.indexOf('Kyorugi divisions') < divisionsPage.indexOf('Poomsae divisions'));
+  const poomsaeKey = db.prepare("SELECT event || '-' || gender || '-' || age_group_id || '-' || belt_group_id AS k FROM poomsae_entries LIMIT 1").get().k;
+  const divisionCsrf = await csrfFrom(admin, `/admin/competitions/${id}/divisions`);
+  const savedDivision = await admin.post(`/admin/competitions/${id}/poomsae/division`).type('form')
+    .send({ _csrf: divisionCsrf, division: poomsaeKey, format: 'elimination', cut: '', day: '', back: 'divisions' });
+  assert.equal(savedDivision.headers.location, `/admin/competitions/${id}/divisions#division-${poomsaeKey}`);
+  assert.match((await admin.get(`/admin/competitions/${id}/divisions`)).text, new RegExp(`id="division-${poomsaeKey}"[\\s\\S]*?Format: <strong>Single elimination`));
+  db.prepare('DELETE FROM poomsae_divisions').run();
+  assert.equal((await admin.get(`/admin/competitions/${id}/poomsae`)).headers.location, `/admin/competitions/${id}/divisions#poomsae`, 'the old poomsae page');
+
   db.prepare("UPDATE competitions SET status = 'closed' WHERE id = ?").run(id);
   const bouts = (await admin.get(`/admin/competitions/${id}/bouts`)).text;
   assert.match(bouts, /Poomsae lists and brackets/);
@@ -62,8 +74,8 @@ test('one Review registrations page and one Bout list page cover kyorugi and poo
   const withOrders = (await admin.get(`/admin/competitions/${id}/bouts`)).text;
   assert.match(withOrders, /Publish performance lists/);
   // The performance orders show on the bout list too, after the kyorugi brackets.
-  const orders = withOrders.slice(withOrders.indexOf('id="poomsae-orders"'));
-  assert.ok(withOrders.indexOf('Kyorugi bouts') < withOrders.indexOf('id="poomsae-orders"'));
+  const orders = withOrders.slice(withOrders.indexOf('id="poomsae"'));
+  assert.ok(withOrders.indexOf('Kyorugi bouts') < withOrders.indexOf('id="poomsae"'));
   assert.match(orders, /Ana X/);
   assert.match(orders, /Mia X/);
   const key = db.prepare('SELECT event, gender, age_group_id, belt_group_id FROM poomsae_entries LIMIT 1').get();
@@ -79,7 +91,7 @@ test('one Review registrations page and one Bout list page cover kyorugi and poo
   const drawn = await admin.post(`/admin/competitions/${id}/poomsae/draw`).type('form').send({ _csrf: drawCsrf, division: 'all', back: 'bouts' });
   assert.equal(drawn.headers.location, `/admin/competitions/${id}/bouts#poomsae`);
   const withBracket = (await admin.get(`/admin/competitions/${id}/bouts`)).text;
-  const bracketPart = withBracket.slice(withBracket.indexOf('id="poomsae-brackets"'));
+  const bracketPart = withBracket.slice(withBracket.indexOf('id="poomsae"'));
   assert.match(bracketPart, /<svg class="bracket"/);
   assert.match(bracketPart, /Ana X/);
   const deleteCsrf = await csrfFrom(admin, `/admin/competitions/${id}/bouts`);

@@ -3,39 +3,40 @@
 <div class="page-head">
   <div>
     <h1>Bout list</h1>
-    <p class="sub"><%= competition.name %> · <%= competition.venue %>, <%= eventDatesText(competition) %><% if (divisions.length > 0) { %> · <%= totalBouts %> bout<%= totalBouts === 1 ? '' : 's' %> in <%= divisions.length %> division<%= divisions.length === 1 ? '' : 's' %><% } %></p>
+    <p class="sub"><%= competition.name %> · <%= competition.venue %>, <%= eventDatesText(competition) %></p>
   </div>
+  <div class="actions"><a class="btn secondary" href="/admin/competitions/<%= competition.id %>/results">Record results</a></div>
+</div>
+
+<%# Kyorugi first, then poomsae, laid out the same way: a heading with publishing, Draw and schedule, then one card per division. %>
+<% if (hasKyorugi(competition)) { %>
+<section id="kyorugi">
+<div class="division-head">
+  <h2 class="event-heading"><%= poomsae ? 'Kyorugi bouts' : 'Bouts' %></h2>
   <% if (divisions.length > 0) { %>
     <div class="actions">
-<% if (competition.bouts_published_at) { %>
-        <span class="badge approved"><%= poomsae ? 'Kyorugi published' : 'Published for everyone' %></span> <a href="/competitions/<%= competition.id %>/bouts?event=kyorugi">Public page</a>
+    <% if (competition.bouts_published_at) { %>
+        <span class="badge approved"><%= poomsae ? 'Kyorugi published' : 'Published for everyone' %></span> <a class="btn secondary small" href="/competitions/<%= competition.id %>/bouts?event=kyorugi">Public page</a>
         <form method="post" action="/admin/competitions/<%= competition.id %>/bouts/unpublish">
           <input type="hidden" name="_csrf" value="<%= csrf %>">
-          <button class="btn secondary" type="submit">Hide <%= poomsae ? 'kyorugi ' : '' %>bout list</button>
+          <button class="btn secondary small" type="submit">Hide <%= poomsae ? 'kyorugi ' : '' %>bout list</button>
         </form>
       <% } else { %>
         <form method="post" action="/admin/competitions/<%= competition.id %>/bouts/publish" data-confirm="Publish this bout list? Coaches with athletes in it will be emailed.">
           <input type="hidden" name="_csrf" value="<%= csrf %>">
-          <button class="btn approve" type="submit">Publish <%= poomsae ? 'kyorugi ' : '' %>bout list</button>
+          <button class="btn approve small" type="submit">Publish <%= poomsae ? 'kyorugi ' : '' %>bout list</button>
         </form>
       <% } %>
-      <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/results">Record results</a>
-      <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/bouts.pdf">Download PDF</a>
+      <a class="btn secondary small" href="/admin/competitions/<%= competition.id %>/bouts.pdf">Download PDF</a>
       <% if (!resultsRecorded) { %>
       <form method="post" action="/admin/competitions/<%= competition.id %>/bouts/delete" data-confirm="Delete this bout list?">
         <input type="hidden" name="_csrf" value="<%= csrf %>">
-        <button class="btn danger" type="submit">Delete</button>
+        <button class="btn danger small" type="submit">Delete bout list</button>
       </form>
       <% } %>
     </div>
   <% } %>
 </div>
-
-<% if (poomsae) { %><%- include('../partials/poomsae_draws', { poomsae }) %><% } %>
-
-<%# Everything below is kyorugi. %>
-<% if (hasKyorugi(competition)) { %>
-<% if (poomsae) { %><h2 class="event-heading">Kyorugi bouts</h2><% } %>
 <% if (competition.status !== 'closed' && divisions.length === 0) { %>
   <section class="card">
     <h2>Registration is still open</h2>
@@ -44,6 +45,7 @@
 <% } else { %>
   <section class="card">
     <h2>Draw and schedule</h2>
+    <% if (divisions.length > 0) { %><p class="stats"><span><strong><%= divisions.length %></strong> division<%= divisions.length === 1 ? '' : 's' %></span><span><strong><%= totalBouts %></strong> bout<%= totalBouts === 1 ? '' : 's' %></span></p><% } %>
     <% if (divisions.length === 0) { %>
       <% const out = weighIn.no_show + weighIn.disqualified; %>
       <p class="stats">
@@ -213,7 +215,8 @@
     </details>
   </section>
 <% }) %>
+</section>
 <% } %>
 
-<% if (poomsae) { %><%- include('../partials/poomsae_orders', { poomsae }) %><% } %>
+<% if (poomsae) { %><%- include('../partials/poomsae_bouts', { poomsae }) %><% } %>
 <%- include('../partials/bottom') %>

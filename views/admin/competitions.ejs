@@ -46,11 +46,8 @@
       <%# Review registrations and Bout list cover kyorugi and poomsae together. %>
       <a class="btn small" href="/admin/competitions/<%= c.id %>/registrations">Review registrations</a>
       <% if (c.status === 'closed') { %><a class="btn small" href="/admin/competitions/<%= c.id %>/bouts">Bout list</a><a class="btn small" href="/admin/competitions/<%= c.id %>/results">Results</a><% } %>
-      <% if (hasKyorugi(c)) { %>
-        <a class="btn secondary small" href="/admin/competitions/<%= c.id %>/divisions">Divisions</a>
-        <% if (c.status === 'closed') { %><a class="btn secondary small" href="/admin/competitions/<%= c.id %>/weigh-in">Weigh-in</a><% } %>
-      <% } %>
-      <% if (hasPoomsae(c)) { %><a class="btn secondary small" href="/admin/competitions/<%= c.id %>/poomsae">Poomsae divisions</a><% } %>
+      <a class="btn secondary small" href="/admin/competitions/<%= c.id %>/divisions">Divisions</a>
+      <% if (hasKyorugi(c) && c.status === 'closed') { %><a class="btn secondary small" href="/admin/competitions/<%= c.id %>/weigh-in">Weigh-in</a><% } %>
       <a class="btn secondary small" href="/admin/competitions/<%= c.id %>/setup">Division setup</a>
       <a class="btn secondary small" href="/admin/competitions/<%= c.id %>/edit">Edit</a>
       <a class="btn secondary small" href="/admin/competitions/<%= c.id %>/files">Logo and files</a>

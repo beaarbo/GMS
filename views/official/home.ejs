@@ -33,7 +33,7 @@
             <% } %>
           <% } %>
           <% if (hasPoomsae(c)) { %>
-            <a class="btn" href="/admin/competitions/<%= c.id %>/poomsae">Poomsae scores</a>
+            <a class="btn" href="/admin/competitions/<%= c.id %>/results?event=poomsae">Poomsae scores</a>
             <% if (!c.hasBouts) { %><a class="btn secondary" href="/screens/<%= c.id %>">Court screens</a><% } %>
           <% } %>
         </div>

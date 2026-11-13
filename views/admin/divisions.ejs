@@ -1,74 +1,153 @@
 <%- include('../partials/top') %>
+<% const kyorugi = hasKyorugi(competition); %>
+<% const poomsaeList = poomsae ? poomsae.divisions : []; %>
 <p class="breadcrumb"><a href="/admin/competitions">Competitions</a></p>
 <div class="page-head">
   <div>
     <h1>Divisions</h1>
-    <p class="sub"><%= competition.name %> · <%= divisions.length %> division<%= divisions.length === 1 ? '' : 's' %> with entries</p>
+    <p class="sub"><%= competition.name %> · divisions with entries</p>
   </div>
   <div class="actions">
     <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/registrations">Review registrations</a>
-    <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/export.csv">Export approved (CSV)</a>
+    <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/setup">Division setup</a>
+    <% if (kyorugi) { %><a class="btn secondary" href="/admin/competitions/<%= competition.id %>/export.csv">Export approved (CSV)</a><% } %>
   </div>
 </div>
 
-<% const loneCount = divisions.filter((d) => d.lone).length; %>
-<% if (loneCount > 0 && !locked) { %>
-  <div class="notice info"><%= loneCount %> division<%= loneCount === 1 ? ' has' : 's have' %> no opponent yet. Move the athlete into another division of the same gender to give them a bout. Their coach is emailed, and it can be undone until the bout list is drawn.</div>
-<% } else if (locked) { %>
-  <div class="notice info">The bout list has been drawn, so athletes can't move between divisions. Delete the bout list first to change them.</div>
-<% } %>
+<%# Kyorugi first, then poomsae, laid out the same way: one card per division with its approved athletes and a way to change it. %>
+<% if (kyorugi) { %>
+<section id="kyorugi">
+  <div class="division-head">
+    <h2 class="event-heading"><%= poomsae ? 'Kyorugi divisions' : 'Divisions' %></h2>
+    <p class="stats"><span><strong><%= divisions.length %></strong> division<%= divisions.length === 1 ? '' : 's' %></span></p>
+  </div>
+  <% const loneCount = divisions.filter((d) => d.lone).length; %>
+  <% if (loneCount > 0 && !locked) { %>
+    <div class="notice info"><%= loneCount %> division<%= loneCount === 1 ? ' has' : 's have' %> no opponent yet. Move the athlete into another division of the same gender to give them a bout. Their coach is emailed, and it can be undone until the bout list is drawn.</div>
+  <% } else if (locked) { %>
+    <div class="notice info">The bout list has been drawn, so athletes can't move between divisions. Delete the bout list first to change them.</div>
+  <% } %>
 
-<% if (divisions.length === 0) { %>
-  <div class="card"><p class="empty">No athletes are registered yet.</p></div>
-<% } %>
+  <% if (divisions.length === 0) { %>
+    <section class="card"><p class="empty">No athletes are registered yet.</p></section>
+  <% } %>
 
-<% divisions.forEach((d) => { %>
-  <section class="card" id="division-<%= d.key %>">
-    <div class="division-head">
-      <h2><%= d.title %></h2>
-      <p class="stats">
-        <span><strong><%= d.approved.length %></strong> approved</span>
-        <% if (d.pending > 0) { %><span><strong><%= d.pending %></strong> pending</span><% } %>
-      </p>
-    </div>
-    <% if (d.approved.length === 0) { %>
-      <p class="empty">No approved athletes yet.</p>
-    <% } else { %>
-      <ol class="fighter-list">
-        <% d.approved.forEach((r) => { %>
-          <li>
-            <strong><%= r.last_name %>, <%= r.first_name %></strong> · <%= r.club_name %>
-            <% if (r.mergedFromTitle) { %>
-              <span class="hint">· moved here from <%= r.mergedFromTitle %></span>
-              <% if (!locked) { %>
-                <form class="inline-form" method="post" action="/admin/competitions/<%= competition.id %>/divisions/unmerge">
-                  <input type="hidden" name="_csrf" value="<%= csrf %>">
-                  <input type="hidden" name="registration" value="<%= r.id %>">
-                  <button class="btn secondary small" type="submit">Undo move</button>
-                </form>
+  <% divisions.forEach((d) => { %>
+    <section class="card" id="division-<%= d.key %>">
+      <div class="division-head">
+        <h2><%= d.title %></h2>
+        <p class="stats">
+          <span>Approved: <strong><%= d.approved.length %></strong></span>
+          <% if (d.pending > 0) { %><span>Pending: <strong><%= d.pending %></strong></span><% } %>
+        </p>
+      </div>
+      <% if (d.approved.length === 0) { %>
+        <p class="empty">No approved athletes yet.</p>
+      <% } else { %>
+        <ol class="fighter-list">
+          <% d.approved.forEach((r) => { %>
+            <li>
+              <strong><%= r.last_name %>, <%= r.first_name %></strong> · <%= r.club_name %>
+              <% if (r.mergedFromTitle) { %>
+                <span class="hint">· moved here from <%= r.mergedFromTitle %></span>
+                <% if (!locked) { %>
+                  <form class="inline-form" method="post" action="/admin/competitions/<%= competition.id %>/divisions/unmerge">
+                    <input type="hidden" name="_csrf" value="<%= csrf %>">
+                    <input type="hidden" name="registration" value="<%= r.id %>">
+                    <button class="btn secondary small" type="submit">Undo move</button>
+                  </form>
+                <% } %>
               <% } %>
-            <% } %>
-          </li>
-        <% }) %>
-      </ol>
-    <% } %>
-    <% if (d.lone) { %>
-      <p class="warn-text">No opponent yet in this division.</p>
-      <% if (!locked && d.targets.length > 0) { %>
-        <form class="division-edit-row" method="post" action="/admin/competitions/<%= competition.id %>/divisions/merge" data-confirm="Move everyone in this division? Their coach will be emailed.">
+            </li>
+          <% }) %>
+        </ol>
+      <% } %>
+      <% if (d.lone) { %>
+        <p class="warn-text">No opponent yet in this division.</p>
+        <% if (!locked && d.targets.length > 0) { %>
+          <details class="division-edit" open>
+            <summary>Change this division</summary>
+            <form class="division-edit-row" method="post" action="/admin/competitions/<%= competition.id %>/divisions/merge" data-confirm="Move everyone in this division? Their coach will be emailed.">
+              <input type="hidden" name="_csrf" value="<%= csrf %>">
+              <input type="hidden" name="from" value="<%= d.key %>">
+              <label>Move to
+                <select name="to" required>
+                  <% d.targets.forEach((t, i) => { %><option value="<%= t.key %>"><%= t.title %> (<%= t.approved.length + t.pending %>)<%= i === 0 ? ' · closest' : '' %></option><% }) %>
+                </select>
+              </label>
+              <button class="btn secondary small" type="submit">Move</button>
+            </form>
+          </details>
+        <% } else if (!locked) { %>
+          <p class="hint">There's no other <%= d.gender === 'M' ? 'male' : 'female' %> division with entries to move into.</p>
+        <% } %>
+      <% } %>
+    </section>
+  <% }) %>
+</section>
+<% } %>
+
+<% if (poomsae) { %>
+<section id="poomsae">
+  <div class="division-head">
+    <h2 class="event-heading"><%= kyorugi ? 'Poomsae divisions' : 'Divisions' %></h2>
+    <p class="stats">
+      <span><strong><%= poomsaeList.length %></strong> division<%= poomsaeList.length === 1 ? '' : 's' %></span>
+      <span>Competition format: <strong><%= POOMSAE_FORMATS[competition.poomsae_format] %><%= competition.poomsae_format === 'cut' ? ` (top ${competition.poomsae_cut})` : '' %></strong></span>
+    </p>
+  </div>
+  <div class="notice info">Each division uses the competition's format unless you change it here. A format is fixed once the division has a performance list, scores or a bracket; its day can still change.</div>
+
+  <% if (poomsaeList.length === 0) { %>
+    <section class="card"><p class="empty">No poomsae entries yet.</p></section>
+  <% } %>
+
+  <% poomsaeList.forEach((d) => { %>
+    <% const approved = d.entries.filter((e) => e.status === 'approved'); %>
+    <section class="card" id="division-<%= d.key %>">
+      <div class="division-head">
+        <h2><%= d.title %></h2>
+        <p class="stats">
+          <span>Approved: <strong><%= d.approved %></strong></span>
+          <% if (d.pending > 0) { %><span>Pending: <strong><%= d.pending %></strong></span><% } %>
+          <span>Format: <strong><%= d.mode === 'score' ? 'Ranked by score' : d.mode === 'cut' ? `Score round, top ${d.cut}` : 'Single elimination' %></strong></span>
+          <span>Day: <strong><%= d.pinnedDay ? dayOptions.find((o) => o.value === d.pinnedDay).label.replace(/^Day /, '') : 'Any' %></strong></span>
+        </p>
+      </div>
+      <% if (approved.length === 0) { %>
+        <p class="empty">No approved entries yet.</p>
+      <% } else { %>
+        <ol class="fighter-list">
+          <% approved.forEach((e) => { %><li><strong><%= e.names %></strong> · <%= e.club_name %></li><% }) %>
+        </ol>
+      <% } %>
+      <details class="division-edit">
+        <summary>Change this division</summary>
+        <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/division" class="division-edit-row">
           <input type="hidden" name="_csrf" value="<%= csrf %>">
-          <input type="hidden" name="from" value="<%= d.key %>">
-          <label>Move to
-            <select name="to" required>
-              <% d.targets.forEach((t, i) => { %><option value="<%= t.key %>"><%= t.title %> (<%= t.approved.length + t.pending %>)<%= i === 0 ? ' · closest' : '' %></option><% }) %>
+          <input type="hidden" name="back" value="divisions">
+          <input type="hidden" name="division" value="<%= d.key %>">
+          <label>Format
+            <select name="format" <%= d.locked ? 'disabled' : '' %>>
+              <option value="">Competition's: <%= POOMSAE_FORMATS[competition.poomsae_format] %></option>
+              <% Object.entries(POOMSAE_FORMATS).forEach(([value, label]) => { %><option value="<%= value %>" <%= d.ownFormat && d.format === value ? 'selected' : '' %>><%= label %></option><% }) %>
             </select>
           </label>
-          <button class="btn secondary small" type="submit">Move</button>
+          <label>Top into the bracket
+            <input name="cut" type="number" min="2" max="<%= MAX_CUT %>" value="<%= d.ownCut ?? '' %>" placeholder="<%= competition.poomsae_cut %>" <%= d.locked ? 'disabled' : '' %>>
+          </label>
+          <label>Day
+            <select name="day">
+              <option value="">Any day</option>
+              <% dayOptions.forEach((o) => { %><option value="<%= o.value %>" <%= d.pinnedDay === o.value ? 'selected' : '' %>><%= o.label %></option><% }) %>
+            </select>
+          </label>
+          <button class="btn secondary small" type="submit">Save division</button>
         </form>
-      <% } else if (!locked) { %>
-        <p class="hint">There's no other <%= d.gender === 'M' ? 'male' : 'female' %> division with entries to move into.</p>
-      <% } %>
-    <% } %>
-  </section>
-<% }) %>
+        <% if (d.locked) { %><p class="hint">The format is fixed now that this division has a performance list, scores or a bracket.</p><% } %>
+      </details>
+    </section>
+  <% }) %>
+</section>
+<% } %>
 <%- include('../partials/bottom') %>
