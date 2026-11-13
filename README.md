@@ -248,6 +248,10 @@ The host must serve the site over HTTPS, because login cookies are HTTPS-only in
 
 The database holds personal data, including children's names and dates of birth, so check which data protection rules apply to you.
 
+### Tests before each deploy
+
+`.github/workflows/test.yml` runs `npm test` on GitHub (Node 22, like the `Dockerfile`) for every push to `main` and every pull request; the result shows as a tick or cross beside the commit. To stop a failing push from reaching the live site, turn on **Wait for CI** in the Railway service's **Settings**: Railway then deploys a push only after the tests pass.
+
 ## Backups
 
 The server saves a snapshot of the database once a day, in a `backups` folder next to the database file (on Railway, `/data/backups`). It keeps the newest 7 daily snapshots, plus the newest 10 made with **Back up now**, unless **Settings → Backups** says otherwise; it can also email each daily snapshot off-site. Each snapshot is checked before it's kept. Two optional settings change this:

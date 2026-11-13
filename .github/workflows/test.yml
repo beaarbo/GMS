@@ -1,0 +1,24 @@
+# Runs the test suite on every push and pull request, so a broken change shows
+# up on GitHub before it reaches the live site. With Railway's "Wait for CI"
+# turned on, a push to main deploys only once this passes.
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # The same Node as the Dockerfile that Railway builds.
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
