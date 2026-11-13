@@ -125,3 +125,23 @@ test('the front page lists finished competitions apart, newest first, with their
   assert.doesNotMatch(past, /Coming Cup/);
   assert.doesNotMatch(past, /\/results/, 'no results link until results are published');
 });
+
+test('a competition link shared on WhatsApp or Facebook previews its logo, name, dates and venue', async () => {
+  const { openDb } = require('../src/db');
+  const { createApp } = require('../src/app');
+  const { createCompetition, saveCompetitionLogo } = require('../src/services');
+  const request = require('supertest');
+  const db = openDb(':memory:');
+  const year = new Date().getFullYear() + 1;
+  const id = createCompetition(db, { name: 'City Open', event_date: `${year}-05-01`, registration_deadline: `${year}-04-01`, venue: 'Sports Hall', status: 'open' });
+  saveCompetitionLogo(db, id, { data: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64'), contentType: 'image/png' });
+  const app = createApp({ db, sessionSecret: 'test-secret', mailer: { configured: false, send: async () => {} }, publicUrl: 'https://gms.test' });
+  const page = (await request(app).get(`/competitions/${id}`)).text;
+  assert.match(page, /<meta property="og:title" content="City Open">/);
+  assert.match(page, /<meta property="og:description" content="[^"]*Sports Hall · Registration closes/);
+  assert.ok(page.includes(`<meta property="og:image" content="https://gms.test/competitions/${id}/logo?v=`));
+  assert.ok(page.includes(`<meta property="og:url" content="https://gms.test/competitions/${id}">`));
+  // The image the preview names must load for someone without an account.
+  const image = page.match(/og:image" content="https:\/\/gms\.test([^"]+)"/)[1].replace(/&amp;/g, '&');
+  assert.equal((await request(app).get(image)).status, 200);
+});

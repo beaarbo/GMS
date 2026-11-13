@@ -4,6 +4,20 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title><%= title %> · <%= site.siteName %></title>
+  <%
+    // Link previews (WhatsApp, Facebook, Telegram…): a competition's pages show its
+    // logo, name, dates and venue; other pages the site's name and logo.
+    const c = locals.competition && locals.competition.id ? locals.competition : null;
+    const previewText = c ? `${eventDatesText(c)} · ${c.venue}${isRegistrationOpen(c) ? ` · Registration closes ${deadlineText(c)}` : ''}` : site.footerText;
+    const previewImage = (c && competitionLogoUrl(c.id)) || siteLogoUrl();
+  %>
+  <meta property="og:site_name" content="<%= site.siteName %>">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="<%= title %>">
+  <meta property="og:url" content="<%= publicUrl %><%= currentPath %>">
+  <% if (previewText) { %><meta property="og:description" content="<%= previewText %>"><meta name="description" content="<%= previewText %>"><% } %>
+  <% if (previewImage) { %><meta property="og:image" content="<%= publicUrl %><%= previewImage %>"><% } %>
+  <meta name="twitter:card" content="summary">
   <script src="/theme.js"></script>
   <link rel="stylesheet" href="/styles.css">
   <script src="/app.js" defer></script>

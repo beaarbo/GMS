@@ -165,6 +165,10 @@ Everyone can change their name, email, password and theme, and choose which emai
 
 Coaches can add a photo of each athlete from the club dashboard (**Add photo**, or click the athlete's name): JPG or PNG, up to 1 MB. WebP isn't accepted because the card PDF can't print it. Photos are optional; athletes without one show a plain person icon. The photo shows on the club's athlete list, the weigh-in list, the officials' athlete page and the printed athlete card. Only the club, admins and officials can see it, and officials only for athletes entered in that competition. It never appears on public pages.
 
+## Link previews
+
+A competition's link pasted into WhatsApp, Facebook, Telegram and similar apps shows a preview with its logo, name, dates, venue and, while entries are open, the deadline. Other pages show the site's name, footer text and organiser logo. The links in previews use `PUBLIC_URL`. Apps keep a preview for a while, so a changed logo can take time to show.
+
 ## Club countries
 
 Each club can have a country, set on **Clubs and coaches** (chosen from a list). Its athletes then show the country's three-letter code before the club, as in **SGP · Tigers Taekwondo Club** or **MAS · Dragons Martial Arts**, on the bout lists and their PDF, brackets, court screens, results, the medal table and athlete cards. A club without a country shows its name alone.

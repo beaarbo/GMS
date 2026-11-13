@@ -213,6 +213,8 @@ function createApp({
       // The Settings page: site name, footer, privacy and registration rules.
       site: loadSettings(db),
       emailKinds: EMAIL_KINDS,
+      // The site's own address (PUBLIC_URL), for links that must be absolute, like link previews.
+      publicUrl: app.locals.notify.publicUrl,
       user: null,
       csrf: req.session.csrf,
       flash: [],
