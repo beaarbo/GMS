@@ -152,7 +152,18 @@
         <% } %>
 
         <% if (d.mode !== 'score') { %>
-          <h3>Bracket</h3>
+          <%# Delete bracket sits beside the heading, in plain sight, while the bracket has no results. %>
+          <div class="section-head bracket-head">
+            <h3>Bracket</h3>
+            <% if (d.bouts && !d.bouts.some((b) => b.winner)) { %>
+              <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/delete-bracket" data-confirm="Delete this bracket so it can be drawn again?">
+                <input type="hidden" name="_csrf" value="<%= csrf %>"><%- back %>
+                <button class="btn danger small" name="division" value="<%= d.key %>" type="submit">Delete bracket</button>
+              </form>
+            <% } else if (d.bouts) { %>
+              <span class="hint">Has results: undo them on <a href="/admin/competitions/<%= competition.id %>/results?event=poomsae#result-division-<%= d.key %>">Results</a> to delete it.</span>
+            <% } %>
+          </div>
           <% if (d.bouts) { %>
             <% if (hasList && d.court) { %><p class="stats"><span>Day: <strong><%= dayLabel(d.day) %></strong></span><span>Poomsae court: <strong><%= d.court %></strong></span></p><% } %>
             <%- include('bracket', { division: d, highlightClubId: null }) %>
@@ -169,7 +180,7 @@
           <% } %>
         <% } %>
 
-        <% if (d.order.length > 0 || d.bouts) { %>
+        <% if (d.order.length > 0) { %>
           <details class="division-edit">
             <summary>Change this division</summary>
             <% if (d.order.length > 0) { %>
@@ -186,17 +197,6 @@
                 </div>
               <% } else { %>
                 <p class="hint">Scoring has started, so the performance order stays as it is.</p>
-              <% } %>
-            <% } %>
-            <% if (d.bouts) { %>
-              <% if (!d.bouts.some((b) => b.winner)) { %>
-                <form class="division-edit-row" method="post" action="/admin/competitions/<%= competition.id %>/poomsae/delete-bracket" data-confirm="Delete this bracket so it can be drawn again?">
-                  <input type="hidden" name="_csrf" value="<%= csrf %>"><%- back %>
-                  <button class="btn danger small" name="division" value="<%= d.key %>" type="submit">Delete bracket</button>
-                  <span class="hint">Then draw it again for a new random draw.</span>
-                </form>
-              <% } else { %>
-                <p class="hint">This bracket has results, so it can't change. Undo its results on the Results page first.</p>
               <% } %>
             <% } %>
           </details>

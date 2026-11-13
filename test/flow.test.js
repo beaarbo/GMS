@@ -2609,7 +2609,7 @@ test('published bout lists are public: kyorugi, and poomsae order and brackets a
   const e = db.prepare('SELECT event, gender, age_group_id, belt_group_id FROM poomsae_entries WHERE id = ?').get(entries[0].id);
   await post(admin, `${review}/draw`, { division: [e.event, e.gender, e.age_group_id, e.belt_group_id].join('-') }, review);
   // The admin page shows where each part runs: the list in the header, the bracket above it.
-  assert.match((await admin.get(review.replace(/poomsae$/, 'bouts'))).text, /Poomsae court: <strong>1<\/strong>[\s\S]*?<h3>Bracket<\/h3>\s*<p class="stats">[\s\S]*?Poomsae court: <strong>2<\/strong>/);
+  assert.match((await admin.get(review.replace(/poomsae$/, 'bouts'))).text, /Poomsae court: <strong>1<\/strong>[\s\S]*?<h3>Bracket<\/h3>[\s\S]*?>Delete bracket<[\s\S]*?<p class="stats">[\s\S]*?Poomsae court: <strong>2<\/strong>/);
   assert.doesNotMatch((await visitor.get(publicPage)).text, /<svg class="bracket"/);
   assert.match((await admin.get(review.replace(/poomsae$/, 'bouts'))).text, /Publish poomsae brackets/);
   await post(admin, `${review}/publish`, { stage: 'brackets' }, review);
