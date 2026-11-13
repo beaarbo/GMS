@@ -51,7 +51,14 @@
                         <% } %>
                         <button class="btn secondary small" type="submit">Save</button>
                       </form>
-                    <% } else if (e.score !== null) { %><%= formatScore(e.score) %><% } %>
+                      <% if (e.score !== null) { %>
+                        <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/<%= e.id %>/score" class="inline-form" data-confirm="Undo the score of <%= e.names %>?">
+                          <input type="hidden" name="_csrf" value="<%= csrf %>">
+                          <input type="hidden" name="back" value="results"><input type="hidden" name="event" value="<%= event || '' %>">
+                          <button class="btn danger small" name="action" value="clear" type="submit">Undo</button>
+                        </form>
+                      <% } %>
+                    <% } else if (e.score !== null) { %><%= formatScore(e.score) %><% if (d.bouts) { %><div class="hint">Delete the bracket on the Bout list to undo</div><% } %><% } %>
                   </td>
                 </tr>
               <% }) %>

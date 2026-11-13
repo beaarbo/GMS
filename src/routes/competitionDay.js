@@ -776,11 +776,13 @@ router.post('/competitions/:id(\\d+)/poomsae/:entryId(\\d+)/score', (req, res) =
   const { db } = req.app.locals;
   const entry = getPoomsaeEntry(db, req.competition.id, req.params.entryId);
   if (!entry) return notFound(res);
-  const parsed = readScore(req.body, req.competition.poomsae_judges);
+  // action=clear is the Results page's Undo: the same as clearing every box.
+  const parsed = req.body.action === 'clear' ? { ok: true, score: null, marks: null } : readScore(req.body, req.competition.poomsae_judges);
   const result = parsed.ok ? recordPoomsaeScore(db, req.competition, entry.id, parsed.score, parsed.marks) : parsed;
   if (!result.ok) {
     req.flash('error', `${entry.names}: ${result.error}`);
   } else if (parsed.score !== entry.score || parsed.marks) {
+    if (req.body.action === 'clear') req.flash('success', `Score undone for ${entry.names}.`);
     const was = entry.score === null ? '' : `, changed from ${formatScore(entry.score)}`;
     const judges = parsed.marks ? ` (judges ${parsed.marks.map(formatScore).join(', ')})` : '';
     const summary = parsed.score === null

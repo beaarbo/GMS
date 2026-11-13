@@ -142,6 +142,14 @@ test('the Results page records kyorugi bouts and poomsae scores together', async
   const onTab = await admin.post(`/admin/competitions/${id}/poomsae/${entryId}/score`).type('form').send({ _csrf: tabCsrf, score: '8', back: 'results', event: 'poomsae' });
   assert.equal(onTab.headers.location, `/admin/competitions/${id}/results?event=poomsae#result-entry-${entryId}`);
 
+  // Undo beside a saved score clears it, and the page comes back to the entry.
+  assert.match((await admin.get(`/admin/competitions/${id}/results?event=poomsae`)).text, /name="action" value="clear" type="submit">Undo</);
+  const undoCsrf = await csrfFrom(admin, `/admin/competitions/${id}/results?event=poomsae`);
+  const undone = await admin.post(`/admin/competitions/${id}/poomsae/${entryId}/score`).type('form').send({ _csrf: undoCsrf, action: 'clear', back: 'results', event: 'poomsae' });
+  assert.equal(undone.headers.location, `/admin/competitions/${id}/results?event=poomsae#result-entry-${entryId}`);
+  assert.equal(db.prepare('SELECT score FROM poomsae_entries WHERE id = ?').get(entryId).score, null);
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM activity_log WHERE action = 'poomsae.score_cleared'").get().n, 1);
+
   const list = (await admin.get('/admin/competitions')).text;
   assert.equal((list.match(/>Results</g) || []).length, 1, 'one Results button');
   assert.doesNotMatch(list, /Poomsae scores/);
