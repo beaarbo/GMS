@@ -1802,7 +1802,8 @@ async function ensureAdmin(db, email, password) {
   return true;
 }
 
-function createClub(db, { name, city, country = '' }) {
+// city is no longer asked for; the column stays for clubs that have one.
+function createClub(db, { name, city = '', country = '' }) {
   return Number(db.prepare('INSERT INTO clubs (name, city, country) VALUES (?, ?, ?)').run(name, city, country).lastInsertRowid);
 }
 

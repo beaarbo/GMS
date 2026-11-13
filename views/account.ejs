@@ -195,7 +195,7 @@
                 <label for="club_id"><%= clubName ? 'Move to another club' : 'Join a club' %></label>
                 <select id="club_id" name="club_id" required>
                   <option value="">Select</option>
-                  <% others.forEach((c) => { %><option value="<%= c.id %>"><%= c.name %> (<%= c.city %>)</option><% }) %>
+                  <% others.forEach((c) => { %><option value="<%= c.id %>"><%= c.name %><%= c.country ? ` (${c.country})` : '' %></option><% }) %>
                 </select>
                 <% if (clubName) { %><p class="hint">You stay in <%= clubName %> until then.</p><% } %>
               </div>

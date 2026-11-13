@@ -55,10 +55,6 @@
         <input id="new-name" name="name" required>
       </div>
       <div class="field">
-        <label for="new-city">City</label>
-        <input id="new-city" name="city" required>
-      </div>
-      <div class="field">
         <label for="new-country">Country</label>
         <select id="new-country" name="country">
           <option value="">Not set</option>
@@ -104,7 +100,6 @@
       <form class="actions" method="post" action="/admin/clubs/<%= club.id %>">
         <input type="hidden" name="_csrf" value="<%= csrf %>">
         <input class="note-field" name="name" value="<%= club.name %>" aria-label="Name of <%= club.name %>" required>
-        <input class="note-field" name="city" value="<%= club.city %>" aria-label="City of <%= club.name %>" required>
         <select name="country" aria-label="Country of <%= club.name %>">
           <option value="">Country not set</option>
           <% countries.forEach(([code, name]) => { %><option value="<%= code %>" <%= club.country === code ? 'selected' : '' %>><%= name %> (<%= code %>)</option><% }) %>

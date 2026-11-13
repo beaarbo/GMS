@@ -9,10 +9,9 @@ const router = express.Router();
 router.use(requireRole('admin'));
 
 function readClub(body) {
-  const values = { name: clean(body.name), city: clean(body.city), country: readCountry(body.country) };
+  const values = { name: clean(body.name), country: readCountry(body.country) };
   const errors = [];
   if (!values.name) errors.push('Enter a club name.');
-  if (!values.city) errors.push('Enter a city.');
   return { values, errors };
 }
 
@@ -53,7 +52,7 @@ router.post('/', (req, res) => {
   if (errors.length > 0) errors.forEach((error) => req.flash('error', error));
   else {
     createClub(db, values);
-    req.logActivity('club.created', `Created club ${values.name} (${values.city}${values.country ? `, ${values.country}` : ''})`);
+    req.logActivity('club.created', `Created club ${values.name}${values.country ? ` (${values.country})` : ''}`);
     req.flash('success', `${values.name} created. Coaches can now apply to join it.`);
   }
   return res.redirect('/admin/clubs');
@@ -68,8 +67,8 @@ router.post('/:id(\\d+)', (req, res) => {
   if (nameTaken(db, values.name, id)) errors.push('A club with this name already exists.');
   if (errors.length > 0) errors.forEach((error) => req.flash('error', error));
   else {
-    db.prepare('UPDATE clubs SET name = ?, city = ?, country = ? WHERE id = ?').run(values.name, values.city, values.country, id);
-    req.logActivity('club.updated', `Changed club ${club.name} (${club.city}${club.country ? `, ${club.country}` : ''}) to ${values.name} (${values.city}${values.country ? `, ${values.country}` : ''})`);
+    db.prepare('UPDATE clubs SET name = ?, country = ? WHERE id = ?').run(values.name, values.country, id);
+    req.logActivity('club.updated', `Changed club ${club.name}${club.country ? ` (${club.country})` : ''} to ${values.name}${values.country ? ` (${values.country})` : ''}`);
     req.flash('success', 'Club updated.');
   }
   return res.redirect('/admin/clubs');

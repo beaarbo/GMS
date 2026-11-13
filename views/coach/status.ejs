@@ -25,7 +25,7 @@
           <label for="club_id">Club</label>
           <select id="club_id" name="club_id" required>
             <option value="">Select</option>
-            <% clubs.forEach((club) => { %><option value="<%= club.id %>"><%= club.name %> (<%= club.city %>)</option><% }) %>
+            <% clubs.forEach((club) => { %><option value="<%= club.id %>"><%= club.name %><%= club.country ? ` (${club.country})` : '' %></option><% }) %>
           </select>
         </div>
         <button class="btn" type="submit">Apply to join</button>

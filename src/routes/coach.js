@@ -12,7 +12,7 @@ router.get('/', (req, res) => {
   const { db } = req.app.locals;
   return res.render('coach/status', {
     title: 'Join a club',
-    clubs: db.prepare('SELECT id, name, city FROM clubs ORDER BY name').all(),
+    clubs: db.prepare('SELECT id, name, country FROM clubs ORDER BY name').all(),
     application: db
       .prepare(
         `SELECT a.*, c.name AS club_name FROM club_applications a JOIN clubs c ON c.id = a.club_id

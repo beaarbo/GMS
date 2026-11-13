@@ -50,7 +50,7 @@ function render(req, res, status = 200, errors = {}, values = {}, extra = {}) {
     account: user,
     clubName: user.club_id ? db.prepare('SELECT name FROM clubs WHERE id = ?').get(user.club_id).name : null,
     pending,
-    clubs: db.prepare('SELECT id, name, city FROM clubs ORDER BY name').all(),
+    clubs: db.prepare('SELECT id, name, country FROM clubs ORDER BY name').all(),
     errors,
     values,
     emailChoices: kindsFor(user.role),
