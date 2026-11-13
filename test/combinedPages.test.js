@@ -72,7 +72,7 @@ test('one Review registrations page and one Bout list page cover kyorugi and poo
   assert.equal(made.headers.location, `/admin/competitions/${id}/bouts#poomsae`);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM poomsae_entries WHERE perform_order IS NOT NULL').get().n, 2);
   const withOrders = (await admin.get(`/admin/competitions/${id}/bouts`)).text;
-  assert.match(withOrders, /Publish performance lists/);
+  assert.match(withOrders, /Publish poomsae bout list/);
   // The performance orders show on the bout list too, after the kyorugi brackets.
   const orders = withOrders.slice(withOrders.indexOf('id="poomsae"'));
   assert.ok(withOrders.indexOf('Kyorugi bouts') < withOrders.indexOf('id="poomsae"'));
@@ -145,4 +145,45 @@ test('the Results page records kyorugi bouts and poomsae scores together', async
   const list = (await admin.get('/admin/competitions')).text;
   assert.equal((list.match(/>Results</g) || []).length, 1, 'one Results button');
   assert.doesNotMatch(list, /Poomsae scores/);
+});
+
+test('Divisions and Bout list show one event at a time, stay on it after saving, and print one club\'s cards', async () => {
+  const db = openDb(':memory:');
+  await ensureAdmin(db, 'admin@test.test', PASSWORD);
+  saveSettings(db, { require_document: '0' });
+  const clubId = createClub(db, { name: 'Tigers' });
+  createClub(db, { name: 'Empty Club' });
+  const id = createCompetition(db, { name: 'Both Cup', event_date: `${YEAR}-12-01`, registration_deadline: `${YEAR}-11-01`, venue: 'Hall', status: 'open', events: 'both', poomsae_format: 'score' });
+  const competition = db.prepare('SELECT * FROM competitions WHERE id = ?').get(id);
+  const ana = db.prepare('SELECT * FROM fighters WHERE id = ?').get(
+    db.prepare("INSERT INTO fighters (club_id, first_name, last_name, gender, date_of_birth, belt_rank) VALUES (?, 'Ana', 'X', 'F', ?, 3)").run(clubId, `${YEAR - 16}-03-01`).lastInsertRowid
+  );
+  assert.ok(enterPoomsae(db, competition, clubId, 'individual', [ana]).ok);
+  db.prepare("UPDATE poomsae_entries SET status = 'approved'").run();
+  db.prepare("UPDATE competitions SET status = 'closed' WHERE id = ?").run(id);
+
+  const app = createApp({ db, sessionSecret: 'test-secret', mailer: { configured: true, send: async () => {} } });
+  const admin = request.agent(app);
+  const loginCsrf = await csrfFrom(admin, '/login');
+  await admin.post('/login').type('form').send({ _csrf: loginCsrf, email: 'admin@test.test', password: PASSWORD });
+
+  const poomsaeBouts = (await admin.get(`/admin/competitions/${id}/bouts?event=poomsae`)).text;
+  assert.match(poomsaeBouts, /aria-current="page">Poomsae</);
+  assert.doesNotMatch(poomsaeBouts, /Kyorugi bouts/);
+  assert.match(poomsaeBouts, /Poomsae lists and brackets/);
+  assert.doesNotMatch((await admin.get(`/admin/competitions/${id}/bouts?event=kyorugi`)).text, /Poomsae lists and brackets/);
+  assert.doesNotMatch((await admin.get(`/admin/competitions/${id}/divisions?event=poomsae`)).text, /Kyorugi divisions/);
+
+  const csrf = await csrfFrom(admin, `/admin/competitions/${id}/bouts?event=poomsae`);
+  const made = await admin.post(`/admin/competitions/${id}/poomsae/order`).type('form').send({ _csrf: csrf, division: 'all', back: 'bouts', event: 'poomsae' });
+  assert.equal(made.headers.location, `/admin/competitions/${id}/bouts?event=poomsae#poomsae`);
+  const withList = (await admin.get(`/admin/competitions/${id}/bouts?event=poomsae`)).text;
+  assert.match(withList, /Publish poomsae bout list/);
+
+  // The card download lists only clubs with approved athletes, and prints one club's cards.
+  assert.match(withList, /All clubs<\/option>\s*<option value="\d+">Tigers<\/option>\s*<\/select>/);
+  const cards = await admin.get(`/admin/competitions/${id}/cards.pdf?club=${clubId}`);
+  assert.equal(cards.status, 200);
+  assert.match(cards.headers['content-disposition'], new RegExp(`club-${clubId}\.pdf`));
+  assert.match((await admin.get('/admin/competitions')).text, new RegExp(`href="/admin/competitions/${id}/cards.pdf">Athlete cards<`));
 });

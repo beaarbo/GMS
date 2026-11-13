@@ -4,8 +4,6 @@
 <% const showPoomsae = Boolean(poomsaeDivisions) && event !== 'kyorugi'; %>
 <% const poomsaeOpen = poomsaeDivisions ? poomsaeDivisions.filter((d) => d.approved > 0) : []; %>
 <% const poomsaeDone = poomsaeOpen.filter((d) => d.medalists.gold.length > 0).length; %>
-<% const tab = (value) => `/admin/competitions/${competition.id}/results${value ? `?event=${value}` : ''}`; %>
-<% const current = (on) => (on ? ' class="current-filter" aria-current="page"' : ''); %>
 <p class="breadcrumb"><% if (isAdmin) { %><a href="/admin/competitions/<%= competition.id %>/bouts">Bout list</a><% } else { %><a href="/official">Competition day</a><% } %></p>
 <div class="page-head">
   <div>
@@ -23,13 +21,7 @@
     <% if (hasKyorugi(competition)) { %><span>Kyorugi: <%= done %> of <%= total %> bouts recorded</span><% } %>
     <% if (poomsaeDivisions) { %><span>Poomsae: <%= poomsaeDone %> of <%= poomsaeOpen.length %> divisions decided</span><% } %>
   </p>
-  <% if (bothEvents) { %>
-    <p class="stats">
-      <a href="<%= tab(null) %>"<%- current(!event) %>>Both events</a>
-      <a href="<%= tab('kyorugi') %>"<%- current(event === 'kyorugi') %>>Kyorugi</a>
-      <a href="<%= tab('poomsae') %>"<%- current(event === 'poomsae') %>>Poomsae</a>
-    </p>
-  <% } %>
+  <% if (bothEvents) { %><%- include('../partials/event_tabs', { page: 'results' }) %><% } %>
 </nav>
 
 <%# Kyorugi first, then poomsae. Both are laid out the same way: one card per division with its medallists and bouts, then the event's medal standings. %>

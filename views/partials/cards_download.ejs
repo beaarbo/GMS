@@ -1,0 +1,9 @@
+<%# Athlete cards download: every approved athlete, or one club's. Admin pages only. Pass competition and cardClubs (clubs with approved athletes). %>
+<form method="get" action="/admin/competitions/<%= competition.id %>/cards.pdf" class="inline-form cards-download">
+  <label class="visually-hidden" for="cards-club">Athlete cards for</label>
+  <select id="cards-club" name="club">
+    <option value="">All clubs</option>
+    <% cardClubs.forEach((club) => { %><option value="<%= club.id %>"><%= club.name %></option><% }) %>
+  </select>
+  <button class="btn secondary" type="submit">Athlete cards (PDF)</button>
+</form>

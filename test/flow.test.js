@@ -2595,7 +2595,7 @@ test('published bout lists are public: kyorugi, and poomsae order and brackets a
   assert.equal((await visitor.get(`/competitions/${formsId}/poomsae`)).headers.location, `${publicPage}?event=poomsae`, 'old links still work');
 
   // Publish the first draw (the score round order) on its own.
-  assert.doesNotMatch((await admin.get(review.replace(/poomsae$/, 'bouts'))).text, /Publish brackets/);
+  assert.doesNotMatch((await admin.get(review.replace(/poomsae$/, 'bouts'))).text, /Publish poomsae brackets/);
   await post(admin, `${review}/publish`, { stage: 'lists' }, review);
   let text = (await visitor.get(publicPage)).text;
   assert.match(text, /Performance order, drawn at random/);
@@ -2611,7 +2611,7 @@ test('published bout lists are public: kyorugi, and poomsae order and brackets a
   // The admin page shows where each part runs: the list in the header, the bracket above it.
   assert.match((await admin.get(review.replace(/poomsae$/, 'bouts'))).text, /Poomsae court: <strong>1<\/strong>[\s\S]*?<h3>Bracket<\/h3>\s*<p class="stats">[\s\S]*?Poomsae court: <strong>2<\/strong>/);
   assert.doesNotMatch((await visitor.get(publicPage)).text, /<svg class="bracket"/);
-  assert.match((await admin.get(review.replace(/poomsae$/, 'bouts'))).text, /Publish brackets/);
+  assert.match((await admin.get(review.replace(/poomsae$/, 'bouts'))).text, /Publish poomsae brackets/);
   await post(admin, `${review}/publish`, { stage: 'brackets' }, review);
   text = (await visitor.get(publicPage)).text;
   assert.match(text, /<svg class="bracket"/);

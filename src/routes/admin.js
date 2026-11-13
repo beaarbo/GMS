@@ -69,7 +69,7 @@ const { notifyRegistrationDecisions, notifyBoutListPublished, notifyDivisionMerg
 const { layoutBracket, computeMedals } = require('../bracket');
 const { writeBoutListPdf } = require('../boutlistPdf');
 const { entriesSheets, sendXlsx } = require('../exports');
-const { cardAthletes, writeAthleteCards } = require('../athleteCards');
+const { cardAthletes, cardClubs, writeAthleteCards } = require('../athleteCards');
 const { clean, toArray, requireRole, requireOwner, notFound, wrap, passwordError, readSetup, readPoomsaeAges } = require('./helpers');
 const { resultsPath, poomsaeDrawSummary } = require('./competitionDay');
 const { createBackup, pruneBackups, listBackups } = require('../backups');
@@ -656,6 +656,7 @@ router.get('/competitions/:id(\\d+)/registrations', (req, res) => {
     title: 'Registrations',
     competition,
     poomsaeEntries: hasPoomsae(competition) ? listPoomsaeEntries(db, competition.id) : null,
+    cardClubs: cardClubs(db, competition.id),
     filters,
     query: new URLSearchParams(filters).toString(),
     registrations: db
@@ -810,6 +811,8 @@ router.get('/competitions/:id(\\d+)/divisions', (req, res) => {
   res.render('admin/divisions', {
     title: 'Divisions',
     competition: req.competition,
+    event: hasKyorugi(req.competition) && hasPoomsae(req.competition) && eventQuery(req.query.event) ? req.query.event : null,
+    bothEvents: hasKyorugi(req.competition) && hasPoomsae(req.competition),
     divisions: list,
     locked: hasBoutList(db, req.competition.id),
     // Poomsae divisions on the same page, each with its own format, cut and day.
@@ -824,7 +827,7 @@ router.post('/competitions/:id(\\d+)/divisions/merge', (req, res) => {
   const from = clean(req.body.from, 40);
   const to = clean(req.body.to, 40);
   const result = mergeDivision(db, req.competition, from, to);
-  const back = `/admin/competitions/${req.competition.id}/divisions`;
+  const back = `/admin/competitions/${req.competition.id}/divisions${eventQuery(req.body.event)}`;
   if (!result.ok) {
     req.flash('error', result.error);
     return res.redirect(back);
@@ -846,11 +849,15 @@ router.post('/competitions/:id(\\d+)/divisions/unmerge', (req, res) => {
     req.logActivity('registration.unmerged', `Moved ${name} back to ${titleOf(result.key)}`, req.competition.id);
     req.flash('success', `${name} is back in ${titleOf(result.key)}.`);
   }
-  return res.redirect(`/admin/competitions/${req.competition.id}/divisions`);
+  return res.redirect(`/admin/competitions/${req.competition.id}/divisions${eventQuery(req.body.event)}`);
 });
 
-function boutListPath(competition) {
-  return `/admin/competitions/${competition.id}/bouts`;
+// ?event=kyorugi or poomsae shows one event on the Divisions, Bout list and
+// Results pages; forms send it back so saving stays on the same tab.
+const eventQuery = (event) => (['kyorugi', 'poomsae'].includes(event) ? `?event=${event}` : '');
+
+function boutListPath(competition, event) {
+  return `/admin/competitions/${competition.id}/bouts${eventQuery(event)}`;
 }
 
 // Missing fields keep the competition's saved values.
@@ -900,7 +907,10 @@ router.get('/competitions/:id(\\d+)/bouts', (req, res) => {
   res.render('admin/bouts', {
     title: 'Bout list',
     competition: req.competition,
+    event: hasKyorugi(req.competition) && hasPoomsae(req.competition) && eventQuery(req.query.event) ? req.query.event : null,
+    bothEvents: hasKyorugi(req.competition) && hasPoomsae(req.competition),
     poomsae: hasPoomsae(req.competition) ? poomsaeDrawSummary(db, req.competition) : null,
+    cardClubs: cardClubs(db, req.competition.id),
     divisions,
     dayCount: eventDates.length,
     dayOptions: eventDates.map((date, i) => ({ value: i + 1, label: `Day ${i + 1} (${formatDay(date)})` })),
@@ -920,13 +930,13 @@ router.post('/competitions/:id(\\d+)/bouts/generate', (req, res) => {
   const { db } = req.app.locals;
   if (req.competition.status !== 'closed') {
     req.flash('error', 'Close registration before generating the bout list.');
-    return res.redirect(boutListPath(req.competition));
+    return res.redirect(boutListPath(req.competition, req.body.event));
   }
   if (hasResults(db, req.competition.id)) {
     req.flash('error', 'Clear the recorded results before redrawing.');
-    return res.redirect(boutListPath(req.competition));
+    return res.redirect(boutListPath(req.competition, req.body.event));
   }
-  if (!saveSchedule(req, res)) return res.redirect(boutListPath(req.competition));
+  if (!saveSchedule(req, res)) return res.redirect(boutListPath(req.competition, req.body.event));
   const redraw = hasBoutList(db, req.competition.id);
   const fighters = generateBoutList(db, req.competition.id);
   // A new draw needs a fresh look before coaches see it.
@@ -940,27 +950,27 @@ router.post('/competitions/:id(\\d+)/bouts/generate', (req, res) => {
   }
   if (fighters === 0) req.flash('error', 'There are no approved athletes to draw.');
   else req.flash('success', `Bout list generated for ${fighters} approved athlete${fighters === 1 ? '' : 's'}. Publish it when you're ready for coaches to see it.`);
-  return res.redirect(boutListPath(req.competition));
+  return res.redirect(boutListPath(req.competition, req.body.event));
 });
 
 router.post('/competitions/:id(\\d+)/bouts/publish', (req, res) => {
   const { db, notify } = req.app.locals;
   if (!hasBoutList(db, req.competition.id)) {
     req.flash('error', 'Generate the bout list first.');
-    return res.redirect(boutListPath(req.competition));
+    return res.redirect(boutListPath(req.competition, req.body.event));
   }
   db.prepare("UPDATE competitions SET bouts_published_at = datetime('now') WHERE id = ?").run(req.competition.id);
   notifyBoutListPublished(notify, req.competition);
   req.logActivity('bouts.published', `Published the bout list for ${req.competition.name}`, req.competition.id);
-  req.flash('success', 'Bout list published for everyone to see. Coaches with athletes in it have been emailed.');
-  return res.redirect(boutListPath(req.competition));
+  req.flash('success', 'Kyorugi bout list published for everyone to see. Coaches with athletes in it have been emailed.');
+  return res.redirect(boutListPath(req.competition, req.body.event));
 });
 
 router.post('/competitions/:id(\\d+)/bouts/unpublish', (req, res) => {
   req.app.locals.db.prepare('UPDATE competitions SET bouts_published_at = NULL WHERE id = ?').run(req.competition.id);
   req.logActivity('bouts.unpublished', `Hid the bout list for ${req.competition.name} from coaches`, req.competition.id);
-  req.flash('success', 'Bout list hidden.');
-  return res.redirect(boutListPath(req.competition));
+  req.flash('success', 'Kyorugi bout list hidden.');
+  return res.redirect(boutListPath(req.competition, req.body.event));
 });
 
 router.post('/competitions/:id(\\d+)/results/clear-all', (req, res) => {
@@ -983,7 +993,7 @@ function divisionTitle(db, competitionId, key) {
   return division ? division.title : 'a division';
 }
 
-const divisionAnchor = (competition, key) => `${boutListPath(competition)}#division-${key}`;
+const divisionAnchor = (competition, key, event) => `${boutListPath(competition, event)}#division-${key}`;
 
 router.post('/competitions/:id(\\d+)/bouts/swap', (req, res) => {
   const { db } = req.app.locals;
@@ -995,7 +1005,7 @@ router.post('/competitions/:id(\\d+)/bouts/swap', (req, res) => {
     req.logActivity('bouts.swapped', `Swapped ${athleteName(db, req.body.first)} and ${athleteName(db, req.body.second)} in ${title}`, req.competition.id);
     req.flash('success', 'Athletes swapped. Bout times were updated.');
   }
-  return res.redirect(divisionAnchor(req.competition, key));
+  return res.redirect(divisionAnchor(req.competition, key, req.body.event));
 });
 
 router.post('/competitions/:id(\\d+)/bouts/withdraw', (req, res) => {
@@ -1012,7 +1022,7 @@ router.post('/competitions/:id(\\d+)/bouts/withdraw', (req, res) => {
       ? `${name} withdrawn. They had a bye, so the division was laid out again in seed order.`
       : `${name} withdrawn. Their first opponent now has a bye.`);
   }
-  return res.redirect(divisionAnchor(req.competition, key));
+  return res.redirect(divisionAnchor(req.competition, key, req.body.event));
 });
 
 router.post('/competitions/:id(\\d+)/bouts/reinstate', (req, res) => {
@@ -1021,12 +1031,12 @@ router.post('/competitions/:id(\\d+)/bouts/reinstate', (req, res) => {
   const result = reinstateAthlete(db, req.competition, req.body.registration);
   if (!result.ok) {
     req.flash('error', result.error);
-    return res.redirect(boutListPath(req.competition));
+    return res.redirect(boutListPath(req.competition, req.body.event));
   }
   const title = divisionTitle(db, req.competition.id, result.key);
   req.logActivity('bouts.reinstated', `Reinstated ${name} and redrew ${title} (${result.athletes} athletes)`, req.competition.id);
   req.flash('success', `${name} reinstated, and ${title} was redrawn to include them.`);
-  return res.redirect(divisionAnchor(req.competition, result.key));
+  return res.redirect(divisionAnchor(req.competition, result.key, req.body.event));
 });
 
 router.post('/competitions/:id(\\d+)/bouts/redraw-division', (req, res) => {
@@ -1039,7 +1049,7 @@ router.post('/competitions/:id(\\d+)/bouts/redraw-division', (req, res) => {
     req.logActivity('bouts.division_redrawn', `Redrew ${title} (${result.athletes} athletes)`, req.competition.id);
     req.flash('success', `Division redrawn with ${result.athletes} athlete${result.athletes === 1 ? '' : 's'}. Bout times were updated.`);
   }
-  return res.redirect(divisionAnchor(req.competition, key));
+  return res.redirect(divisionAnchor(req.competition, key, req.body.event));
 });
 
 // Changes courts and times only. The draw stays the same.
@@ -1056,7 +1066,7 @@ router.post('/competitions/:id(\\d+)/bouts/schedule', (req, res) => {
     );
     req.flash('success', 'Schedule updated. The draw has not changed.');
   }
-  return res.redirect(boutListPath(req.competition));
+  return res.redirect(boutListPath(req.competition, req.body.event));
 });
 
 // Pins divisions to event days, then reschedules. The draw stays the same.
@@ -1064,7 +1074,7 @@ router.post('/competitions/:id(\\d+)/bouts/days', (req, res) => {
   const { db } = req.app.locals;
   if (!hasBoutList(db, req.competition.id)) {
     req.flash('error', 'Generate the bout list first.');
-    return res.redirect(boutListPath(req.competition));
+    return res.redirect(boutListPath(req.competition, req.body.event));
   }
   const choices = Object.fromEntries(
     Object.entries(req.body)
@@ -1079,27 +1089,27 @@ router.post('/competitions/:id(\\d+)/bouts/days', (req, res) => {
     req.competition.id
   );
   req.flash('success', 'Division days saved and the schedule updated. The draw has not changed.');
-  return res.redirect(boutListPath(req.competition));
+  return res.redirect(boutListPath(req.competition, req.body.event));
 });
 
 router.post('/competitions/:id(\\d+)/bouts/delete', (req, res) => {
   const { db } = req.app.locals;
   if (hasResults(db, req.competition.id)) {
     req.flash('error', 'Clear the recorded results before deleting the bout list.');
-    return res.redirect(boutListPath(req.competition));
+    return res.redirect(boutListPath(req.competition, req.body.event));
   }
   deleteBoutList(db, req.competition.id);
   db.prepare('UPDATE competitions SET bouts_published_at = NULL WHERE id = ?').run(req.competition.id);
   req.logActivity('bouts.deleted', `Deleted the bout list for ${req.competition.name}`, req.competition.id);
   req.flash('success', 'Bout list deleted. You can change approvals or reopen registration.');
-  return res.redirect(boutListPath(req.competition));
+  return res.redirect(boutListPath(req.competition, req.body.event));
 });
 
 router.get('/competitions/:id(\\d+)/bouts.pdf', (req, res) => {
   const divisions = loadBoutList(req.app.locals.db, req.competition.id);
   if (divisions.length === 0) {
     req.flash('error', 'Generate the bout list first.');
-    return res.redirect(boutListPath(req.competition));
+    return res.redirect(boutListPath(req.competition, req.body.event));
   }
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="bout-list-competition-${req.competition.id}.pdf"`);

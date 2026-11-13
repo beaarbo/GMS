@@ -1,0 +1,8 @@
+<%# Both events / Kyorugi / Poomsae, on the admin Divisions, Bout list and Results pages. Pass competition, page ('divisions', 'bouts' or 'results') and event (null for both). Plain links, so they work without JavaScript. %>
+<% const tabHref = (value) => `/admin/competitions/${competition.id}/${page}${value ? `?event=${value}` : ''}`; %>
+<% const tabCurrent = (on) => (on ? ' class="current-filter" aria-current="page"' : ''); %>
+<p class="stats">
+  <a href="<%= tabHref(null) %>"<%- tabCurrent(!event) %>>Both events</a>
+  <a href="<%= tabHref('kyorugi') %>"<%- tabCurrent(event === 'kyorugi') %>>Kyorugi</a>
+  <a href="<%= tabHref('poomsae') %>"<%- tabCurrent(event === 'poomsae') %>>Poomsae</a>
+</p>

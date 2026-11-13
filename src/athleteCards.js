@@ -38,6 +38,16 @@ function cardAthletes(db, competition, { clubId = null } = {}) {
   return [...athletes.values()].sort((a, b) => a.club.localeCompare(b.club) || a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName));
 }
 
+// Clubs with at least one approved athlete, in either event: the choices for printing one club's cards.
+function cardClubs(db, competitionId) {
+  return db.prepare(
+    `SELECT c.id, c.name FROM clubs c
+     WHERE c.id IN (SELECT club_id FROM registrations WHERE competition_id = ? AND status = 'approved' AND withdrawn_at IS NULL)
+        OR c.id IN (SELECT club_id FROM poomsae_entries WHERE competition_id = ? AND status = 'approved')
+     ORDER BY c.name`
+  ).all(competitionId, competitionId);
+}
+
 // The officials' page a card's code opens.
 function cardUrl(publicUrl, competitionId, fighterId) {
   return `${publicUrl}/admin/competitions/${competitionId}/athletes/${fighterId}`;
@@ -141,4 +151,4 @@ function writeAthleteCards(stream, { competition, athletes, publicUrl, photoFor 
   doc.end();
 }
 
-module.exports = { cardAthletes, cardUrl, writeAthleteCards };
+module.exports = { cardAthletes, cardClubs, cardUrl, writeAthleteCards };

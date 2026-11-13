@@ -14,8 +14,10 @@
   </div>
 </div>
 
+<% if (bothEvents) { %><nav class="card programme-nav" aria-label="Divisions by event"><%- include('../partials/event_tabs', { page: 'divisions' }) %></nav><% } %>
+
 <%# Kyorugi first, then poomsae, laid out the same way: one card per division with its approved athletes and a way to change it. %>
-<% if (kyorugi) { %>
+<% if (kyorugi && event !== 'poomsae') { %>
 <section id="kyorugi">
   <div class="division-head">
     <h2 class="event-heading"><%= poomsae ? 'Kyorugi divisions' : 'Divisions' %></h2>
@@ -53,6 +55,7 @@
                 <% if (!locked) { %>
                   <form class="inline-form" method="post" action="/admin/competitions/<%= competition.id %>/divisions/unmerge">
                     <input type="hidden" name="_csrf" value="<%= csrf %>">
+<input type="hidden" name="event" value="<%= event || '' %>">
                     <input type="hidden" name="registration" value="<%= r.id %>">
                     <button class="btn secondary small" type="submit">Undo move</button>
                   </form>
@@ -69,6 +72,7 @@
             <summary>Change this division</summary>
             <form class="division-edit-row" method="post" action="/admin/competitions/<%= competition.id %>/divisions/merge" data-confirm="Move everyone in this division? Their coach will be emailed.">
               <input type="hidden" name="_csrf" value="<%= csrf %>">
+<input type="hidden" name="event" value="<%= event || '' %>">
               <input type="hidden" name="from" value="<%= d.key %>">
               <label>Move to
                 <select name="to" required>
@@ -87,7 +91,7 @@
 </section>
 <% } %>
 
-<% if (poomsae) { %>
+<% if (poomsae && event !== 'kyorugi') { %>
 <section id="poomsae">
   <div class="division-head">
     <h2 class="event-heading"><%= kyorugi ? 'Poomsae divisions' : 'Divisions' %></h2>
@@ -125,6 +129,7 @@
         <summary>Change this division</summary>
         <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/division" class="division-edit-row">
           <input type="hidden" name="_csrf" value="<%= csrf %>">
+<input type="hidden" name="event" value="<%= event || '' %>">
           <input type="hidden" name="back" value="divisions">
           <input type="hidden" name="division" value="<%= d.key %>">
           <label>Format

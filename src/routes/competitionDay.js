@@ -477,7 +477,8 @@ const poomsaePath = (competition, entryId = null, divisionKey = null) =>
 // anchor, when given, else the poomsae section).
 function sharedPageReturn(req, anchor = 'poomsae') {
   if (req.body.back === 'results') return `${resultsPath(req.competition, null, null, req.body.event)}#${anchor}`;
-  return ['registrations', 'bouts', 'divisions'].includes(req.body.back) ? `/admin/competitions/${req.competition.id}/${req.body.back}#${anchor}` : null;
+  const tab = ['kyorugi', 'poomsae'].includes(req.body.event) ? `?event=${req.body.event}` : '';
+  return ['registrations', 'bouts', 'divisions'].includes(req.body.back) ? `/admin/competitions/${req.competition.id}/${req.body.back}${tab}#${anchor}` : null;
 }
 
 // What the shared Bout list page needs about poomsae: its divisions and what's ready.
@@ -600,8 +601,9 @@ router.post('/competitions/:id(\\d+)/poomsae/clear-order', requireRole('admin'),
 // brackets that follow the score rounds. Published pages are public, like the
 // kyorugi bout list. Brackets drawn after their stage is published show at once.
 const STAGES = {
-  lists: { column: 'poomsae_published_at', kind: 'list', what: 'performance order' },
-  brackets: { column: 'poomsae_brackets_published_at', kind: 'bracket', what: 'brackets' },
+  // what: as the emails name it; label: as the buttons do ("Publish poomsae bout list").
+  lists: { column: 'poomsae_published_at', kind: 'list', what: 'performance order', label: 'bout list' },
+  brackets: { column: 'poomsae_brackets_published_at', kind: 'bracket', what: 'brackets', label: 'brackets' },
 };
 
 router.post('/competitions/:id(\\d+)/poomsae/publish', requireRole('admin'), (req, res) => {
@@ -615,7 +617,7 @@ router.post('/competitions/:id(\\d+)/poomsae/publish', requireRole('admin'), (re
   db.prepare(`UPDATE competitions SET ${stage.column} = datetime('now') WHERE id = ?`).run(req.competition.id);
   notifyPoomsaePublished(notify, req.competition, stage.what);
   req.logActivity('poomsae.published', `Published the poomsae ${stage.what} for ${req.competition.name}`, req.competition.id);
-  req.flash('success', `Poomsae ${stage.what} published for everyone to see. Coaches with entries have been emailed.`);
+  req.flash('success', `Poomsae ${stage.label} published for everyone to see. Coaches with entries have been emailed.`);
   return res.redirect(sharedPageReturn(req) || poomsaePath(req.competition));
 });
 
@@ -624,7 +626,7 @@ router.post('/competitions/:id(\\d+)/poomsae/unpublish', requireRole('admin'), (
   if (!stage) return notFound(res);
   req.app.locals.db.prepare(`UPDATE competitions SET ${stage.column} = NULL WHERE id = ?`).run(req.competition.id);
   req.logActivity('poomsae.unpublished', `Hid the poomsae ${stage.what} for ${req.competition.name}`, req.competition.id);
-  req.flash('success', `Poomsae ${stage.what} hidden.`);
+  req.flash('success', `Poomsae ${stage.label} hidden.`);
   return res.redirect(sharedPageReturn(req) || poomsaePath(req.competition));
 });
 

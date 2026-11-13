@@ -4,20 +4,21 @@
 <% const closed = competition.status === 'closed'; %>
 <%# "1 (Fri 8 Jan)", as on the kyorugi cards. %>
 <% const dayLabel = (day) => { const found = dayOptions.find((o) => o.value === day); return found ? found.label.replace(/^Day /, '') : day || '–'; }; %>
-<% const back = '<input type="hidden" name="back" value="bouts">'; %>
+<%# event is checked by the route: kyorugi, poomsae or empty. %>
+<% const back = `<input type="hidden" name="back" value="bouts"><input type="hidden" name="event" value="${event || ''}">`; %>
 <section id="poomsae">
   <div class="division-head">
     <h2 class="event-heading">Poomsae lists and brackets</h2>
     <div class="actions">
-      <% [['lists', 'performance lists', 'Lists', lists > 0, competition.poomsae_published_at], ['brackets', 'brackets', 'Brackets', brackets > 0, competition.poomsae_brackets_published_at]].forEach(([stage, label, badge, isReady, published]) => { %>
+      <% [['lists', 'poomsae bout list', lists > 0, competition.poomsae_published_at], ['brackets', 'poomsae brackets', brackets > 0, competition.poomsae_brackets_published_at]].forEach(([stage, label, isReady, published]) => { %>
         <% if (published) { %>
-          <span class="badge approved"><%= badge %> published</span>
+          <span class="badge approved"><%= label[0].toUpperCase() + label.slice(1) %> published</span>
           <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/unpublish">
             <input type="hidden" name="_csrf" value="<%= csrf %>"><%- back %>
             <button class="btn secondary small" name="stage" value="<%= stage %>" type="submit">Hide <%= label %></button>
           </form>
         <% } else if (isReady) { %>
-          <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/publish" data-confirm="Publish the poomsae <%= label %>? Everyone can see them, and coaches with entries will be emailed.">
+          <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/publish" data-confirm="Publish the <%= label %>? Everyone can see it, and coaches with entries will be emailed.">
             <input type="hidden" name="_csrf" value="<%= csrf %>"><%- back %>
             <button class="btn approve small" name="stage" value="<%= stage %>" type="submit">Publish <%= label %></button>
           </form>

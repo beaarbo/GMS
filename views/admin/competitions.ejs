@@ -47,6 +47,7 @@
       <a class="btn small" href="/admin/competitions/<%= c.id %>/registrations">Review registrations</a>
       <% if (c.status === 'closed') { %><a class="btn small" href="/admin/competitions/<%= c.id %>/bouts">Bout list</a><a class="btn small" href="/admin/competitions/<%= c.id %>/results">Results</a><% } %>
       <a class="btn secondary small" href="/admin/competitions/<%= c.id %>/divisions">Divisions</a>
+      <% if ((c.approved || 0) + (c.poomsae_approved || 0) > 0) { %><a class="btn secondary small" href="/admin/competitions/<%= c.id %>/cards.pdf">Athlete cards</a><% } %>
       <% if (hasKyorugi(c) && c.status === 'closed') { %><a class="btn secondary small" href="/admin/competitions/<%= c.id %>/weigh-in">Weigh-in</a><% } %>
       <a class="btn secondary small" href="/admin/competitions/<%= c.id %>/setup">Division setup</a>
       <a class="btn secondary small" href="/admin/competitions/<%= c.id %>/edit">Edit</a>

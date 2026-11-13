@@ -11,7 +11,7 @@
       <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/export.csv">Export approved (CSV)</a>
     <% } %>
     <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/entries.xlsx">All entries (Excel)</a>
-    <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/cards.pdf">Athlete cards (PDF)</a>
+    <%- include('../partials/cards_download') %>
   </div>
 </div>
 
