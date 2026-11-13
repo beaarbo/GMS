@@ -161,3 +161,47 @@ test('a competition needs a logo and description to open, and shows its files', 
   const actions = db.prepare("SELECT action FROM activity_log WHERE action LIKE 'competition.%' ORDER BY id").all().map((r) => r.action);
   assert.deepEqual(actions, ['competition.created', 'competition.logo', 'competition.file_added', 'competition.file_added', 'competition.status', 'competition.file_removed']);
 });
+
+test('a competition shows up to ten photos, added on creation or from Logo and files', async () => {
+  const db = openDb(':memory:');
+  await ensureAdmin(db, 'admin@test.test', PASSWORD);
+  const app = createApp({ db, sessionSecret: 'test-secret', publicUrl: 'https://gms.test' });
+  const admin = request.agent(app);
+  const loginCsrf = await csrfFrom(admin, '/login');
+  await admin.post('/login').type('form').send({ _csrf: loginCsrf, email: 'admin@test.test', password: PASSWORD });
+
+  const _csrf = await csrfFrom(admin, '/admin/competitions/new');
+  const created = await admin.post('/admin/competitions')
+    .field('_csrf', _csrf).field('name', 'Photo Cup').field('venue', 'Arena').field('description', 'Open.')
+    .field('event_dates', `${YEAR}-05-02`).field('registration_deadline', `${YEAR}-04-01`).field('registration_deadline_time', '17:00').field('age_basis', 'year')
+    .attach('logo', PNG, 'logo.png').attach('photos', PNG, 'a.png').attach('photos', PNG, 'b.png');
+  assert.equal(created.status, 302);
+  const id = db.prepare('SELECT id FROM competitions').get().id;
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM competition_photos').get().n, 2);
+
+  const add = async (count, file = PNG, name = 'p.png') => {
+    const token = await csrfFrom(admin, `/admin/competitions/${id}/files`);
+    let req = admin.post(`/admin/competitions/${id}/photos`).field('_csrf', token);
+    for (let i = 0; i < count; i += 1) req = req.attach('photos', file, name);
+    return req;
+  };
+  assert.equal((await add(1, Buffer.from('MZ not a picture'), 'x.exe')).status, 400);
+  assert.equal((await add(8)).status, 302);
+  const full = await add(1);
+  assert.equal(full.status, 400);
+  assert.match(full.text, /can have 10 photos/);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM competition_photos').get().n, 10);
+
+  // A draft's photos are the admin's alone; once published, anyone sees the gallery.
+  const photoId = db.prepare('SELECT id FROM competition_photos ORDER BY id').get().id;
+  assert.equal((await request(app).get(`/competitions/${id}/photos/${photoId}`)).status, 404);
+  db.prepare("UPDATE competitions SET status = 'open' WHERE id = ?").run(id);
+  const page = (await request(app).get(`/competitions/${id}`)).text;
+  assert.equal((page.match(/class="photo-grid"[\s\S]*?<\/div>/)[0].match(/<img /g) || []).length, 10);
+  assert.equal((await request(app).get(`/competitions/${id}/photos/${photoId}`)).status, 200);
+
+  const removeCsrf = await csrfFrom(admin, `/admin/competitions/${id}/files`);
+  const remove = await admin.post(`/admin/competitions/${id}/photos/${photoId}/delete`).type('form').send({ _csrf: removeCsrf });
+  assert.equal(remove.status, 302);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM competition_photos').get().n, 9);
+});

@@ -457,6 +457,12 @@ tbody tr.result-row-done:hover td { background: var(--ok-soft); }
 .past-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .past-text .sub { margin: 0; }
 
+/* A competition's photos: square tiles that open full size. */
+.photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--space-3); margin-bottom: var(--space-4); }
+.photo-grid img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface-2); }
+.photo-grid a:hover img { border-color: var(--line-hover); }
+.photo-tile { display: flex; flex-direction: column; gap: var(--space-2); }
+
 /* Log in and Sign up, side by side at the top of both forms. */
 .auth-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-1); padding: var(--space-1); margin-bottom: var(--space-5); background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); }
 .auth-tabs a { display: flex; align-items: center; justify-content: center; min-height: var(--control-height-sm); border-radius: var(--radius-sm); color: var(--ink-2); font-weight: 600; text-decoration: none; }

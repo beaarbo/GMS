@@ -34,6 +34,9 @@ const {
   recordWeighIn,
   saveCompetitionLogo,
   hasCompetitionLogo,
+  listCompetitionPhotos,
+  addCompetitionPhoto,
+  deleteCompetitionPhoto,
   listCompetitionFiles,
   getCompetitionFile,
   addCompetitionFile,
@@ -59,7 +62,7 @@ const {
   REGISTRATION_SELECT,
   DIVISION_ORDER,
 } = require('../services');
-const { sendDocument, detectIconType, detectAttachmentType, safeFilename, MAX_ICON_BYTES, MAX_NEW_COMPETITION_FILES } = require('../documents');
+const { sendDocument, detectIconType, detectAttachmentType, safeFilename, MAX_ICON_BYTES, MAX_NEW_COMPETITION_FILES, MAX_COMPETITION_PHOTOS, MAX_COMPETITION_PHOTO_BYTES } = require('../documents');
 const { ACTIVITY_CATEGORIES, listActivity, countActivity, formatActivityTime } = require('../activity');
 const { notifyRegistrationDecisions, notifyBoutListPublished, notifyDivisionMerged, notifyAccountChange, sendAdminInvite } = require('../notifications');
 const { layoutBracket, computeMedals } = require('../bracket');
@@ -254,7 +257,24 @@ function readNewCompetitionFiles(req) {
     const filename = safeFilename(file.originalname, type.extension);
     attachments.push({ title: filename.replace(/\.[^.]*$/, ''), filename, contentType: type.contentType, data: file.buffer });
   });
-  return { logo, attachments, errors, anyChosen: Boolean(logoFile) || chosen('files').length > 0 };
+  const photos = readPhotos(chosen('photos'), errors, MAX_COMPETITION_PHOTOS);
+  return { logo, attachments, photos, errors, anyChosen: Boolean(logoFile) || chosen('files').length > 0 || chosen('photos').length > 0 };
+}
+
+// Checks chosen photos (JPG, PNG or WebP, up to 5 MB each), adding a message to
+// errors for each problem. room = how many more the competition can take.
+function readPhotos(files, errors, room) {
+  if (files.length > room) {
+    errors.push(room === 0 ? `A competition can have ${MAX_COMPETITION_PHOTOS} photos. Remove one to add another.` : `Only ${room} more photo${room === 1 ? '' : 's'} can be added (a competition can have ${MAX_COMPETITION_PHOTOS}).`);
+    return [];
+  }
+  return files.flatMap((file) => {
+    const type = detectIconType(file.buffer);
+    if (file.size > MAX_COMPETITION_PHOTO_BYTES) errors.push(`${file.originalname} is over the 5 MB limit.`);
+    else if (!type) errors.push(`${file.originalname} is not a JPG, PNG or WebP picture.`);
+    else return [{ data: file.buffer, contentType: type.contentType }];
+    return [];
+  });
 }
 
 router.post('/competitions', (req, res) => {
@@ -277,13 +297,15 @@ router.post('/competitions', (req, res) => {
     const newId = createCompetition(db, values);
     if (uploads.logo) saveCompetitionLogo(db, newId, uploads.logo);
     uploads.attachments.forEach((file) => addCompetitionFile(db, newId, { ...file, userId: req.user.id }));
+    uploads.photos.forEach((photo) => addCompetitionPhoto(db, newId, { ...photo, userId: req.user.id }));
     return newId;
   })();
   req.logActivity('competition.created', `Created competition ${values.name}`, id);
   if (uploads.logo) req.logActivity('competition.logo', `Updated the logo for ${values.name}`, id);
   uploads.attachments.forEach((file) => req.logActivity('competition.file_added', `Attached ${file.title} to ${values.name}`, id));
+  if (uploads.photos.length > 0) req.logActivity('competition.photos', `Added ${uploads.photos.length} photo${uploads.photos.length === 1 ? '' : 's'} to ${values.name}`, id);
 
-  const added = [uploads.logo && 'the logo', uploads.attachments.length > 0 && `${uploads.attachments.length} file${uploads.attachments.length === 1 ? '' : 's'}`].filter(Boolean);
+  const added = [uploads.logo && 'the logo', uploads.attachments.length > 0 && `${uploads.attachments.length} file${uploads.attachments.length === 1 ? '' : 's'}`, uploads.photos.length > 0 && `${uploads.photos.length} photo${uploads.photos.length === 1 ? '' : 's'}`].filter(Boolean);
   req.flash(
     'success',
     `Competition created as a draft${added.length > 0 ? ` with ${added.join(' and ')}` : ''}. ${uploads.logo ? 'Check the files and divisions' : 'Upload its logo, check the divisions'}, then publish it.`
@@ -412,6 +434,7 @@ function filesPage(req, res, status = 200, error = null) {
     competition: req.competition,
     hasLogo: hasCompetitionLogo(db, req.competition.id),
     files: listCompetitionFiles(db, req.competition.id),
+    photos: listCompetitionPhotos(db, req.competition.id),
     error,
   });
 }
@@ -442,6 +465,28 @@ router.post('/competitions/:id(\\d+)/files', (req, res) => {
   req.logActivity('competition.file_added', `Attached ${title} to ${req.competition.name}`, req.competition.id);
   req.flash('success', `${title} attached.`);
   return res.redirect(filesPath(req.competition));
+});
+
+router.post('/competitions/:id(\\d+)/photos', (req, res) => {
+  const { db } = req.app.locals;
+  if (req.uploadError) return filesPage(req, res, 400, req.uploadError);
+  const chosen = (req.files || []).filter((f) => f.size > 0);
+  if (chosen.length === 0) return filesPage(req, res, 400, 'Choose one or more photos to add.');
+  const errors = [];
+  const photos = readPhotos(chosen, errors, MAX_COMPETITION_PHOTOS - listCompetitionPhotos(db, req.competition.id).length);
+  if (errors.length > 0) return filesPage(req, res, 400, `${errors.join(' ')} Nothing was added.`);
+  db.transaction(() => photos.forEach((photo) => addCompetitionPhoto(db, req.competition.id, { ...photo, userId: req.user.id })))();
+  req.logActivity('competition.photos', `Added ${photos.length} photo${photos.length === 1 ? '' : 's'} to ${req.competition.name}`, req.competition.id);
+  req.flash('success', `${photos.length} photo${photos.length === 1 ? '' : 's'} added.`);
+  return res.redirect(`${filesPath(req.competition)}#photos`);
+});
+
+router.post('/competitions/:id(\\d+)/photos/:photoId(\\d+)/delete', (req, res) => {
+  if (deleteCompetitionPhoto(req.app.locals.db, req.competition.id, Number(req.params.photoId))) {
+    req.logActivity('competition.photo_removed', `Removed a photo from ${req.competition.name}`, req.competition.id);
+    req.flash('success', 'Photo removed.');
+  }
+  return res.redirect(`${filesPath(req.competition)}#photos`);
 });
 
 router.post('/competitions/:id(\\d+)/files/:fileId(\\d+)/delete', (req, res) => {

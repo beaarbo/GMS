@@ -44,6 +44,18 @@
   </section>
 <% } %>
 
+<% if (photos.length > 0) { %>
+  <section class="card">
+    <h2>Photos</h2>
+    <%# Each opens full size; photo ids never change, so the links can be cached. %>
+    <div class="photo-grid">
+      <% photos.forEach((photo, i) => { const src = `/competitions/${competition.id}/photos/${photo.id}`; %>
+        <a href="<%= src %>" target="_blank" rel="noopener"><img src="<%= src %>" alt="<%= competition.name %>, photo <%= i + 1 %> of <%= photos.length %>" loading="lazy"></a>
+      <% }) %>
+    </div>
+  </section>
+<% } %>
+
 <% if (competition.map_query) { %>
   <section class="card">
     <h2>Location</h2>

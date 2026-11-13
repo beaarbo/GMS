@@ -243,6 +243,17 @@ CREATE TABLE IF NOT EXISTS competition_logos (
 
 -- Files the admin attaches to a competition (prospectus, rules, forms). Anyone who
 -- can see the competition can download them. Never SELECT data in lists.
+-- Pictures shown on a competition's page, up to MAX_COMPETITION_PHOTOS each.
+-- They follow the competition's visibility, like its logo and files.
+CREATE TABLE IF NOT EXISTS competition_photos (
+  id INTEGER PRIMARY KEY,
+  competition_id INTEGER NOT NULL REFERENCES competitions(id) ON DELETE CASCADE,
+  content_type TEXT NOT NULL,
+  data BLOB NOT NULL,
+  uploaded_by INTEGER,
+  uploaded_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS competition_files (
   id INTEGER PRIMARY KEY,
   competition_id INTEGER NOT NULL REFERENCES competitions(id) ON DELETE CASCADE,

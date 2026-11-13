@@ -257,6 +257,22 @@ function competitionLogoVersions(db) {
   return new Map(db.prepare('SELECT competition_id, uploaded_at FROM competition_logos').all().map((r) => [r.competition_id, r.uploaded_at]));
 }
 
+function listCompetitionPhotos(db, competitionId) {
+  return db.prepare('SELECT id, uploaded_at FROM competition_photos WHERE competition_id = ? ORDER BY id').all(competitionId);
+}
+
+function getCompetitionPhoto(db, competitionId, photoId) {
+  return db.prepare('SELECT id, content_type, data FROM competition_photos WHERE competition_id = ? AND id = ?').get(competitionId, photoId) || null;
+}
+
+function addCompetitionPhoto(db, competitionId, { data, contentType, userId = null }) {
+  db.prepare('INSERT INTO competition_photos (competition_id, content_type, data, uploaded_by) VALUES (?, ?, ?, ?)').run(competitionId, contentType, data, userId);
+}
+
+function deleteCompetitionPhoto(db, competitionId, photoId) {
+  return db.prepare('DELETE FROM competition_photos WHERE competition_id = ? AND id = ?').run(competitionId, photoId).changes > 0;
+}
+
 function listCompetitionFiles(db, competitionId) {
   return db
     .prepare('SELECT id, competition_id, title, filename, content_type, size, uploaded_at FROM competition_files WHERE competition_id = ? ORDER BY id')
@@ -1976,6 +1992,10 @@ function cleanUpDocuments(db, days) {
 }
 
 module.exports = {
+  listCompetitionPhotos,
+  getCompetitionPhoto,
+  addCompetitionPhoto,
+  deleteCompetitionPhoto,
   createSubAdmin,
   removeSubAdmin,
   saveFighterPhoto,

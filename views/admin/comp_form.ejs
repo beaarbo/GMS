@@ -94,8 +94,13 @@
         <input id="files" name="files" type="file" accept=".pdf,.docx,.xlsx,.jpg,.jpeg,.png,.webp" multiple>
         <p class="hint">Choose up to <%= maxNewFiles %> at once, such as the prospectus, rules or forms: PDF, Word (.docx), Excel (.xlsx), JPG, PNG or WebP, up to 10 MB each. Each is titled with its file name. You can add more, or retitle one by attaching it again, later from Logo and files.</p>
       </div>
+      <div class="field">
+        <label for="photos">Photos <span class="hint">(optional)</span></label>
+        <input id="photos" name="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple>
+        <p class="hint">Up to <%= maxPhotos %> pictures for the competition page: JPG, PNG or WebP, up to 5 MB each. Anyone who can see the competition can see them.</p>
+      </div>
     <% } else { %>
-      <p class="hint">To change the logo or attached files, use <a href="/admin/competitions/<%= competition.id %>/files">Logo and files</a>.</p>
+      <p class="hint">To change the logo, photos or attached files, use <a href="/admin/competitions/<%= competition.id %>/files">Logo and files</a>.</p>
     <% } %>
     <div class="actions">
       <button class="btn" type="submit">Save</button>

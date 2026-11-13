@@ -171,6 +171,10 @@ The first admin (the one made from `ADMIN_EMAIL` when the site first starts) is 
 
 Sub-admins can do everything else an admin can, except: add or remove admins, remove the main admin, turn off the main admin's two-step login, download backups, or change the security settings (requiring two-step login for admins, and the off-site backup address). The main admin can remove a sub-admin at any time; they're logged out at once. Sending the invite needs email set up on the live site.
 
+## Competition photos
+
+Each competition can show up to 10 photos on its page, such as the venue or last year's event. Add them on the new-competition form or later on **Logo and files** (several at once; JPG, PNG or WebP, up to 5 MB each), and remove them there. Each opens full size when clicked. Photos follow the competition's visibility: a draft's are seen only by admins, and once published anyone can see them.
+
 ## Link previews
 
 A competition's link pasted into WhatsApp, Facebook, Telegram and similar apps shows a preview with its logo, name, dates, venue and, while entries are open, the deadline. Other pages show the site's name, footer text and organiser logo. The links in previews use `PUBLIC_URL`. Apps keep a preview for a while, so a changed logo can take time to show.

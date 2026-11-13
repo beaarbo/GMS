@@ -27,6 +27,37 @@
   </form>
 </section>
 
+<section class="card" id="photos">
+  <h2>Photos</h2>
+  <p class="sub">Up to <%= maxPhotos %> pictures shown on the competition page, such as the venue or last year's event. Anyone who can see the competition can see them, so think twice before showing children.</p>
+  <% if (photos.length > 0) { %>
+    <div class="photo-grid">
+      <% photos.forEach((photo, i) => { %>
+        <div class="photo-tile">
+          <img src="/competitions/<%= competition.id %>/photos/<%= photo.id %>" alt="Photo <%= i + 1 %>" loading="lazy">
+          <form method="post" action="/admin/competitions/<%= competition.id %>/photos/<%= photo.id %>/delete" data-confirm="Remove this photo?">
+            <input type="hidden" name="_csrf" value="<%= csrf %>">
+            <button class="btn danger small" type="submit">Remove</button>
+          </form>
+        </div>
+      <% }) %>
+    </div>
+  <% } %>
+  <% if (photos.length < maxPhotos) { %>
+    <form method="post" action="/admin/competitions/<%= competition.id %>/photos" enctype="multipart/form-data">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <div class="field">
+        <label for="photos-input">Add photos <span class="hint">(<%= photos.length %> of <%= maxPhotos %>)</span></label>
+        <input id="photos-input" name="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple required>
+        <p class="hint">JPG, PNG or WebP, up to 5 MB each. Choose several at once.</p>
+      </div>
+      <button class="btn" type="submit">Add photos</button>
+    </form>
+  <% } else { %>
+    <p class="hint">This competition has the most photos it can have. Remove one to add another.</p>
+  <% } %>
+</section>
+
 <section class="card">
   <h2>Files for clubs</h2>
   <p class="sub">Attach as many as you need, such as the prospectus, rules or forms. Anyone who can see the competition can download them, so don't attach athletes' personal details.</p>

@@ -44,6 +44,9 @@ const MAX_ICON_BYTES = 1024 * 1024;
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 // Files attached in one go on the new-competition form. More can follow later.
 const MAX_NEW_COMPETITION_FILES = 10;
+// Pictures on a competition's page: how many, and how big each may be.
+const MAX_COMPETITION_PHOTOS = 10;
+const MAX_COMPETITION_PHOTO_BYTES = 5 * 1024 * 1024;
 
 const OFFICE_TYPES = {
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -110,6 +113,8 @@ module.exports = {
   MAX_ICON_BYTES,
   MAX_ATTACHMENT_BYTES,
   MAX_NEW_COMPETITION_FILES,
+  MAX_COMPETITION_PHOTOS,
+  MAX_COMPETITION_PHOTO_BYTES,
   detectIconType,
   detectAttachmentType,
   safeFilename,

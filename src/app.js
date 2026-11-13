@@ -11,7 +11,7 @@ const { WIN_TYPES } = require('./bracket');
 const { createMailer } = require('./mailer');
 const { logActivity } = require('./activity');
 const { createLiveUpdates } = require('./live');
-const { MAX_DOCUMENT_BYTES, MAX_ICON_BYTES, MAX_ATTACHMENT_BYTES, MAX_NEW_COMPETITION_FILES, documentLabel, documentTypeFor, clubInitials } = require('./documents');
+const { MAX_DOCUMENT_BYTES, MAX_ICON_BYTES, MAX_ATTACHMENT_BYTES, MAX_NEW_COMPETITION_FILES, MAX_COMPETITION_PHOTOS, MAX_COMPETITION_PHOTO_BYTES, documentLabel, documentTypeFor, clubInitials } = require('./documents');
 const { MAX_IMPORT_BYTES } = require('./athleteImport');
 const { isRegistrationOpen, today, timeLeft, closeExpiredCompetitions, getEventDates, getClubIcon, clubIconVersions, competitionLogoVersions } = require('./services');
 const publicRoutes = require('./routes/public');
@@ -169,15 +169,21 @@ function createApp({
     ...upload,
     read: multer({ storage: multer.memoryStorage(), limits: { fileSize: upload.maxBytes, files: 1, fields: 5 } }).single(upload.field),
   }));
-  // The new-competition form carries an optional logo and any number of files.
-  // The route checks the logo's own, smaller limit.
+  // A competition's photos, several at once.
+  uploads.push({
+    path: /^\/admin\/competitions\/\d+\/photos$/,
+    tooBig: 'A photo is over the 5 MB limit.',
+    read: multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_COMPETITION_PHOTO_BYTES, files: MAX_COMPETITION_PHOTOS, fields: 5 } }).array('photos', MAX_COMPETITION_PHOTOS),
+  });
+  // The new-competition form carries an optional logo, files and photos.
+  // The route checks the logo's and photos' own, smaller limits.
   uploads.push({
     path: /^\/admin\/competitions$/,
     tooBig: 'A file is over the 10 MB limit.',
     read: multer({
       storage: multer.memoryStorage(),
-      limits: { fileSize: MAX_ATTACHMENT_BYTES, files: MAX_NEW_COMPETITION_FILES + 1, fields: 40 },
-    }).fields([{ name: 'logo', maxCount: 1 }, { name: 'files', maxCount: MAX_NEW_COMPETITION_FILES }]),
+      limits: { fileSize: MAX_ATTACHMENT_BYTES, files: MAX_NEW_COMPETITION_FILES + MAX_COMPETITION_PHOTOS + 1, fields: 40 },
+    }).fields([{ name: 'logo', maxCount: 1 }, { name: 'files', maxCount: MAX_NEW_COMPETITION_FILES }, { name: 'photos', maxCount: MAX_COMPETITION_PHOTOS }]),
   });
   app.use((req, res, next) => {
     if (req.method !== 'POST' || !req.session.userId || !req.is('multipart/form-data')) return next();
@@ -187,8 +193,8 @@ function createApp({
       if (error) {
         const messages = {
           LIMIT_FILE_SIZE: upload.tooBig,
-          LIMIT_FILE_COUNT: `Attach at most ${MAX_NEW_COMPETITION_FILES} files at once. You can add more afterwards from Logo and files.`,
-          LIMIT_UNEXPECTED_FILE: `Attach at most ${MAX_NEW_COMPETITION_FILES} files at once. You can add more afterwards from Logo and files.`,
+          LIMIT_FILE_COUNT: `Attach at most ${MAX_NEW_COMPETITION_FILES} files and ${MAX_COMPETITION_PHOTOS} photos at once.`,
+          LIMIT_UNEXPECTED_FILE: `Attach at most ${MAX_NEW_COMPETITION_FILES} files and ${MAX_COMPETITION_PHOTOS} photos at once.`,
         };
         req.uploadError = messages[error.code] || 'That upload could not be read. Please try again.';
       }
@@ -250,6 +256,7 @@ function createApp({
       siteLogoUrl: () => null,
       competitionLogoUrl: () => null,
       maxNewFiles: MAX_NEW_COMPETITION_FILES,
+      maxPhotos: MAX_COMPETITION_PHOTOS,
       fileSize: (bytes) => (bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`),
       newsAudiences: AUDIENCES,
       formatBody,

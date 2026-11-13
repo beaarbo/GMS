@@ -1,6 +1,6 @@
 const express = require('express');
 const {
-  loadDivisionSetup, listNews, getNews, today, getCompetitionLogo, listCompetitionFiles, getCompetitionFile,
+  loadDivisionSetup, listNews, getNews, today, listCompetitionPhotos, getCompetitionPhoto, getCompetitionLogo, listCompetitionFiles, getCompetitionFile,
   getEventDates, competitionResults, competitionProgramme,
 } = require('../services');
 const { formatEventDates } = require('../divisions');
@@ -64,6 +64,7 @@ router.get('/competitions/:id(\\d+)', (req, res) => {
     competition,
     setup: loadDivisionSetup(db, competition.id),
     files: listCompetitionFiles(db, competition.id),
+    photos: listCompetitionPhotos(db, competition.id),
     hasBoutList: competitionProgramme(db, competition, { published: true }).length > 0,
     hasResults: competitionResults(db, competition, { published: true }).divisions.length > 0,
   });
@@ -151,6 +152,16 @@ router.get('/competitions/:id(\\d+)/logo', (req, res) => {
   res.setHeader('Content-Type', logo.content_type);
   res.setHeader('Cache-Control', `${competition.status === 'draft' ? 'private' : 'public'}, max-age=31536000, immutable`);
   return res.send(logo.data);
+});
+
+// A competition's photo, shown like its logo: only while the competition is visible.
+router.get('/competitions/:id(\\d+)/photos/:photoId(\\d+)', (req, res) => {
+  const competition = visibleCompetition(req);
+  const photo = competition && getCompetitionPhoto(req.app.locals.db, competition.id, Number(req.params.photoId));
+  if (!photo) return notFound(res);
+  res.setHeader('Content-Type', photo.content_type);
+  res.setHeader('Cache-Control', `${competition.status === 'draft' ? 'private' : 'public'}, max-age=31536000, immutable`);
+  return res.send(photo.data);
 });
 
 router.get('/competitions/:id(\\d+)/files/:fileId(\\d+)', (req, res) => {
