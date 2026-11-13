@@ -127,7 +127,7 @@ function createApp({
           defaultSrc: ["'self'"],
           scriptSrc: ["'self'"],
           styleSrc: ["'self'"],
-          imgSrc: ["'self'", 'data:'],
+          imgSrc: ["'self'", 'data:', 'blob:'],
           formAction: ["'self'"],
           objectSrc: ["'none'"],
           // Google's map embed, for each competition's location (src/maps.js).

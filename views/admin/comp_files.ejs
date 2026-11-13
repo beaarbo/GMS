@@ -48,8 +48,9 @@
       <input type="hidden" name="_csrf" value="<%= csrf %>">
       <div class="field">
         <label for="photos-input">Add photos <span class="hint">(<%= photos.length %> of <%= maxPhotos %>)</span></label>
-        <input id="photos-input" name="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple required>
+        <input id="photos-input" name="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple required data-photo-preview="photos-preview" data-room="<%= maxPhotos - photos.length %>">
         <p class="hint">JPG, PNG or WebP, up to 5 MB each. Choose several at once.</p>
+        <div class="photo-grid photo-preview" id="photos-preview" aria-live="polite" hidden></div>
       </div>
       <button class="btn" type="submit">Add photos</button>
     </form>

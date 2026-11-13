@@ -165,3 +165,38 @@ document.addEventListener('change', (event) => {
     }
   }
 });
+
+// Competition photos: show the chosen pictures before they're uploaded, and
+// flag any the server would refuse (too large, or more than there's room for).
+(function () {
+  const MAX_BYTES = 5 * 1024 * 1024;
+  let urls = [];
+  document.addEventListener('change', (event) => {
+    const input = event.target;
+    if (!input.matches('[data-photo-preview]')) return;
+    const grid = document.getElementById(input.dataset.photoPreview);
+    if (!grid) return;
+    urls.forEach((url) => URL.revokeObjectURL(url));
+    urls = [];
+    grid.replaceChildren();
+    const files = [...input.files];
+    const room = Number(input.dataset.room);
+    files.forEach((file, i) => {
+      const tile = document.createElement('figure');
+      tile.className = 'photo-tile';
+      const img = document.createElement('img');
+      const url = URL.createObjectURL(file);
+      urls.push(url);
+      img.src = url;
+      img.alt = `Preview of ${file.name}`;
+      const caption = document.createElement('figcaption');
+      caption.className = 'hint';
+      const problem = file.size > MAX_BYTES ? 'Too large: over 5 MB' : i >= room ? 'No room for this one' : '';
+      caption.textContent = problem ? `${file.name} · ${problem}` : file.name;
+      if (problem) tile.classList.add('photo-problem');
+      tile.append(img, caption);
+      grid.append(tile);
+    });
+    grid.hidden = files.length === 0;
+  });
+}());

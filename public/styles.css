@@ -776,4 +776,8 @@ body.mat { background: var(--page); }
   .topbar, .footer, .actions, .breadcrumb { display: none; }
   body { background: #fff; }
   .card { break-inside: avoid; border-color: #999; box-shadow: none; }
-}
+}.photo-preview { margin: var(--space-3) 0 0; }
+.photo-preview .photo-tile { margin: 0; }
+.photo-preview figcaption { overflow-wrap: anywhere; }
+.photo-preview .photo-problem img { opacity: 0.5; border-color: var(--hong); }
+.photo-preview .photo-problem figcaption { color: var(--hong); }

@@ -96,8 +96,9 @@
       </div>
       <div class="field">
         <label for="photos">Photos <span class="hint">(optional)</span></label>
-        <input id="photos" name="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple>
+        <input id="photos" name="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple data-photo-preview="photos-preview" data-room="<%= maxPhotos %>">
         <p class="hint">Up to <%= maxPhotos %> pictures for the competition page: JPG, PNG or WebP, up to 5 MB each. Anyone who can see the competition can see them.</p>
+        <div class="photo-grid photo-preview" id="photos-preview" aria-live="polite" hidden></div>
       </div>
     <% } else { %>
       <p class="hint">To change the logo, photos or attached files, use <a href="/admin/competitions/<%= competition.id %>/files">Logo and files</a>.</p>
