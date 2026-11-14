@@ -36,10 +36,10 @@
     <% } else if (clubCoach && entered > 0) { %>
       <a class="btn secondary" href="/club/competitions/<%= c.id %>">Your entries</a>
     <% } %>
-    <% if (clubCoach && c.bouts_published_at) { %>
-      <a class="btn secondary" href="/club/competitions/<%= c.id %>/bouts">Bout list</a>
-      <% if (c.status === 'closed') { %><a class="btn secondary" href="/screens/<%= c.id %>">Court screens</a><% } %>
-    <% } %>
+    <%# The shared bout list: kyorugi and poomsae together, with tabs for either event (and My club for coaches). %>
+    <% const published = c.bouts_published_at || c.poomsae_published_at || c.poomsae_brackets_published_at; %>
+    <% if (published) { %><a class="btn secondary" href="/competitions/<%= c.id %>/bouts">Bout list</a><% } %>
+    <% if (clubCoach && published && c.status === 'closed') { %><a class="btn secondary" href="/screens/<%= c.id %>">Court screens</a><% } %>
     <a class="btn secondary" href="/competitions/<%= c.id %>">Details</a>
   </div>
 </article>

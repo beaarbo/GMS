@@ -24,4 +24,11 @@ test('the home page shows up to four photos on each competition card, then how m
   assert.match(cupCard, /data-more="\+2" aria-label="See all 6 photos of Photo Cup"/);
   assert.doesNotMatch(home, new RegExp(`/competitions/${plain}/photos/`));
   assert.equal((await request(app).get(`/competitions/${cup}/photos/${first}`)).status, 200, 'visitors can open them');
+
+  // Once anything is published (here only poomsae), the card links to the shared bout list with its event tabs.
+  assert.doesNotMatch(home, />Bout list</);
+  db.prepare("UPDATE competitions SET poomsae_published_at = datetime('now') WHERE id = ?").run(cup);
+  const after = (await request(app).get('/')).text;
+  assert.match(after, new RegExp(`href="/competitions/${cup}/bouts">Bout list<`));
+  assert.doesNotMatch(after, new RegExp(`href="/competitions/${plain}/bouts"`));
 });
