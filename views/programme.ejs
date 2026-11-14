@@ -16,7 +16,10 @@
 <% if (competitors) { %>
   <%# My club: the coach's competitors in time order, before their divisions. %>
   <section class="card" id="my-club">
-    <h2>Your competitors</h2>
+    <div class="section-head">
+      <h2>Your competitors</h2>
+      <a class="btn secondary" href="/competitions/<%= competition.id %>/bouts/my-club.pdf<%= filters.event ? `?event=${filters.event}` : '' %>">Download my competitors (PDF)</a>
+    </div>
     <% if (competitors.length === 0) { %>
       <p class="empty">None of your club's competitors are on the published bout list<%= filters.event ? ' for this event' : '' %> yet.</p>
     <% } else { %>

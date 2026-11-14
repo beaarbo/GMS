@@ -6,6 +6,7 @@ const {
 const { formatEventDates } = require('../divisions');
 const { hasKyorugi, hasPoomsae } = require('../poomsae');
 const { writeBoutListPdf } = require('../boutlistPdf');
+const { writeClubCompetitorsPdf } = require('../clubPdf');
 const { shortenNames } = require('../settings');
 
 // Visitors without an account see shortened names when the Settings page says so.
@@ -142,6 +143,25 @@ router.get('/competitions/:id(\\d+)/bouts.pdf', (req, res) => {
   if (parts.length === 0) return notFound(res);
   pdfHeaders(res, 'bout-list', competition);
   return writeBoutListPdf(res, { competition, divisions: parts, dateLabel: dateLabel(db, competition) });
+});
+
+// A coach's own competitors as a PDF, the My club list to print: published
+// stages only, as on the page. Only for a coach of a club; never anyone else's.
+router.get('/competitions/:id(\\d+)/bouts/my-club.pdf', (req, res) => {
+  const competition = visibleCompetition(req);
+  if (!competition || !req.user || !req.user.club_id) return notFound(res);
+  const { db } = req.app.locals;
+  const filters = programmeFilters(req, competition);
+  const club = db.prepare('SELECT name FROM clubs WHERE id = ?').get(req.user.club_id);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="my-club-competition-${competition.id}.pdf"`);
+  return writeClubCompetitorsPdf(res, {
+    competition,
+    clubName: club ? club.name : 'Your club',
+    rows: clubCompetitors(db, competition, req.user.club_id, { event: filters.event }),
+    dateLabel: dateLabel(db, competition),
+    printedAt: new Date().toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+  });
 });
 
 // The old poomsae addresses, kept for links already shared.
