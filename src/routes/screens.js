@@ -3,7 +3,7 @@
 // courts. Logged-in users only, because they show athletes' names; coaches only
 // see what has been published (the kyorugi bout list, each poomsae stage).
 const express = require('express');
-const { listBouts, getEventDates, poomsaeCourtItems, poomsaeCourtQueue } = require('../services');
+const { listBouts, getEventDates, poomsaeCourtItems, poomsaeCourtQueue, listBoutCalls, calledBouts, callTime, callText } = require('../services');
 const { formatDay } = require('../divisions');
 const { hasPoomsae } = require('../poomsae');
 const { notFound } = require('./helpers');
@@ -114,6 +114,27 @@ router.get('/:id(\\d+)/:day(\\d+)/:court(\\d+)', screenCompetition('kyorugi'), (
   });
 });
 
+// The call screen: the bouts staff last called for one day, for the warm-up
+// area, with the call before it. Live like the court screens.
+router.get('/:id(\\d+)/calls/:day(\\d+)', screenCompetition('kyorugi'), (req, res) => {
+  const { db } = req.app.locals;
+  const day = Number(req.params.day);
+  if (!listBouts(db, req.competition.id).some((b) => b.day === day)) return notFound(res);
+  const [current, previous] = listBoutCalls(db, req.competition.id, day, 2).map((call) => ({ ...call, at: callTime(call), text: callText(call) }));
+  const bouts = current ? calledBouts(db, req.competition.id, current) : [];
+  res.render('screens/calls', {
+    title: 'Now calling',
+    competition: req.competition,
+    day,
+    dayLabel: dayLabelOf(getEventDates(db, req.competition.id), day),
+    current: current || null,
+    previous: previous || null,
+    courts: [...new Set(bouts.map((b) => b.court))].map((court) => ({ court, bouts: bouts.filter((b) => b.court === court) })),
+    refreshSeconds: REFRESH_SECONDS,
+    updatedAt: updatedAt(),
+  });
+});
+
 router.get('/:id(\\d+)/poomsae/:day(\\d+)/:court(\\d+)', screenCompetition('poomsae'), (req, res) => {
   const { db } = req.app.locals;
   const day = Number(req.params.day);
@@ -169,5 +190,6 @@ function changeStream(req, res) {
 
 router.get('/:id(\\d+)/:day(\\d+)/:court(\\d+)/events', screenCompetition('kyorugi'), changeStream);
 router.get('/:id(\\d+)/poomsae/:day(\\d+)/:court(\\d+)/events', screenCompetition('poomsae'), changeStream);
+router.get('/:id(\\d+)/calls/:day(\\d+)/events', screenCompetition('kyorugi'), changeStream);
 
 module.exports = router;

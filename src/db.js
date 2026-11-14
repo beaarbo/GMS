@@ -373,6 +373,19 @@ CREATE INDEX IF NOT EXISTS idx_poomsae_bouts_division ON poomsae_bouts(competiti
 
 -- A poomsae division's own choices. NULL keeps the competition's format and cut,
 -- and an automatic day.
+-- Bout calling: each call of a range of kyorugi bout numbers on one day, on
+-- every court (court 0) or one court, newest last. The call screen shows the latest.
+CREATE TABLE IF NOT EXISTS bout_calls (
+  id INTEGER PRIMARY KEY,
+  competition_id INTEGER NOT NULL REFERENCES competitions(id) ON DELETE CASCADE,
+  day INTEGER NOT NULL,
+  court INTEGER NOT NULL DEFAULT 0,
+  from_number INTEGER NOT NULL,
+  to_number INTEGER NOT NULL,
+  called_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  called_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS poomsae_divisions (
   competition_id INTEGER NOT NULL REFERENCES competitions(id) ON DELETE CASCADE,
   division_key TEXT NOT NULL,

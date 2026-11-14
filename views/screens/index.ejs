@@ -17,6 +17,16 @@
   <section class="section">
     <div class="section-head"><h2><%= d.label %></h2></div>
     <div class="card-grid">
+      <% if (d.courts.some((c) => c.kind === 'kyorugi')) { %>
+        <article class="card">
+          <h3 class="card-title">Call screen</h3>
+          <p class="sub">The bouts called to the warm-up area, every court</p>
+          <div class="actions">
+            <a class="btn" href="/screens/<%= competition.id %>/calls/<%= d.day %>">Open screen</a>
+            <% if (user.role !== 'coach') { %><a class="btn secondary" href="/admin/competitions/<%= competition.id %>/calls?day=<%= d.day %>">Call bouts</a><% } %>
+          </div>
+        </article>
+      <% } %>
       <% d.courts.forEach((c) => { const poomsae = c.kind === 'poomsae'; %>
         <article class="card">
           <h3 class="card-title"><%= poomsae ? 'Poomsae court' : 'Court' %> <%= c.court %></h3>

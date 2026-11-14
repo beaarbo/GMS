@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <%# With JavaScript the page updates live as bouts are called. Without it, it reloads itself. %>
+  <noscript><meta http-equiv="refresh" content="<%= refreshSeconds %>"></noscript>
+  <title>Now calling · <%= competition.name %></title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body class="screen" data-live-events="/screens/<%= competition.id %>/calls/<%= day %>/events">
+<% const side = (bout, color) => bout[color] ? bout[color] : { name: bout[`${color}Placeholder`] || 'To be decided', club: '' }; %>
+<header class="screen-head">
+  <div>
+    <p class="screen-court">Now calling</p>
+    <p class="screen-sub"><%= competition.name %> · <%= dayLabel %></p>
+  </div>
+  <div class="screen-sub screen-right">
+    <span class="screen-status" id="screen-status" hidden></span>
+    <span data-live-part="progress">Updated <%= updatedAt %></span>
+  </div>
+</header>
+
+<main class="screen-main" data-live-part="main">
+  <section class="screen-now">
+    <% if (!current) { %>
+      <h1 class="screen-label">Please wait</h1>
+      <p class="screen-empty">No bouts have been called yet.</p>
+    <% } else { %>
+      <h1 class="screen-label">Called at <%= current.at %></h1>
+      <p class="screen-call"><%= current.text[0].toUpperCase() + current.text.slice(1) %></p>
+      <p class="screen-sub">Athletes in these bouts, please report to the warm-up area.</p>
+    <% } %>
+  </section>
+
+  <% if (current) { %>
+    <div class="screen-columns screen-call-courts">
+      <% courts.forEach((c) => { %>
+        <section>
+          <h2 class="screen-label">Court <%= c.court %></h2>
+          <ol class="screen-list">
+            <% c.bouts.forEach((b) => { const blue = side(b, 'blue'); const red = side(b, 'red'); const done = b.winner || b.noContest; %>
+              <li class="<%= done ? 'screen-done' : '' %>">
+                <span class="screen-number"><%= b.number %></span>
+                <div>
+                  <strong><span class="blue-text"><%= blue.name %></span> vs <span class="red-text"><%= red.name %></span></strong><br>
+                  <span class="screen-sub"><%= b.time %> · <%= [blue.club, red.club].filter(Boolean).join(' / ') %><%= done ? ' · finished' : '' %></span>
+                </div>
+              </li>
+            <% }) %>
+          </ol>
+        </section>
+      <% }) %>
+    </div>
+  <% } %>
+
+  <% if (previous) { %><p class="screen-sub screen-previous">Called before: <%= previous.text %> (<%= previous.at %>)</p><% } %>
+</main>
+</body>
+</html>

@@ -1,0 +1,94 @@
+<%- include('../partials/top') %>
+<% const isAdmin = user.role === 'admin'; %>
+<% const side = (bout, color) => bout[color] ? `${bout[color].name} (${bout[color].club})` : (bout[`${color}Placeholder`] || 'To be decided'); %>
+<p class="breadcrumb"><% if (isAdmin) { %><a href="/admin/competitions/<%= competition.id %>/results">Results</a><% } else { %><a href="/official">Competition day</a><% } %></p>
+<div class="page-head">
+  <div>
+    <h1>Bout calling</h1>
+    <p class="sub"><%= competition.name %> · Call the next bouts to the warm-up area; the call screen shows them straight away.</p>
+  </div>
+  <% if (day) { %>
+    <div class="actions">
+      <a class="btn" href="/screens/<%= competition.id %>/calls/<%= day %>">Open call screen</a>
+      <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/results">Results</a>
+    </div>
+  <% } %>
+</div>
+
+<% if (!day) { %>
+  <section class="card"><p class="empty">There are no bouts to call yet. The bout list needs to be drawn first.</p></section>
+<% } else { %>
+  <% if (days.length > 1) { %>
+    <nav class="card programme-nav" aria-label="Days">
+      <p class="stats"><% days.forEach((d) => { %><a href="/admin/competitions/<%= competition.id %>/calls?day=<%= d.value %>"<%- d.value === day ? ' class="current-filter" aria-current="page"' : '' %>><%= d.label %></a><% }) %></p>
+    </nav>
+  <% } %>
+
+  <section class="card">
+    <h2>Call bouts</h2>
+    <p class="sub">Bout numbers start again on each court every day, so calling “6 to 10” on every court calls bouts 6 to 10 of each court.</p>
+    <% if (suggest.from <= lastNumber) { %>
+      <form method="post" action="/admin/competitions/<%= competition.id %>/calls" class="actions">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <input type="hidden" name="day" value="<%= day %>">
+        <input type="hidden" name="court" value="<%= suggest.court %>">
+        <input type="hidden" name="from" value="<%= suggest.from %>">
+        <input type="hidden" name="to" value="<%= Math.min(suggest.to, lastNumber) %>">
+        <button class="btn approve" type="submit">Call next: bouts <%= suggest.from %><%= Math.min(suggest.to, lastNumber) > suggest.from ? `–${Math.min(suggest.to, lastNumber)}` : '' %><%= suggest.court ? ` on court ${suggest.court}` : '' %></button>
+      </form>
+    <% } else { %>
+      <p class="hint">Every bout of this day has been called.</p>
+    <% } %>
+    <form method="post" action="/admin/competitions/<%= competition.id %>/calls" class="filters">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <input type="hidden" name="day" value="<%= day %>">
+      <div>
+        <label for="call-court">Court</label>
+        <select id="call-court" name="court">
+          <option value="0">Every court</option>
+          <% courts.forEach((c) => { %><option value="<%= c %>" <%= suggest.court === c ? 'selected' : '' %>>Court <%= c %></option><% }) %>
+        </select>
+      </div>
+      <div><label for="call-from">From bout</label><input id="call-from" name="from" type="number" min="1" max="<%= lastNumber %>" value="<%= Math.min(suggest.from, lastNumber) %>" required></div>
+      <div><label for="call-to">To bout</label><input id="call-to" name="to" type="number" min="1" max="<%= lastNumber %>" value="<%= Math.min(suggest.to, lastNumber) %>" required></div>
+      <div class="actions"><button class="btn secondary" type="submit">Call these bouts</button></div>
+    </form>
+  </section>
+
+  <section class="card">
+    <div class="section-head">
+      <h2>Called now</h2>
+      <% if (current) { %><span class="hint">Called at <%= current.at %></span><% } %>
+    </div>
+    <% if (!current) { %>
+      <p class="empty">Nothing has been called today yet.</p>
+    <% } else { %>
+      <p class="stats"><span><strong><%= current.text[0].toUpperCase() + current.text.slice(1) %></strong></span></p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Court</th><th>Bout</th><th>Time</th><th>Division</th><th>Blue</th><th>Red</th><th>Status</th></tr></thead>
+          <tbody>
+            <% currentBouts.forEach((b) => { %>
+              <tr class="<%= b.winner || b.noContest ? 'result-row-done' : '' %>">
+                <td class="num"><%= b.court %></td>
+                <td class="num"><strong><%= b.number %></strong></td>
+                <td class="nowrap"><%= b.time %></td>
+                <td><%= b.title %></td>
+                <td><%= side(b, 'blue') %></td>
+                <td><%= side(b, 'red') %></td>
+                <td><%= b.winner ? 'Finished' : b.noContest ? 'No contest' : 'To fight' %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
+    <% if (earlier.length > 0) { %>
+      <h3>Earlier calls</h3>
+      <ul class="plain-list">
+        <% earlier.forEach((call) => { %><li><span class="hint"><%= call.at %></span> <%= call.text[0].toUpperCase() + call.text.slice(1) %></li><% }) %>
+      </ul>
+    <% } %>
+  </section>
+<% } %>
+<%- include('../partials/bottom') %>

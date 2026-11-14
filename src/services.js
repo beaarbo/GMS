@@ -948,6 +948,41 @@ function competitionProgramme(db, competition, { published = false, event = null
     || (a.court || 99) - (b.court || 99) || String(a.start).localeCompare(String(b.start)));
 }
 
+// Bout calling. A call names bout numbers fromNumber..toNumber on one day, on
+// every court (court 0) or one. Bout numbers restart on each court each day, so
+// "6 to 10" on every court calls Court 1's 6 to 10, Court 2's 6 to 10 and so on.
+const MAX_CALLED = 50;
+
+function recordBoutCall(db, competition, { day, court = 0, fromNumber, toNumber, userId = null }) {
+  if (![day, court, fromNumber, toNumber].every(Number.isInteger) || fromNumber < 1 || toNumber < fromNumber) {
+    return { ok: false, error: 'Enter the first and last bout numbers to call, the last no lower than the first.' };
+  }
+  if (toNumber - fromNumber + 1 > MAX_CALLED) return { ok: false, error: `Call at most ${MAX_CALLED} bout numbers at once.` };
+  const call = { day, court, from_number: fromNumber, to_number: toNumber };
+  if (calledBouts(db, competition.id, call).length === 0) {
+    return { ok: false, error: `There are no bouts numbered ${fromNumber} to ${toNumber} on day ${day}${court ? `, court ${court}` : ''}.` };
+  }
+  db.prepare('INSERT INTO bout_calls (competition_id, day, court, from_number, to_number, called_by) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(competition.id, day, court, fromNumber, toNumber, userId);
+  return { ok: true };
+}
+
+// called_at is UTC, as SQLite's datetime('now') gives; shown in the site's time zone.
+const callTime = (call) => new Date(`${call.called_at.replace(' ', 'T')}Z`).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+const callText = (call) => `bouts ${call.from_number}${call.to_number !== call.from_number ? ` to ${call.to_number}` : ''}${call.court ? ` on court ${call.court}` : ' on every court'}`;
+
+// The latest calls of one day, newest first.
+function listBoutCalls(db, competitionId, day, limit = 10) {
+  return db.prepare('SELECT * FROM bout_calls WHERE competition_id = ? AND day = ? ORDER BY id DESC LIMIT ?').all(competitionId, day, limit);
+}
+
+// The bouts a call names, by court then number (byes have no number, so never appear).
+function calledBouts(db, competitionId, call) {
+  return listBouts(db, competitionId)
+    .filter((b) => b.day === call.day && (!call.court || b.court === call.court) && b.number >= call.from_number && b.number <= call.to_number)
+    .sort((a, b) => a.court - b.court || a.number - b.number);
+}
+
 // One club's competitors on the published bout list, for the coach's My club
 // view: one row per kyorugi athlete or poomsae entry with its division, day,
 // court, what's next (a bout, or a place in the performance order), the drawn
@@ -2112,6 +2147,11 @@ module.exports = {
   saveDesignatedPoomsae,
   drawDivisionPoomsae,
   clubCompetitors,
+  recordBoutCall,
+  callTime,
+  callText,
+  listBoutCalls,
+  calledBouts,
   getEventDates,
   saveEventDates,
   createCompetition,

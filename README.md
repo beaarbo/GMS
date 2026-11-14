@@ -118,6 +118,8 @@ After closing registration, open **Bout list** on the competition's card on the 
 
 **Record results** shows each division's bouts in a card with its medallists, kyorugi and then poomsae laid out the same way, with event tabs and a day and court filter. Click the winner and they move into their next bout. Results then appear on the brackets, the PDF and the coaches' pages, and build the medal standings: gold and silver from the final, and bronze for each losing semifinalist. A fighter alone in a division gets no medal and isn't counted. A result can only be undone or changed while the next bout has none. Clear all results before redrawing or deleting a list.
 
+**Bout calling** (on the Results page, and **Competition day** for officials) calls the next bouts to the warm-up area. Click **Call next** for the next five bout numbers after the last call, or choose a court (or every court) and a range of bout numbers. Bout numbers restart on each court every day, so "6 to 10" on every court calls bouts 6 to 10 of each court. The **call screen** (`/screens/:id/calls/:day`, listed with the court screens) shows the latest call in large type, with each called bout's court, time and athletes, and the call before it; it updates live like the court screens. Kyorugi bouts only.
+
 While a bout list exists, approvals can't change and registration can't reopen. Delete the list first, because any change to the fighters would make the draw wrong.
 
 **Change this division**, under each bracket, edits one division without redrawing the rest, as long as it has no results yet:

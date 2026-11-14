@@ -22,6 +22,11 @@ const {
   savePoomsaeSchedule,
   savePoomsaeDivision,
   saveDesignatedPoomsae,
+  recordBoutCall,
+  callTime,
+  callText,
+  listBoutCalls,
+  calledBouts,
   drawDivisionPoomsae,
   generatePoomsaeOrder,
   clearPoomsaeOrder,
@@ -49,7 +54,7 @@ const router = express.Router();
 const staff = requireRole(['admin', 'official']);
 
 // Officials only reach competitions that are past registration.
-router.use('/competitions/:id(\\d+)/:page(weigh-in|results|mat|poomsae|athletes)', staff, (req, res, next) => {
+router.use('/competitions/:id(\\d+)/:page(weigh-in|results|mat|poomsae|athletes|calls)', staff, (req, res, next) => {
   const competition = req.app.locals.db.prepare('SELECT * FROM competitions WHERE id = ?').get(req.params.id);
   if (!competition || (req.user.role === 'official' && competition.status !== 'closed')) return notFound(res);
   req.competition = competition;
@@ -293,6 +298,51 @@ router.get('/competitions/:id(\\d+)/results', (req, res) => {
     poomsaeMedals: poomsaeDivisions ? { table: poomsaeMedalTable(poomsaeDivisions.filter((d) => d.approved > 0)) } : null,
     marks: hasPoomsae(req.competition) ? loadJudgeMarks(req.app.locals.db, req.competition.id) : null,
   });
+});
+
+// Bout calling: staff call a range of bout numbers (on every court, or one)
+// and the call screen shows them, live. Kyorugi bouts only.
+const callsPath = (competition, day) => `/admin/competitions/${competition.id}/calls${day ? `?day=${day}` : ''}`;
+
+router.get('/competitions/:id(\\d+)/calls', (req, res) => {
+  const { db } = req.app.locals;
+  const bouts = listBouts(db, req.competition.id);
+  const dayNumbers = [...new Set(bouts.map((b) => b.day))].sort((a, b) => a - b);
+  const dates = getEventDates(db, req.competition.id);
+  const asked = Number(req.query.day);
+  // The chosen day, else the first with a bout still to fight.
+  const day = dayNumbers.includes(asked) ? asked : (bouts.find((b) => !b.winner && !b.noContest) || bouts[0] || {}).day || null;
+  const calls = (day ? listBoutCalls(db, req.competition.id, day) : []).map((call) => ({ ...call, at: callTime(call), text: callText(call) }));
+  const current = calls[0] || null;
+  const next = current ? current.to_number + 1 : 1;
+  res.render('admin/calls', {
+    title: 'Bout calling',
+    competition: req.competition,
+    day,
+    days: dayNumbers.map((n) => ({ value: n, label: dates[n - 1] ? `Day ${n} (${formatDay(dates[n - 1])})` : `Day ${n}` })),
+    courts: [...new Set(bouts.filter((b) => b.day === day).map((b) => b.court))].sort((a, b) => a - b),
+    current,
+    currentBouts: current ? calledBouts(db, req.competition.id, current) : [],
+    earlier: calls.slice(1),
+    suggest: { from: next, to: next + 4, court: current ? current.court : 0 },
+    lastNumber: Math.max(0, ...bouts.filter((b) => b.day === day).map((b) => b.number || 0)),
+  });
+});
+
+router.post('/competitions/:id(\\d+)/calls', (req, res) => {
+  const { db } = req.app.locals;
+  const number = (value) => (/^\d{1,4}$/.test(String(value || '').trim()) ? Number(String(value).trim()) : NaN);
+  const day = number(req.body.day);
+  const result = recordBoutCall(db, req.competition, {
+    day, court: number(req.body.court || 0), fromNumber: number(req.body.from), toNumber: number(req.body.to), userId: req.user.id,
+  });
+  if (!result.ok) req.flash('error', result.error);
+  else {
+    const call = { from_number: number(req.body.from), to_number: number(req.body.to), court: number(req.body.court || 0) };
+    req.logActivity('bouts.called', `Called ${callText(call)}, day ${day}: ${req.competition.name}`, req.competition.id);
+    req.flash('success', `Called ${callText(call)}.`);
+  }
+  return res.redirect(callsPath(req.competition, Number.isInteger(day) ? day : null));
 });
 
 // Names the bout by its place in the schedule, plus who's in it.

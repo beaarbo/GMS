@@ -11,7 +11,7 @@
     <p class="sub"><%= competition.name %></p>
   </div>
   <div class="actions">
-    <% if (total > 0 || poomsaeDivisions) { %><a class="btn secondary" href="/screens/<%= competition.id %>">Court screens</a><a class="btn secondary" href="/competitions/<%= competition.id %>/results">Overall results</a><a class="btn secondary" href="/admin/competitions/<%= competition.id %>/results/export.xlsx">Download results (Excel)</a><% } %>
+    <% if (total > 0 || poomsaeDivisions) { %><% if (total > 0) { %><a class="btn secondary" href="/admin/competitions/<%= competition.id %>/calls">Bout calling</a><% } %><a class="btn secondary" href="/screens/<%= competition.id %>">Court screens</a><a class="btn secondary" href="/competitions/<%= competition.id %>/results">Overall results</a><a class="btn secondary" href="/admin/competitions/<%= competition.id %>/results/export.xlsx">Download results (Excel)</a><% } %>
   </div>
 </div>
 

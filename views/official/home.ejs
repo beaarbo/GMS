@@ -27,6 +27,7 @@
             <a class="btn<%= c.hasBouts ? ' secondary' : '' %>" href="/admin/competitions/<%= c.id %>/weigh-in">Weigh-in</a>
             <% if (c.hasBouts) { %>
               <a class="btn" href="/admin/competitions/<%= c.id %>/results">Record results</a>
+              <a class="btn secondary" href="/admin/competitions/<%= c.id %>/calls">Bout calling</a>
               <a class="btn secondary" href="/screens/<%= c.id %>">Court screens</a>
             <% } else { %>
               <span class="hint">Results open once the organiser draws the bout list.</span>
