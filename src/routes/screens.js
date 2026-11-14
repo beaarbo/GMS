@@ -114,6 +114,50 @@ router.get('/:id(\\d+)/:day(\\d+)/:court(\\d+)', screenCompetition('kyorugi'), (
   });
 });
 
+// What a court is doing: the first unfinished item that can start (a bout once
+// both sides are known, a performer any time) and the one after it. done: a
+// winner, no contest, or a score.
+function courtState(items) {
+  const isDone = (i) => (i.kind === 'perform' ? i.done : Boolean(i.winner || i.noContest));
+  const waiting = items.filter((i) => !isDone(i));
+  const now = waiting.find((i) => i.kind === 'perform' || (i.blue && i.red)) || null;
+  return { now, next: waiting.find((i) => i !== now) || null, done: items.length - waiting.length, total: items.length };
+}
+
+// The main screen: every court of one day side by side, kyorugi then poomsae,
+// each with what's on now and next, and the latest bout call along the bottom.
+// For a big screen in the hall; live like the court screens.
+router.get('/:id(\\d+)/main/:day(\\d+)', screenCompetition('any'), (req, res) => {
+  const { db } = req.app.locals;
+  const competition = req.competition;
+  const day = Number(req.params.day);
+  const courts = [];
+  if (kyorugiVisible(req.user, competition)) {
+    const bouts = listBouts(db, competition.id).filter((b) => b.day === day);
+    [...new Set(bouts.map((b) => b.court))].sort((a, b) => a - b).forEach((court) => {
+      courts.push({ kind: 'kyorugi', court, label: `Court ${court}`, ...courtState(bouts.filter((b) => b.court === court)) });
+    });
+  }
+  if (poomsaeVisible(req.user, competition)) {
+    const items = poomsaeCourtItems(db, competition, { published: !isStaff(req.user) }).filter((i) => i.day === day);
+    [...new Set(items.map((i) => i.court))].sort((a, b) => a - b).forEach((court) => {
+      courts.push({ kind: 'poomsae', court, label: `Poomsae court ${court}`, ...courtState(items.filter((i) => i.court === court)) });
+    });
+  }
+  if (courts.length === 0) return notFound(res);
+  const [current] = kyorugiVisible(req.user, competition) ? listBoutCalls(db, competition.id, day, 1) : [];
+  res.render('screens/main', {
+    title: 'Main screen',
+    competition,
+    day,
+    dayLabel: dayLabelOf(getEventDates(db, competition.id), day),
+    courts,
+    call: current ? { ...current, at: callTime(current), text: callText(current), bouts: calledBouts(db, competition.id, current) } : null,
+    refreshSeconds: REFRESH_SECONDS,
+    updatedAt: updatedAt(),
+  });
+});
+
 // The call screen: the bouts staff last called for one day, for the warm-up
 // area, with the call before it. Live like the court screens.
 router.get('/:id(\\d+)/calls/:day(\\d+)', screenCompetition('kyorugi'), (req, res) => {
@@ -191,5 +235,6 @@ function changeStream(req, res) {
 router.get('/:id(\\d+)/:day(\\d+)/:court(\\d+)/events', screenCompetition('kyorugi'), changeStream);
 router.get('/:id(\\d+)/poomsae/:day(\\d+)/:court(\\d+)/events', screenCompetition('poomsae'), changeStream);
 router.get('/:id(\\d+)/calls/:day(\\d+)/events', screenCompetition('kyorugi'), changeStream);
+router.get('/:id(\\d+)/main/:day(\\d+)/events', screenCompetition('any'), changeStream);
 
 module.exports = router;

@@ -17,6 +17,11 @@
   <section class="section">
     <div class="section-head"><h2><%= d.label %></h2></div>
     <div class="card-grid">
+      <article class="card">
+        <h3 class="card-title">Main screen</h3>
+        <p class="sub">Every court at once, with the bout call along the bottom</p>
+        <div class="actions"><a class="btn" href="/screens/<%= competition.id %>/main/<%= d.day %>">Open screen</a></div>
+      </article>
       <% if (d.courts.some((c) => c.kind === 'kyorugi')) { %>
         <article class="card">
           <h3 class="card-title">Call screen</h3>

@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <%# With JavaScript the page updates live as results and calls come in. Without it, it reloads itself. %>
+  <noscript><meta http-equiv="refresh" content="<%= refreshSeconds %>"></noscript>
+  <title>All courts · <%= competition.name %></title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body class="screen main-screen" data-live-events="/screens/<%= competition.id %>/main/<%= day %>/events">
+<% const side = (item, color) => item[color] || { name: item[`${color}Placeholder`] || 'To be decided', club: '' }; %>
+<header class="screen-head">
+  <div>
+    <p class="screen-court">All courts</p>
+    <p class="screen-sub"><%= competition.name %> · <%= dayLabel %></p>
+  </div>
+  <div class="screen-sub screen-right">
+    <span class="screen-status" id="screen-status" hidden></span>
+    <span data-live-part="progress">Updated <%= updatedAt %></span>
+  </div>
+</header>
+
+<main class="screen-main" data-live-part="main">
+  <div class="main-courts">
+    <% courts.forEach((c) => { %>
+      <section class="main-tile">
+        <div class="main-tile-head">
+          <h2 class="screen-label"><%= c.label %></h2>
+          <span class="screen-sub"><%= c.done %> of <%= c.total %> done</span>
+        </div>
+        <% if (!c.now) { %>
+          <p class="screen-empty"><%= c.next ? 'Waiting for earlier results.' : 'All finished.' %></p>
+        <% } else if (c.now.kind === 'perform') { %>
+          <p class="main-now"><span class="screen-number"><%= c.now.place %></span><span class="screen-sub"><%= c.now.time %> · performing</span></p>
+          <p class="main-name"><%= c.now.name %></p>
+          <p class="screen-sub"><%= c.now.club %></p>
+        <% } else { const blue = side(c.now, 'blue'); const red = side(c.now, 'red'); %>
+          <p class="main-now"><span class="screen-number"><%= c.now.number %></span><span class="screen-sub"><%= c.now.time %> · Bout <%= c.now.number %></span></p>
+          <p class="main-name blue-text"><%= blue.name %></p>
+          <p class="screen-sub"><%= blue.club %></p>
+          <p class="main-name red-text"><%= red.name %></p>
+          <p class="screen-sub"><%= red.club %></p>
+        <% } %>
+        <% if (c.next) { %>
+          <p class="main-next">Next: <%= c.next.kind === 'perform' ? `${c.next.name} (${c.next.time})` : `Bout ${c.next.number} · ${side(c.next, 'blue').name} vs ${side(c.next, 'red').name}` %></p>
+        <% } %>
+      </section>
+    <% }) %>
+  </div>
+
+  <%# The latest bout call, for the warm-up area. %>
+  <section class="main-call">
+    <% if (!call) { %>
+      <p class="screen-label">Now calling</p>
+      <p class="screen-empty">No bouts called yet.</p>
+    <% } else { %>
+      <div class="main-call-head">
+        <p class="screen-label">Now calling · <%= call.at %></p>
+        <p class="main-call-text"><%= call.text[0].toUpperCase() + call.text.slice(1) %></p>
+      </div>
+      <ol class="main-call-list">
+        <% call.bouts.forEach((b) => { %>
+          <li class="<%= b.winner || b.noContest ? 'screen-done' : '' %>"><span class="screen-number"><%= b.number %></span><span>Court <%= b.court %> · <%= b.time %><br><span class="blue-text"><%= side(b, 'blue').name %></span> vs <span class="red-text"><%= side(b, 'red').name %></span></span></li>
+        <% }) %>
+      </ol>
+    <% } %>
+  </section>
+</main>
+</body>
+</html>

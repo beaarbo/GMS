@@ -10,6 +10,7 @@
   <% if (day) { %>
     <div class="actions">
       <a class="btn" href="/screens/<%= competition.id %>/calls/<%= day %>">Open call screen</a>
+      <a class="btn secondary" href="/screens/<%= competition.id %>/main/<%= day %>">Open main screen</a>
       <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/results">Results</a>
     </div>
   <% } %>

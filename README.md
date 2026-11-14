@@ -120,6 +120,8 @@ After closing registration, open **Bout list** on the competition's card on the 
 
 **Bout calling** (on the Results page, and **Competition day** for officials) calls the next bouts to the warm-up area. Click **Call next** for the next five bout numbers after the last call, or choose a court (or every court) and a range of bout numbers. Bout numbers restart on each court every day, so "6 to 10" on every court calls bouts 6 to 10 of each court. The **call screen** (`/screens/:id/calls/:day`, listed with the court screens) shows the latest call in large type, with each called bout's court, time and athletes, and the call before it; it updates live like the court screens. Kyorugi bouts only.
 
+**The main screen** (`/screens/:id/main/:day`, the first card on the court screens list) is for a big screen in the hall: every court of the day side by side, kyorugi then poomsae, each showing the bout or performer on now with both athletes and clubs, and what's next, with the latest bout call along the bottom. It updates live too.
+
 While a bout list exists, approvals can't change and registration can't reopen. Delete the list first, because any change to the fighters would make the draw wrong.
 
 **Change this division**, under each bracket, edits one division without redrawing the rest, as long as it has no results yet:

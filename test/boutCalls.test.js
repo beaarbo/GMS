@@ -78,10 +78,20 @@ test('staff call bout numbers, and the call screen shows the called bouts live',
   assert.match(later, /Called before: bouts 1 to 2 on every court/);
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM activity_log WHERE action = 'bouts.called'").get().n, 2);
 
+  // The main screen: every court with what's on now and next, and the latest call along the bottom.
+  const main = (await admin.get(`/screens/${id}/main/1`)).text;
+  assert.equal((main.match(/class="main-tile"/g) || []).length, 1, 'one court');
+  assert.match(main, /<h2 class="screen-label">Court 1<\/h2>/);
+  assert.match(main, /Bout 1<\/span>/, 'bout 1 is on now');
+  assert.match(main, /Next: Bout 2/);
+  assert.match(main, /class="main-call-text">Bouts 3 to 4 on every court</);
+  assert.equal((await admin.get(`/screens/${id}/main/9`)).status, 404, 'no such day');
+
   // Coaches see the published screen, but can't call.
   await createCoachAccount(db, { full_name: 'Coach', phone: '', email: 'coach@test.test', password: PASSWORD });
   db.prepare("UPDATE users SET club_id = ? WHERE email = 'coach@test.test'").run(clubId);
   const coach = await login(app, 'coach@test.test');
   assert.equal((await coach.get(screen)).status, 200);
+  assert.equal((await coach.get(`/screens/${id}/main/1`)).status, 200, 'and the main screen');
   assert.notEqual((await coach.get(calls)).status, 200);
 });

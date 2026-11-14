@@ -826,3 +826,30 @@ body.mat { background: var(--page); }
 .screen-call-courts { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
 .screen-list .screen-done { opacity: 0.5; }
 .screen-previous { margin-top: var(--space-5); }
+/* The main screen: every court side by side, the bout call along the bottom. */
+.main-courts { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--space-4); }
+.main-tile { background: #111a2e; border-radius: var(--radius-lg); padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-1); }
+.main-tile-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-2); margin-bottom: var(--space-2); }
+.main-tile-head .screen-label { margin: 0; }
+.main-now { display: flex; align-items: center; gap: var(--space-3); margin: 0 0 var(--space-2); }
+.main-name { font-size: 1.6rem; font-weight: 700; line-height: 1.15; margin: var(--space-1) 0 0; }
+.main-tile .screen-sub { margin: 0; }
+.main-next { margin: auto 0 0; padding-top: var(--space-3); border-top: 1px solid #1e293b; color: #94a3b8; font-size: 1rem; }
+.main-call { margin-top: var(--space-5); background: #1d4ed8; border-radius: var(--radius-lg); padding: var(--space-4) var(--space-5); display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4) var(--space-6); }
+.main-call .screen-label, .main-call .screen-empty { color: #e3eaff; margin: 0; }
+.main-call-text { font-size: 2rem; font-weight: 800; margin: 0; }
+.main-call-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-5); font-size: 1rem; }
+.main-call-list li { display: flex; align-items: center; gap: var(--space-2); }
+.main-call-list .blue-text, .main-call-list .red-text { color: #ffffff; font-weight: 700; }
+/* On the main screen the courts fill the TV and the call sits at the bottom. */
+.main-screen .screen-main { display: flex; flex-direction: column; min-height: calc(100vh - 140px); box-sizing: border-box; }
+.main-screen .main-courts { flex: 1; grid-auto-rows: 1fr; }
+.main-screen .main-call { margin-top: var(--space-5); }
+.main-screen .main-tile .screen-label { font-size: 1.3rem; }
+.main-screen .main-tile .screen-sub { font-size: 1.15rem; }
+.main-screen .main-now .screen-number { font-size: 1.8rem; padding: 4px 14px; }
+.main-screen .main-name { font-size: clamp(1.6rem, 2.6vw, 3rem); }
+.main-screen .main-next { font-size: 1.25rem; }
+.main-screen .main-call-text { font-size: clamp(2rem, 3vw, 3.2rem); }
+.main-screen .main-call-list { font-size: 1.25rem; }
+.main-screen .main-call .screen-label { font-size: 1.2rem; }
