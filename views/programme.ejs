@@ -18,7 +18,12 @@
   <section class="card" id="my-club">
     <div class="section-head">
       <h2>Your competitors</h2>
-      <a class="btn secondary" href="/competitions/<%= competition.id %>/bouts/my-club.pdf<%= filters.event ? `?event=${filters.event}` : '' %>">Download my competitors (PDF)</a>
+      <%# One PDF per event, so a coach can print the kyorugi and poomsae lists separately. %>
+      <div class="actions">
+        <% [['kyorugi', 'Kyorugi', hasKyorugi(competition)], ['poomsae', 'Poomsae', hasPoomsae(competition)]].filter(([, , has]) => has).forEach(([value, label]) => { %>
+          <a class="btn secondary" href="/competitions/<%= competition.id %>/bouts/my-club.pdf?event=<%= value %>">Download <%= label.toLowerCase() %> (PDF)</a>
+        <% }) %>
+      </div>
     </div>
     <% if (competitors.length === 0) { %>
       <p class="empty">None of your club's competitors are on the published bout list<%= filters.event ? ' for this event' : '' %> yet.</p>

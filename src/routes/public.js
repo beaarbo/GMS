@@ -154,10 +154,12 @@ router.get('/competitions/:id(\\d+)/bouts/my-club.pdf', (req, res) => {
   const filters = programmeFilters(req, competition);
   const club = db.prepare('SELECT name FROM clubs WHERE id = ?').get(req.user.club_id);
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `attachment; filename="my-club-competition-${competition.id}.pdf"`);
+  res.setHeader('Content-Disposition', `attachment; filename="my-club-${filters.event ? `${filters.event}-` : ''}competition-${competition.id}.pdf"`);
   return writeClubCompetitorsPdf(res, {
     competition,
     clubName: club ? club.name : 'Your club',
+    // Kyorugi or Poomsae, named in the title; null in a single-event competition or with both.
+    event: filters.event ? `${filters.event[0].toUpperCase()}${filters.event.slice(1)}` : null,
     rows: clubCompetitors(db, competition, req.user.club_id, { event: filters.event }),
     dateLabel: dateLabel(db, competition),
     printedAt: new Date().toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),

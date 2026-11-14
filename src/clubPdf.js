@@ -39,12 +39,13 @@ function drawHeaderRow(doc, y) {
   return bottom;
 }
 
-function writeClubCompetitorsPdf(stream, { competition, clubName, rows, dateLabel, printedAt }) {
-  const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: MARGIN, info: { Title: `${clubName} - ${competition.name}` } });
+function writeClubCompetitorsPdf(stream, { competition, clubName, event = null, rows, dateLabel, printedAt }) {
+  const title = `${clubName}: our ${event ? `${event.toLowerCase()} ` : ''}competitors`;
+  const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: MARGIN, info: { Title: `${title} - ${competition.name}` } });
   doc.pipe(stream);
   const pageBottom = doc.page.height - MARGIN - 18;
 
-  doc.fillColor(INK).font('Helvetica-Bold').fontSize(16).text(`${clubName}: our competitors`, MARGIN, MARGIN);
+  doc.fillColor(INK).font('Helvetica-Bold').fontSize(16).text(title, MARGIN, MARGIN);
   doc.font('Helvetica').fontSize(10).fillColor(MUTED)
     .text(`${competition.name} · ${competition.venue}, ${dateLabel}`, { lineGap: 2 })
     .text(`Printed ${printedAt}. Times and next bouts change as results come in: check the live bout list on the day.`);

@@ -61,8 +61,9 @@ test('My club on the bout list lists only the coach\'s own competitors, kyorugi 
   assert.doesNotMatch(mine, /<h2>Running order<\/h2>/);
 
   // The same list as a PDF to print, for the coach only.
-  assert.match(mine, new RegExp(`href="/competitions/${id}/bouts/my-club.pdf">Download my competitors \\(PDF\\)`));
-  const pdf = await coach.get(`/competitions/${id}/bouts/my-club.pdf`).buffer(true).parse((res, done) => {
+  assert.match(mine, new RegExp(`href="/competitions/${id}/bouts/my-club.pdf\\?event=kyorugi">Download kyorugi \\(PDF\\)`));
+  assert.match(mine, new RegExp(`href="/competitions/${id}/bouts/my-club.pdf\\?event=poomsae">Download poomsae \\(PDF\\)`));
+  const pdf = await coach.get(`/competitions/${id}/bouts/my-club.pdf?event=poomsae`).buffer(true).parse((res, done) => {
     const chunks = [];
     res.on('data', (c) => chunks.push(c));
     res.on('end', () => done(null, Buffer.concat(chunks)));
@@ -70,6 +71,7 @@ test('My club on the bout list lists only the coach\'s own competitors, kyorugi 
   assert.equal(pdf.status, 200);
   assert.equal(pdf.headers['content-type'], 'application/pdf');
   assert.equal(pdf.body.subarray(0, 4).toString(), '%PDF');
+  assert.match(pdf.headers['content-disposition'], new RegExp(`my-club-poomsae-competition-${id}\\.pdf`));
   assert.equal((await request(app).get(`/competitions/${id}/bouts/my-club.pdf`)).status, 404, 'visitors have no club');
 
   // The event tab narrows it; everyone else gets the normal bout list.
