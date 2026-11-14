@@ -67,6 +67,11 @@ test('staff call bout numbers, and the call screen shows the called bouts live',
   // Officials call too; the screen shows the newest call and the one before.
   assert.ok(await createOfficialAccount(db, { full_name: 'Olive', email: 'olive@test.test', password: PASSWORD }));
   const official = await login(app, 'olive@test.test');
+  // An official's menu is just Competition day (and their account).
+  const officialHome = (await official.get('/official')).text;
+  const menu = officialHome.slice(officialHome.indexOf('<nav class="nav"'), officialHome.indexOf('</nav>'));
+  assert.match(menu, /href="\/official"[^>]*>Competition day</);
+  assert.doesNotMatch(menu, />Competitions<|>News</);
   await call(official, { from: 3, to: 4 });
   const later = (await admin.get(screen)).text;
   assert.match(later, /Bouts 3 to 4 on every court/);
