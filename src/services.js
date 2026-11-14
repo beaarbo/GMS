@@ -10,10 +10,10 @@ const {
   parseWeightLimits,
   formatDay,
 } = require('./divisions');
-const { buildBracket, roundsFromSlots, seededSlots, slotsAreValid, assignCourts, scheduleCourt, formatTime, layoutBracket, computeMedals } = require('./bracket');
+const { buildBracket, roundsFromSlots, seededSlots, slotsAreValid, assignCourts, scheduleCourt, formatTime, layoutBracket, computeMedals, clubAthleteSummary } = require('./bracket');
 const {
   placeEntry, POOMSAE_EVENTS, POOMSAE_GENDERS, poomsaeDivisionTitle, rankEntries, divisionMode, bracketEntrants, poomsaeMedalists, schedulePoomsae, hasKyorugi, hasPoomsae, judgesScore,
-  defaultDesignated, pickPoomsae,
+  defaultDesignated, pickPoomsae, entryResult,
 } = require('./poomsae');
 const { logActivity } = require('./activity');
 const { documentLabel, documentTypeFor } = require('./documents');
@@ -946,6 +946,47 @@ function competitionProgramme(db, competition, { published = false, event = null
   }
   return parts.sort((a, b) => (a.day || 99) - (b.day || 99) || a.courtOrder - b.courtOrder
     || (a.court || 99) - (b.court || 99) || String(a.start).localeCompare(String(b.start)));
+}
+
+// One club's competitors on the published bout list, for the coach's My club
+// view: one row per kyorugi athlete or poomsae entry with its division, day,
+// court, what's next (a bout, or a place in the performance order), the drawn
+// poomsae and how they stand. Only published stages appear, as on the bout list.
+function clubCompetitors(db, competition, clubId, { event = null } = {}) {
+  const rows = [];
+  if (event !== 'poomsae' && hasKyorugi(competition) && competition.bouts_published_at) {
+    clubAthleteSummary(loadBoutList(db, competition.id), clubId).forEach((a) => rows.push({
+      name: a.name, event: 'Kyorugi', division: a.title, day: a.day, dayLabel: a.dayLabel,
+      court: a.court ? `Court ${a.court}` : '–', next: a.nextNumber ? `Bout ${a.nextNumber}` : '–', time: a.nextTime || '', poomsae: null, status: a.status,
+    }));
+  }
+  const lists = Boolean(competition.poomsae_published_at);
+  const brackets = Boolean(competition.poomsae_brackets_published_at);
+  if (event !== 'kyorugi' && hasPoomsae(competition) && (lists || brackets)) {
+    const entries = listPoomsaeEntries(db, competition.id);
+    const dates = getEventDates(db, competition.id);
+    const dayLabel = (day) => (day && dates[day - 1] ? `${day} (${formatDay(dates[day - 1])})` : '–');
+    poomsaeDivisions(entries, competition, loadPoomsaeBrackets(db, competition.id, entries), loadPoomsaeSettings(db, competition.id)).forEach((d) => {
+      d.entries.filter((e) => e.club_id === clubId && e.status === 'approved').forEach((e) => {
+        const inBracket = brackets && d.bouts && d.bouts.some((b) => [b.blue, b.red].some((side) => side && side.registrationId === e.id));
+        const status = entryResult(e, d) || 'Waiting';
+        if (inBracket) {
+          const next = d.bouts.find((b) => !b.isBye && !b.winner && [b.blue, b.red].some((side) => side && side.registrationId === e.id));
+          rows.push({
+            name: e.names, event: 'Poomsae', division: d.title, day: d.day, dayLabel: dayLabel(d.day),
+            court: d.court ? `Poomsae court ${d.court}` : '–', next: next ? `Bout ${next.number}` : '–', time: next ? next.time : '', poomsae: d.bracketPoomsae, status,
+          });
+        } else if (lists && e.perform_order !== null) {
+          rows.push({
+            name: e.names, event: 'Poomsae', division: d.title, day: d.listDay, dayLabel: dayLabel(d.listDay),
+            court: d.listCourt ? `Poomsae court ${d.listCourt}` : '–', next: e.score === null ? `Performs ${e.perform_order} of ${d.order.length}` : '–',
+            time: e.score === null ? e.perform_time || '' : '', poomsae: d.listPoomsae, status,
+          });
+        }
+      });
+    });
+  }
+  return rows.sort((a, b) => (a.day || 99) - (b.day || 99) || String(a.time || '99').localeCompare(String(b.time || '99')) || a.name.localeCompare(b.name));
 }
 
 // The competition's final results: every division with its medallists (gold
@@ -2070,6 +2111,7 @@ module.exports = {
   listDesignatedPoomsae,
   saveDesignatedPoomsae,
   drawDivisionPoomsae,
+  clubCompetitors,
   getEventDates,
   saveEventDates,
   createCompetition,

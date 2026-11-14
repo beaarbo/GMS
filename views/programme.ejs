@@ -13,10 +13,43 @@
 
 <%- include('partials/programme_nav') %>
 
+<% if (competitors) { %>
+  <%# My club: the coach's competitors in time order, before their divisions. %>
+  <section class="card" id="my-club">
+    <h2>Your competitors</h2>
+    <% if (competitors.length === 0) { %>
+      <p class="empty">None of your club's competitors are on the published bout list<%= filters.event ? ' for this event' : '' %> yet.</p>
+    <% } else { %>
+      <p class="sub"><%= competitors.length %> on the bout list, in the order they compete. Their divisions are below.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Competitor</th><th>Event</th><th>Division</th><th>Day</th><th>Court</th><th>Next</th><th>Time</th><th>Poomsae</th><th>Status</th></tr></thead>
+          <tbody>
+            <% competitors.forEach((c) => { %>
+              <tr>
+                <td><strong><%= c.name %></strong></td>
+                <td><%= c.event %></td>
+                <td><%= c.division %></td>
+                <td class="nowrap"><%= c.dayLabel %></td>
+                <td class="nowrap"><%= c.court %></td>
+                <td class="nowrap"><%= c.next %></td>
+                <td class="nowrap"><%= c.time || '–' %></td>
+                <td><%= c.poomsae ? c.poomsae.join(' · ') : '–' %></td>
+                <td><%= c.status %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
+  </section>
+<% } %>
+
 <% if (parts.length === 0) { %>
-  <section class="card"><p class="empty">Nothing is published for these filters yet.</p></section>
+  <% if (!competitors) { %><section class="card"><p class="empty">Nothing is published for these filters yet.</p></section><% } %>
 <% } else { %>
   <% const days = [...new Set(parts.map((p) => p.dayLabel || ''))]; %>
+  <% if (!competitors) { %>
   <section class="card">
     <h2>Running order</h2>
     <% days.forEach((day) => { const list = parts.filter((p) => (p.dayLabel || '') === day); %>
@@ -38,6 +71,7 @@
       </div>
     <% }) %>
   </section>
+  <% } %>
 
   <% parts.forEach((p) => { %>
     <% if (p.kind === 'kyorugi') { %>

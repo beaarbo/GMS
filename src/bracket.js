@@ -363,6 +363,7 @@ function clubAthleteSummary(divisions, clubId) {
       rows.push({
         name: fighter.name,
         title: division.title,
+        day: division.day,
         dayLabel: division.dayLabel,
         court: division.court,
         nextNumber: next ? next.number : null,

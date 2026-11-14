@@ -1,6 +1,6 @@
 const express = require('express');
 const {
-  loadDivisionSetup, listNews, getNews, today, listCompetitionPhotos, getCompetitionPhoto, getCompetitionLogo, listCompetitionFiles, getCompetitionFile,
+  loadDivisionSetup, listNews, getNews, today, listCompetitionPhotos, getCompetitionPhoto, clubCompetitors, getCompetitionLogo, listCompetitionFiles, getCompetitionFile,
   getEventDates, competitionResults, competitionProgramme,
 } = require('../services');
 const { formatEventDates } = require('../divisions');
@@ -129,6 +129,8 @@ router.get('/competitions/:id(\\d+)/bouts', (req, res) => {
     title: `${competition.name}: bout list`,
     ...programmeLocals(req, competition, filters, 'bouts'),
     parts: forVisitor(req, competitionProgramme(db, competition, { published: true, ...filters })),
+    // My club: the coach's own competitors, listed first.
+    competitors: filters.clubId ? clubCompetitors(db, competition, filters.clubId, { event: filters.event }) : null,
   });
 });
 
