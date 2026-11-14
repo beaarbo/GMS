@@ -892,7 +892,7 @@ function poomsaeCourtItems(db, competition, { published = false } = {}) {
     if (showLists && d.listCourt) {
       d.order.forEach((e) => items.push({
         kind: 'perform', id: e.id, day: d.listDay, court: d.listCourt, time: e.perform_time || '', title: d.title,
-        name: e.names, club: e.club_label, score: e.score, done: e.score !== null, place: e.perform_order, of: d.order.length, poomsae: d.listPoomsae,
+        name: e.names, club: e.club_label, clubId: e.club_id, score: e.score, done: e.score !== null, place: e.perform_order, of: d.order.length, poomsae: d.listPoomsae,
       }));
     }
     if (showBrackets && d.bouts && d.court) {

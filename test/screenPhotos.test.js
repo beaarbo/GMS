@@ -5,7 +5,7 @@ const { openDb } = require('../src/db');
 const { createApp } = require('../src/app');
 const {
   ensureAdmin, createCompetition, createClub, enterFighter, loadDivisionSetup, generateBoutList,
-  saveFighterPhoto, createCoachAccount,
+  saveFighterPhoto, createCoachAccount, saveClubIcon,
 } = require('../src/services');
 const { divisionOptions, findWeightClass } = require('../src/divisions');
 const { saveSettings } = require('../src/settings');
@@ -52,6 +52,18 @@ test('athlete photos show on Review registrations and on staff court screens, ne
   const { day, court } = db.prepare('SELECT day, court FROM bouts WHERE competition_id = ? AND bout_number IS NOT NULL').get(id);
   const screen = `/screens/${id}/${day}/${court}`;
   assert.match((await admin.get(screen)).text, photo, 'staff see photos on the screen');
+
+  // The club's icon beside its name in each corner, and on the athlete cards.
+  const onePixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+  saveClubIcon(db, clubId, { data: onePixel, contentType: 'image/png' });
+  assert.match((await admin.get(screen)).text, new RegExp(`class="screen-club">\\s*<img class="club-icon md" src="/club-icons/${clubId}\\?v=`));
+  const cards = await admin.get(`/admin/competitions/${id}/cards.pdf`).buffer(true).parse((res, done) => {
+    const chunks = [];
+    res.on('data', (c) => chunks.push(c));
+    res.on('end', () => done(null, Buffer.concat(chunks)));
+  });
+  assert.equal(cards.status, 200);
+  assert.ok(cards.body.length > 1000 && cards.body.includes('/Subtype /Image'), 'the icon is drawn');
 
   await createCoachAccount(db, { full_name: 'Coach', phone: '', email: 'coach@test.test', password: PASSWORD });
   db.prepare("UPDATE users SET club_id = ? WHERE email = 'coach@test.test'").run(clubId);

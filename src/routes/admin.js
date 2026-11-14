@@ -63,6 +63,7 @@ const {
   REGISTRATION_SELECT,
   DIVISION_ORDER,
   listDesignatedPoomsae,
+  getClubIcon,
 } = require('../services');
 const { sendDocument, detectIconType, detectAttachmentType, safeFilename, MAX_ICON_BYTES, MAX_NEW_COMPETITION_FILES, MAX_COMPETITION_PHOTOS, MAX_COMPETITION_PHOTO_BYTES } = require('../documents');
 const { ACTIVITY_CATEGORIES, listActivity, countActivity, formatActivityTime } = require('../activity');
@@ -1171,7 +1172,13 @@ router.get('/competitions/:id(\\d+)/cards.pdf', (req, res) => {
     const photo = db.prepare('SELECT data FROM fighter_photos WHERE fighter_id = ?').get(fighterId);
     return photo ? photo.data : null;
   };
-  return writeAthleteCards(res, { competition: req.competition, athletes, publicUrl: notify.publicUrl, photoFor });
+  // One read per club, kept for the whole PDF: a club's athletes share its icon.
+  const icons = new Map();
+  const clubIconFor = (id) => {
+    if (!icons.has(id)) icons.set(id, (getClubIcon(db, id) || {}).data || null);
+    return icons.get(id);
+  };
+  return writeAthleteCards(res, { competition: req.competition, athletes, publicUrl: notify.publicUrl, photoFor, clubIconFor });
 });
 
 router.get('/fighters/:id(\\d+)/document', (req, res) => {
