@@ -23,19 +23,15 @@
           <% if (c.hasBouts) { %><span>Results <strong><%= c.bouts.done %>/<%= c.bouts.total %></strong></span><% } %>
         </p>
         <div class="actions">
-          <% if (hasKyorugi(c)) { %>
-            <a class="btn<%= c.hasBouts ? ' secondary' : '' %>" href="/admin/competitions/<%= c.id %>/weigh-in">Weigh-in</a>
-            <% if (c.hasBouts) { %>
-              <a class="btn" href="/admin/competitions/<%= c.id %>/results">Record results</a>
-              <a class="btn secondary" href="/admin/competitions/<%= c.id %>/calls">Bout calling</a>
-              <a class="btn secondary" href="/screens/<%= c.id %>">Court screens</a>
-            <% } else { %>
-              <span class="hint">Results open once the organiser draws the bout list.</span>
-            <% } %>
-          <% } %>
-          <% if (hasPoomsae(c)) { %>
-            <a class="btn" href="/admin/competitions/<%= c.id %>/results?event=poomsae">Poomsae scores</a>
-            <% if (!c.hasBouts) { %><a class="btn secondary" href="/admin/competitions/<%= c.id %>/calls">Bout calling</a><a class="btn secondary" href="/screens/<%= c.id %>">Court screens</a><% } %>
+          <%# One Results page records kyorugi bouts and poomsae scores together, with a tab for each event. %>
+          <% const ready = c.hasBouts || hasPoomsae(c); %>
+          <% if (hasKyorugi(c)) { %><a class="btn<%= ready ? ' secondary' : '' %>" href="/admin/competitions/<%= c.id %>/weigh-in">Weigh-in</a><% } %>
+          <% if (ready) { %>
+            <a class="btn" href="/admin/competitions/<%= c.id %>/results">Record results</a>
+            <a class="btn secondary" href="/admin/competitions/<%= c.id %>/calls">Bout calling</a>
+            <a class="btn secondary" href="/screens/<%= c.id %>">Court screens</a>
+          <% } else { %>
+            <span class="hint">Results open once the organiser draws the bout list.</span>
           <% } %>
         </div>
       </article>

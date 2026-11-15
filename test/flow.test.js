@@ -2263,7 +2263,10 @@ test('poomsae: coaches enter individuals, pairs and teams, the admin approves, a
   db.prepare("UPDATE competitions SET status = 'closed' WHERE id = ?").run(compId);
   assert.ok(await createOfficialAccount(db, { full_name: 'Olive', email: 'olive@test.test', password: PASSWORD }));
   const official = await login(app, 'olive@test.test');
-  assert.match((await official.get('/official')).text, new RegExp(`href="${review.replace(/poomsae$/, 'results')}\\?event=poomsae">Poomsae scores`));
+  // One Record results button covers poomsae scores too.
+  const officialHome = (await official.get('/official')).text;
+  assert.match(officialHome, new RegExp(`href="${review.replace(/poomsae$/, 'results')}">Record results`));
+  assert.doesNotMatch(officialHome, />Poomsae scores</);
   await score(official, anaSolo, '8.5');
   await score(official, eveSolo, '8.9');
   await score(official, eveSolo, '11');
