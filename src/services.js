@@ -969,7 +969,8 @@ function recordBoutCall(db, competition, { day, court = 0, fromNumber, toNumber,
 
 // called_at is UTC, as SQLite's datetime('now') gives; shown in the site's time zone.
 const callTime = (call) => new Date(`${call.called_at.replace(' ', 'T')}Z`).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-const callText = (call) => `bouts ${call.from_number}${call.to_number !== call.from_number ? ` to ${call.to_number}` : ''}${call.court ? ` on court ${call.court}` : ' on every court'}`;
+// "bouts 1-4", "bout 3", or with one court "bouts 1-4 on court 2"; no court means every court.
+const callText = (call) => (call.to_number !== call.from_number ? `bouts ${call.from_number}-${call.to_number}` : `bout ${call.from_number}`) + (call.court ? ` on court ${call.court}` : '');
 
 // The latest calls of one day, newest first.
 function listBoutCalls(db, competitionId, day, limit = 10) {

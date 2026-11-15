@@ -55,7 +55,7 @@ test('staff call bout numbers, and the call screen shows the called bouts live',
   };
   assert.equal((await call(admin, { from: 1, to: 2 })).headers.location, `${calls}?day=1`);
   const shown = (await admin.get(screen)).text;
-  assert.match(shown, /Bouts 1 to 2 on every court/);
+  assert.match(shown, /Bouts 1-2</);
   assert.equal((shown.match(/class="screen-number">/g) || []).length, 2, 'bouts 1 and 2 only');
   assert.match((await admin.get(calls)).text, /Call next: bouts 3–4/, 'carries on from the last call');
 
@@ -74,8 +74,8 @@ test('staff call bout numbers, and the call screen shows the called bouts live',
   assert.doesNotMatch(menu, />Competitions<|>News</);
   await call(official, { from: 3, to: 4 });
   const later = (await admin.get(screen)).text;
-  assert.match(later, /Bouts 3 to 4 on every court/);
-  assert.match(later, /Called before: bouts 1 to 2 on every court/);
+  assert.match(later, /Bouts 3-4</);
+  assert.match(later, /Called before: bouts 1-2 \(/);
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM activity_log WHERE action = 'bouts.called'").get().n, 2);
 
   // The main screen: every court with what's on now and next, and the latest call along the bottom.
@@ -84,7 +84,7 @@ test('staff call bout numbers, and the call screen shows the called bouts live',
   assert.match(main, /<h2 class="screen-label">Court 1<\/h2>/);
   assert.match(main, /Bout 1<\/span>/, 'bout 1 is on now');
   assert.match(main, /Next: Bout 2/);
-  assert.match(main, /class="main-call-text">Bouts 3 to 4 on every court</);
+  assert.match(main, /class="main-call-text">Bouts 3-4</);
   assert.equal((await admin.get(`/screens/${id}/main/9`)).status, 404, 'no such day');
 
   // Coaches see the published screen, but can't call.

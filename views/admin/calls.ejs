@@ -27,7 +27,7 @@
 
   <section class="card">
     <h2>Call bouts</h2>
-    <p class="sub">Bout numbers start again on each court every day, so calling “6 to 10” on every court calls bouts 6 to 10 of each court.</p>
+    <p class="sub">Bout numbers start again on each court every day, so calling “6-10” on every court calls bouts 6 to 10 of each court.</p>
     <% if (suggest.from <= lastNumber) { %>
       <form method="post" action="/admin/competitions/<%= competition.id %>/calls" class="actions">
         <input type="hidden" name="_csrf" value="<%= csrf %>">
