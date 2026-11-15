@@ -6,12 +6,16 @@
     <p class="sub"><%= competition.name %><%= hasKyorugi(competition) && hasPoomsae(competition) ? ' · kyorugi and poomsae' : '' %></p>
   </div>
   <div class="actions">
-    <% if (hasKyorugi(competition)) { %>
-      <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/divisions">View divisions</a>
-      <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/export.csv">Export approved (CSV)</a>
-    <% } %>
-    <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/entries.xlsx">All entries (Excel)</a>
-    <%- include('../partials/cards_download') %>
+    <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/divisions">View divisions</a>
+    <details class="menu">
+      <summary class="btn secondary">Downloads</summary>
+      <div class="menu-list">
+        <% if (hasKyorugi(competition)) { %><a href="/admin/competitions/<%= competition.id %>/export.csv">Export approved (CSV)</a><% } %>
+        <a href="/admin/competitions/<%= competition.id %>/entries.xlsx">All entries (Excel)</a>
+        <hr>
+        <%- include('../partials/cards_download') %>
+      </div>
+    </details>
   </div>
 </div>
 

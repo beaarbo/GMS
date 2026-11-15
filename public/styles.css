@@ -66,6 +66,7 @@
   --radius: 8px;
   --radius-lg: 12px;
   --shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --menu-shadow: rgba(16, 24, 40, 0.12);
   --focus: 0 0 0 3px rgba(29, 78, 216, 0.25);
   --control-height: 40px;
   --control-height-sm: 32px;
@@ -714,6 +715,7 @@ body.mat { background: var(--page); }
   --ok-fill: #127a4b;
   --ok-fill-hover: #0f683f;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --menu-shadow: rgba(0, 0, 0, 0.5);
   --focus: 0 0 0 3px rgba(127, 163, 255, 0.35);
 }
 @media (prefers-color-scheme: dark) {
@@ -750,6 +752,7 @@ body.mat { background: var(--page); }
     --ok-fill: #127a4b;
     --ok-fill-hover: #0f683f;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --menu-shadow: rgba(0, 0, 0, 0.5);
     --focus: 0 0 0 3px rgba(127, 163, 255, 0.35);
   }
 }
@@ -858,3 +861,33 @@ body.mat { background: var(--page); }
 .main-category { margin: 0 0 var(--space-2); color: #cbd5e1; font-size: 1rem; font-weight: 600; line-height: 1.3; }
 .main-screen .main-category { font-size: 1.15rem; }
 .main-call-list .main-call-category { font-size: 0.9em; color: #e3eaff; }
+
+/* "More" menus: secondary actions folded away. A <details>, so they open without
+   JavaScript; public/app.js closes them on a click elsewhere or Escape. */
+.menu { position: relative; display: inline-block; }
+.menu > summary { list-style: none; cursor: pointer; }
+.menu > summary::-webkit-details-marker { display: none; }
+.menu > summary::after { content: "▾"; margin-left: 6px; font-size: 0.8em; }
+.menu-list { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; min-width: 220px; padding: var(--space-2); display: flex; flex-direction: column; gap: 2px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 8px 24px var(--menu-shadow); }
+.menu-list a:not(.btn), .menu-list button:not(.btn) { display: block; width: 100%; box-sizing: border-box; padding: 8px 12px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--ink-2); font: inherit; font-size: var(--text-sm); font-weight: 500; text-align: left; text-decoration: none; cursor: pointer; }
+.menu-list a:not(.btn):hover, .menu-list button:not(.btn):hover, .menu-list a[aria-current="page"] { background: var(--neutral-soft); color: var(--ink); }
+.menu-list form { margin: 0; }
+.menu-list .menu-danger { color: var(--hong); }
+.menu-list hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
+.nav .menu > summary { display: inline-flex; align-items: center; min-height: var(--control-height-sm); padding: 0 var(--space-3); border-radius: var(--radius-sm); color: var(--ink-2); font-size: var(--text-sm); font-weight: 550; }
+.nav .menu > summary:hover, .nav .menu.current > summary { background: var(--neutral-soft); color: var(--ink); }
+.nav .menu-list a { width: 100%; }
+@media (max-width: 640px) {
+  .has-menu-toggle .nav .menu { display: block; }
+  .has-menu-toggle .nav .menu > summary { min-height: var(--control-height); }
+  .has-menu-toggle .nav .menu-list { position: static; box-shadow: none; border: 0; padding: 0 0 0 var(--space-3); }
+}
+.menu-list .cards-download { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-2); padding: 4px 8px; margin: 0; }
+.menu-list .cards-download select { width: 100%; }
+/* A card that folds: its heading stays, its contents open on a click. */
+.fold > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary::after { content: "Show"; flex: none; font-size: var(--text-sm); font-weight: 600; color: var(--chung); }
+.fold[open] > summary::after { content: "Hide"; }
+.fold > summary h2 { margin: 0; }
+.fold[open] > summary { margin-bottom: var(--space-3); }

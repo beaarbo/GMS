@@ -348,3 +348,11 @@ document.addEventListener('change', (event) => {
     ui.done.focus();
   });
 }());
+
+// "More" menus (<details class="menu">): one open at a time, closed by a click
+// elsewhere or Escape. Without JavaScript they still open and close on click.
+(function () {
+  const closeAll = (except) => document.querySelectorAll('details.menu[open]').forEach((menu) => { if (menu !== except) menu.open = false; });
+  document.addEventListener('click', (event) => closeAll(event.target.closest('details.menu')));
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeAll(null); });
+}());

@@ -5,7 +5,13 @@
     <h1>Bout list</h1>
     <p class="sub"><%= competition.name %> · <%= competition.venue %>, <%= eventDatesText(competition) %></p>
   </div>
-  <div class="actions"><a class="btn secondary" href="/admin/competitions/<%= competition.id %>/results">Record results</a><%- include('../partials/cards_download') %></div>
+  <div class="actions">
+    <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/results">Record results</a>
+    <details class="menu">
+      <summary class="btn secondary">Downloads</summary>
+      <div class="menu-list"><%- include('../partials/cards_download') %></div>
+    </details>
+  </div>
 </div>
 
 <% if (bothEvents) { %><nav class="card programme-nav" aria-label="Bout list by event"><%- include('../partials/event_tabs', { page: 'bouts' }) %></nav><% } %>

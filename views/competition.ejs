@@ -79,9 +79,10 @@
   </section>
 <% } %>
 
+<%# The rules, folded away: open each to read it. Visitors mostly want the bout list and results above. %>
 <% if (hasPoomsae(competition)) { %>
-  <section class="card">
-    <h2>Poomsae divisions</h2>
+  <details class="card fold">
+    <summary><h2>Poomsae divisions</h2></summary>
     <p class="sub">Individual, pair (2 athletes) and team (3 athletes) events, divided by age group and then belt group, with boys and girls apart. Pairs and teams of boys and girls together compete as mixed, and are placed by their oldest athlete and highest belt.
       <% if (competition.poomsae_format === 'elimination') { %>Entries face each other in a single-elimination bracket.
       <% } else if (competition.poomsae_format === 'cut') { %>In divisions with more than <%= competition.poomsae_cut %> entries, everyone performs in a score round and the top <%= competition.poomsae_cut %> go into a single-elimination bracket, seeded by their score. Smaller divisions go straight to the bracket.
@@ -96,12 +97,12 @@
         </tbody>
       </table>
     </div>
-  </section>
+  </details>
 <% } %>
 
 <% if (hasKyorugi(competition)) { %>
-<section class="card">
-  <h2>Kyorugi divisions</h2>
+<details class="card fold">
+  <summary><h2>Kyorugi divisions</h2></summary>
   <p class="sub">Fighters are grouped by gender, age, belt and weight.
     <%= competition.age_basis === 'year' ? 'Age is the competition year minus the birth year.' : 'Age is taken on the first day of the event.' %>
     <% if (competition.max_per_club_division) { %>Each club can enter at most <strong><%= competition.max_per_club_division %></strong> athlete<%= competition.max_per_club_division === 1 ? '' : 's' %> per division.<% } %></p>
@@ -120,11 +121,11 @@
       </tbody>
     </table>
   </div>
-</section>
+</details>
 <% } %>
 
-<section class="card">
-  <h2>Belt groups</h2>
+<details class="card fold">
+  <summary><h2>Belt groups</h2></summary>
   <div class="table-wrap">
     <table>
       <thead><tr><th>Group</th><th>Belts</th></tr></thead>
@@ -138,5 +139,5 @@
       </tbody>
     </table>
   </div>
-</section>
+</details>
 <%- include('partials/bottom') %>

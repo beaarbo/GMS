@@ -24,7 +24,8 @@
       </div>
     </div>
     <% const missing = [!competitionLogoUrl(c.id) && 'a logo', !String(c.description || '').trim() && 'a description'].filter(Boolean); %>
-    <% if (missing.length > 0) { %>
+    <%# Only a draft still has to meet these before it can open. %>
+    <% if (c.status === 'draft' && missing.length > 0) { %>
       <div class="notice info">Needs <%= missing.join(' and ') %> before it can open for registration.</div>
     <% } %>
     <% if (hasKyorugi(c)) { %>
@@ -42,33 +43,58 @@
         <span><strong><%= c.poomsae_approved %></strong> approved</span>
       </p>
     <% } %>
+    <%# Every page of the competition, once each: the ones for this stage as buttons, the rest under More. %>
+    <% const base = `/admin/competitions/${c.id}`; %>
+    <% const links = [
+      ['registrations', 'Review registrations', true],
+      ['bouts', 'Bout list', c.status === 'closed'],
+      ['results', 'Results', c.status === 'closed'],
+      ['divisions', 'Divisions', true],
+      ['weigh-in', 'Weigh-in', hasKyorugi(c) && c.status === 'closed'],
+      ['cards.pdf', 'Athlete cards', (c.approved || 0) + (c.poomsae_approved || 0) > 0],
+      ['setup', 'Division setup', true],
+      ['edit', 'Edit', true],
+      ['files', 'Logo and files', true],
+    ].filter(([, , shown]) => shown); %>
+    <% const upFront = { draft: ['edit', 'files'], open: ['registrations'], closed: ['bouts', 'results', 'registrations'] }[c.status] || []; %>
+    <% const entries = (c.pending || 0) + (c.approved || 0) + (c.rejected || 0) + c.poomsae_count; %>
     <div class="actions">
-      <%# Review registrations and Bout list cover kyorugi and poomsae together. %>
-      <a class="btn small" href="/admin/competitions/<%= c.id %>/registrations">Review registrations</a>
-      <% if (c.status === 'closed') { %><a class="btn small" href="/admin/competitions/<%= c.id %>/bouts">Bout list</a><a class="btn small" href="/admin/competitions/<%= c.id %>/results">Results</a><% } %>
-      <a class="btn secondary small" href="/admin/competitions/<%= c.id %>/divisions">Divisions</a>
-      <% if ((c.approved || 0) + (c.poomsae_approved || 0) > 0) { %><a class="btn secondary small" href="/admin/competitions/<%= c.id %>/cards.pdf">Athlete cards</a><% } %>
-      <% if (hasKyorugi(c) && c.status === 'closed') { %><a class="btn secondary small" href="/admin/competitions/<%= c.id %>/weigh-in">Weigh-in</a><% } %>
-      <a class="btn secondary small" href="/admin/competitions/<%= c.id %>/setup">Division setup</a>
-      <a class="btn secondary small" href="/admin/competitions/<%= c.id %>/edit">Edit</a>
-      <a class="btn secondary small" href="/admin/competitions/<%= c.id %>/files">Logo and files</a>
-      <form method="post" action="/admin/competitions/<%= c.id %>/status">
-        <input type="hidden" name="_csrf" value="<%= csrf %>">
-        <% if (c.status === 'open') { %>
-          <button class="btn secondary small" name="status" value="closed" type="submit">Close registration</button>
-        <% } else { %>
-          <button class="btn approve small" name="status" value="open" type="submit"><%= c.status === 'draft' ? 'Publish' : 'Reopen registration' %></button>
-        <% } %>
-      </form>
-      <% const entries = (c.pending || 0) + (c.approved || 0) + (c.rejected || 0) + c.poomsae_count; %>
-      <% if (c.status === 'draft' && entries === 0) { %>
-        <form method="post" action="/admin/competitions/<%= c.id %>/delete" data-confirm="Delete this draft competition? This cannot be undone.">
+      <% if (c.status !== 'closed') { %>
+        <form method="post" action="<%= base %>/status">
           <input type="hidden" name="_csrf" value="<%= csrf %>">
-          <button class="btn danger small" type="submit">Delete</button>
+          <% if (c.status === 'open') { %>
+            <button class="btn secondary small" name="status" value="closed" type="submit">Close registration</button>
+          <% } else { %>
+            <button class="btn approve small" name="status" value="open" type="submit">Publish</button>
+          <% } %>
         </form>
-      <% } else if (c.status !== 'open') { %>
-        <a class="btn danger small" href="/admin/competitions/<%= c.id %>/delete">Delete</a>
       <% } %>
+      <% upFront.map((path) => links.find(([p]) => p === path)).filter(Boolean).forEach(([path, label], i) => { %>
+        <a class="btn <%= i === 0 && c.status !== 'draft' ? '' : 'secondary' %> small" href="<%= base %>/<%= path %>"><%= label %></a>
+      <% }) %>
+      <details class="menu">
+        <summary class="btn secondary small">More</summary>
+        <div class="menu-list">
+          <% links.filter(([path]) => !upFront.includes(path)).forEach(([path, label]) => { %><a href="<%= base %>/<%= path %>"><%= label %></a><% }) %>
+          <% if (c.status === 'closed') { %>
+            <hr>
+            <form method="post" action="<%= base %>/status">
+              <input type="hidden" name="_csrf" value="<%= csrf %>">
+              <button name="status" value="open" type="submit">Reopen registration</button>
+            </form>
+          <% } %>
+          <% if (c.status === 'draft' && entries === 0) { %>
+            <hr>
+            <form method="post" action="<%= base %>/delete" data-confirm="Delete this draft competition? This cannot be undone.">
+              <input type="hidden" name="_csrf" value="<%= csrf %>">
+              <button class="menu-danger" type="submit">Delete</button>
+            </form>
+          <% } else if (c.status !== 'open') { %>
+            <% if (c.status !== 'closed') { %><hr><% } %>
+            <a class="menu-danger" href="<%= base %>/delete">Delete</a>
+          <% } %>
+        </div>
+      </details>
     </div>
   </section>
 <% }) %>
