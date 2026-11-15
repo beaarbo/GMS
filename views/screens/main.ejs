@@ -61,6 +61,9 @@
         <p class="main-call-text"><%= call.text[0].toUpperCase() + call.text.slice(1) %></p>
       </div>
       <ol class="main-call-list">
+        <% if (call.division) { call.division.people.forEach((p, i) => { %>
+          <li class="<%= p.done ? 'screen-done' : '' %>"><span class="screen-number"><%= p.order || i + 1 %></span><span><%= p.time || '' %><br><strong><%= p.name %></strong></span></li>
+        <% }) } %>
         <% call.bouts.forEach((b) => { %>
           <li class="<%= b.winner || b.noContest ? 'screen-done' : '' %>"><span class="screen-number"><%= b.number %></span><span>Court <%= b.court %> · <%= b.time %><br><span class="blue-text"><%= side(b, 'blue').name %></span> vs <span class="red-text"><%= side(b, 'red').name %></span></span></li>
         <% }) %>

@@ -1002,7 +1002,7 @@ function recordBoutCall(db, competition, { day, court = 0, fromNumber, toNumber,
   }
   if (toNumber - fromNumber + 1 > MAX_CALLED) return { ok: false, error: `Call at most ${MAX_CALLED} bout numbers at once.` };
   const call = { day, court, from_number: fromNumber, to_number: toNumber };
-  if (calledBouts(db, competition.id, call).length === 0) {
+  if (calledBouts(db, competition, call).length === 0) {
     return { ok: false, error: `There are no bouts numbered ${fromNumber} to ${toNumber} on day ${day}${court ? `, court ${court}` : ''}.` };
   }
   db.prepare('INSERT INTO bout_calls (competition_id, day, court, from_number, to_number, called_by) VALUES (?, ?, ?, ?, ?, ?)')
@@ -1012,17 +1012,74 @@ function recordBoutCall(db, competition, { day, court = 0, fromNumber, toNumber,
 
 // called_at is UTC, as SQLite's datetime('now') gives; shown in the site's time zone.
 const callTime = (call) => new Date(`${call.called_at.replace(' ', 'T')}Z`).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-// "bouts 1-4", "bout 3", or with one court "bouts 1-4 on court 2"; no court means every court.
-const callText = (call) => (call.to_number !== call.from_number ? `bouts ${call.from_number}-${call.to_number}` : `bout ${call.from_number}`) + (call.court ? ` on court ${call.court}` : '');
+// "bouts 1-4", "bout 3", or with one court "bouts 1-4 on court 2"; no court means
+// every court. A poomsae division call reads as its title and stage, with its court.
+const callText = (call) => (call.division_key
+  ? `poomsae: ${call.label} on court ${call.court}`
+  : (call.to_number !== call.from_number ? `bouts ${call.from_number}-${call.to_number}` : `bout ${call.from_number}`) + (call.court ? ` on court ${call.court}` : ''));
+
+// Every numbered bout on the shared courts, kyorugi and poomsae brackets alike,
+// so a range call covers both (their numbers carry on from each other on a court).
+function numberedBouts(db, competition) {
+  const kyorugi = hasKyorugi(competition) ? listBouts(db, competition.id).map((b) => ({ ...b, event: 'Kyorugi' })) : [];
+  const poomsae = hasPoomsae(competition)
+    ? poomsaeCourtItems(db, competition).filter((i) => i.kind === 'bout' && i.number).map((b) => ({ ...b, event: 'Poomsae' }))
+    : [];
+  return [...kyorugi, ...poomsae];
+}
+
+// The poomsae divisions that can be called on a day: each performance list or
+// bracket placed on that day, with its court and first time, in court order.
+function callablePoomsae(db, competition, day) {
+  if (!hasPoomsae(competition)) return [];
+  const entries = listPoomsaeEntries(db, competition.id);
+  const options = [];
+  poomsaeDivisions(entries, competition, loadPoomsaeBrackets(db, competition.id, entries), loadPoomsaeSettings(db, competition.id))
+    .forEach((d) => {
+      if (d.order.length > 0 && d.listDay === day && d.listCourt) {
+        options.push({ key: d.key, stage: 'list', title: d.title, label: `${d.title} · ${d.mode === 'cut' ? 'score round' : 'performance list'}`, court: d.listCourt, time: d.order[0].perform_time || '' });
+      }
+      if (d.bouts && d.day === day && d.court) {
+        const times = d.bouts.map((b) => b.time).filter(Boolean).sort();
+        options.push({ key: d.key, stage: 'bracket', title: d.title, label: `${d.title} · bracket`, court: d.court, time: times[0] || '' });
+      }
+    });
+  return options.sort((a, b) => a.court - b.court || a.time.localeCompare(b.time));
+}
+
+// Calls one poomsae division's list or bracket to the warm-up area.
+function recordPoomsaeCall(db, competition, { day, key, stage, userId = null }) {
+  const option = callablePoomsae(db, competition, day).find((o) => o.key === key && o.stage === stage);
+  if (!option) return { ok: false, error: 'Choose a poomsae division on this day.' };
+  db.prepare('INSERT INTO bout_calls (competition_id, day, court, from_number, to_number, called_by, division_key, stage, label) VALUES (?, ?, ?, 0, 0, ?, ?, ?, ?)')
+    .run(competition.id, day, option.court, userId, key, stage, option.label);
+  return { ok: true, label: option.label, court: option.court };
+}
+
+// Who a poomsae division call names: its performers in order with their times,
+// or the entrants still in its bracket. Null when the division has gone.
+function calledDivision(db, competition, call) {
+  const entries = listPoomsaeEntries(db, competition.id);
+  const d = poomsaeDivisions(entries, competition, loadPoomsaeBrackets(db, competition.id, entries), loadPoomsaeSettings(db, competition.id))
+    .find((x) => x.key === call.division_key);
+  if (!d) return null;
+  if (call.stage === 'list') {
+    return { title: d.title, stage: 'list', poomsae: d.listPoomsae, people: d.order.map((e) => ({ order: e.perform_order, name: e.names, club: e.club_label, time: e.perform_time || '', done: e.score !== null })) };
+  }
+  const sides = (d.bouts || []).filter((b) => b.round === 1).flatMap((b) => [b.blue, b.red]).filter(Boolean);
+  return { title: d.title, stage: 'bracket', poomsae: d.bracketPoomsae, people: sides.map((side) => ({ order: null, name: side.name, club: side.club, time: '', done: false })) };
+}
 
 // The latest calls of one day, newest first.
 function listBoutCalls(db, competitionId, day, limit = 10) {
   return db.prepare('SELECT * FROM bout_calls WHERE competition_id = ? AND day = ? ORDER BY id DESC LIMIT ?').all(competitionId, day, limit);
 }
 
-// The bouts a call names, by court then number (byes have no number, so never appear).
-function calledBouts(db, competitionId, call) {
-  return listBouts(db, competitionId)
+// The bouts a call names, kyorugi and poomsae, by court then number (byes have
+// no number, so never appear). A poomsae division call names no bouts.
+function calledBouts(db, competition, call) {
+  if (call.division_key) return [];
+  return numberedBouts(db, competition)
     .filter((b) => b.day === call.day && (!call.court || b.court === call.court) && b.number >= call.from_number && b.number <= call.to_number)
     .sort((a, b) => a.court - b.court || a.number - b.number);
 }
@@ -2228,6 +2285,10 @@ module.exports = {
   drawDivisionPoomsae,
   clubCompetitors,
   recordBoutCall,
+  recordPoomsaeCall,
+  callablePoomsae,
+  calledDivision,
+  numberedBouts,
   callTime,
   callText,
   listBoutCalls,

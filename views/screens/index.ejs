@@ -23,7 +23,7 @@
         <p class="sub">Every court at once, with the bout call along the bottom</p>
         <div class="actions"><a class="btn" href="/screens/<%= competition.id %>/main/<%= d.day %>">Open screen</a></div>
       </article>
-      <% if (d.courts.some((c) => c.kind === 'kyorugi')) { %>
+      <% if (d.courts.length > 0) { %>
         <article class="card">
           <h3 class="card-title">Call screen</h3>
           <p class="sub">The bouts called to the warm-up area, every court</p>

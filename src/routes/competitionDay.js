@@ -24,6 +24,10 @@ const {
   saveDesignatedPoomsae,
   savePoomsaeDays,
   recordBoutCall,
+  recordPoomsaeCall,
+  callablePoomsae,
+  calledDivision,
+  numberedBouts,
   callTime,
   callText,
   listBoutCalls,
@@ -301,22 +305,27 @@ router.get('/competitions/:id(\\d+)/results', (req, res) => {
   });
 });
 
-// Bout calling: staff call a range of bout numbers (on every court, or one)
-// and the call screen shows them, live. Kyorugi bouts only.
+// Bout calling: staff call a range of bout numbers (on every court, or one;
+// kyorugi and poomsae brackets share the numbering on a court) or one poomsae
+// division's list or bracket, and the call screen shows them, live.
+// The days that have a poomsae list or bracket placed on them.
+const callableDays = (db, competition) => getEventDates(db, competition.id).map((_, i) => i + 1).filter((day) => callablePoomsae(db, competition, day).length > 0);
 const callsPath = (competition, day) => `/admin/competitions/${competition.id}/calls${day ? `?day=${day}` : ''}`;
 
 router.get('/competitions/:id(\\d+)/calls', (req, res) => {
   const { db } = req.app.locals;
-  const bouts = listBouts(db, req.competition.id);
-  const dayNumbers = [...new Set(bouts.map((b) => b.day))].sort((a, b) => a - b);
+  const bouts = numberedBouts(db, req.competition);
+  const poomsaeDays = hasPoomsae(req.competition) ? [...new Set(callableDays(db, req.competition))] : [];
+  const dayNumbers = [...new Set([...bouts.map((b) => b.day), ...poomsaeDays])].filter(Boolean).sort((a, b) => a - b);
   const dates = getEventDates(db, req.competition.id);
   const asked = Number(req.query.day);
   // The chosen day, else the first with a bout still to fight.
-  const day = dayNumbers.includes(asked) ? asked : (bouts.find((b) => !b.winner && !b.noContest) || bouts[0] || {}).day || null;
+  const day = dayNumbers.includes(asked) ? asked : (bouts.find((b) => !b.winner && !b.noContest) || bouts[0] || {}).day || dayNumbers[0] || null;
   const calls = (day ? listBoutCalls(db, req.competition.id, day) : []).map((call) => ({ ...call, at: callTime(call), text: callText(call) }));
   const current = calls[0] || null;
   // After the last call, else from the day's first bout number (poomsae may come first on the courts).
-  const next = current ? current.to_number + 1 : Math.min(...bouts.filter((b) => b.day === day && b.number).map((b) => b.number), Infinity) || 1;
+  const lastBoutCall = calls.find((call) => !call.division_key);
+  const next = lastBoutCall ? lastBoutCall.to_number + 1 : Math.min(...bouts.filter((b) => b.day === day && b.number).map((b) => b.number), Infinity) || 1;
   res.render('admin/calls', {
     title: 'Bout calling',
     competition: req.competition,
@@ -324,9 +333,11 @@ router.get('/competitions/:id(\\d+)/calls', (req, res) => {
     days: dayNumbers.map((n) => ({ value: n, label: dates[n - 1] ? `Day ${n} (${formatDay(dates[n - 1])})` : `Day ${n}` })),
     courts: [...new Set(bouts.filter((b) => b.day === day).map((b) => b.court))].sort((a, b) => a - b),
     current,
-    currentBouts: current ? calledBouts(db, req.competition.id, current) : [],
+    currentBouts: current ? calledBouts(db, req.competition, current) : [],
+    currentDivision: current && current.division_key ? calledDivision(db, req.competition, current) : null,
+    poomsaeOptions: day ? callablePoomsae(db, req.competition, day) : [],
     earlier: calls.slice(1),
-    suggest: { from: next, to: next + 4, court: current ? current.court : 0 },
+    suggest: { from: next, to: next + 4, court: lastBoutCall ? lastBoutCall.court : 0 },
     lastNumber: Math.max(0, ...bouts.filter((b) => b.day === day).map((b) => b.number || 0)),
   });
 });
@@ -335,6 +346,18 @@ router.post('/competitions/:id(\\d+)/calls', (req, res) => {
   const { db } = req.app.locals;
   const number = (value) => (/^\d{1,4}$/.test(String(value || '').trim()) ? Number(String(value).trim()) : NaN);
   const day = number(req.body.day);
+  // A poomsae division: poomsae = "<division key>|list" or "|bracket".
+  if (req.body.poomsae) {
+    const [key, stage] = String(req.body.poomsae).split('|');
+    const called = recordPoomsaeCall(db, req.competition, { day, key: clean(key, 60), stage, userId: req.user.id });
+    if (!called.ok) req.flash('error', called.error);
+    else {
+      const text = callText({ division_key: key, label: called.label, court: called.court });
+      req.logActivity('bouts.called', `Called ${text}, day ${day}: ${req.competition.name}`, req.competition.id);
+      req.flash('success', `Called ${text}.`);
+    }
+    return res.redirect(callsPath(req.competition, Number.isInteger(day) ? day : null));
+  }
   const result = recordBoutCall(db, req.competition, {
     day, court: number(req.body.court || 0), fromNumber: number(req.body.from), toNumber: number(req.body.to), userId: req.user.id,
   });

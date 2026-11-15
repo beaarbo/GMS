@@ -30,11 +30,24 @@
     <% } else { %>
       <h1 class="screen-label">Called at <%= current.at %></h1>
       <p class="screen-call"><%= current.text[0].toUpperCase() + current.text.slice(1) %></p>
-      <p class="screen-sub">Athletes in these bouts, please report to the warm-up area.</p>
+      <p class="screen-sub"><%= current.division_key ? 'Athletes in this division' : 'Athletes in these bouts' %>, please report to the warm-up area.</p>
+      <% if (current.division && current.division.poomsae) { %><p class="screen-poomsae">Poomsae: <strong><%= current.division.poomsae.join(' · ') %></strong></p><% } %>
     <% } %>
   </section>
 
-  <% if (current) { %>
+  <% if (current && current.division) { %>
+    <section>
+      <h2 class="screen-label">Court <%= current.court %></h2>
+      <ol class="screen-list">
+        <% current.division.people.forEach((p, i) => { %>
+          <li class="<%= p.done ? 'screen-done' : '' %>">
+            <span class="screen-number"><%= p.order || i + 1 %></span>
+            <div><strong><%= p.name %></strong><br><span class="screen-sub"><%= [p.time, p.club].filter(Boolean).join(' · ') %><%= p.done ? ' · finished' : '' %></span></div>
+          </li>
+        <% }) %>
+      </ol>
+    </section>
+  <% } else if (current) { %>
     <div class="screen-columns screen-call-courts">
       <% courts.forEach((c) => { %>
         <section>

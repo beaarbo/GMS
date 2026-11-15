@@ -25,6 +25,7 @@
     </nav>
   <% } %>
 
+  <% if (lastNumber > 0) { %>
   <section class="card">
     <h2>Call bouts</h2>
     <p class="sub">Bout numbers start again on each court every day, so calling “6-10” on every court calls bouts 6 to 10 of each court.</p>
@@ -54,7 +55,27 @@
       <div><label for="call-to">To bout</label><input id="call-to" name="to" type="number" min="1" max="<%= lastNumber %>" value="<%= Math.min(suggest.to, lastNumber) %>" required></div>
       <div class="actions"><button class="btn secondary" type="submit">Call these bouts</button></div>
     </form>
+    <% if (poomsaeOptions.length > 0) { %><p class="hint">Poomsae bracket bouts share the numbering on their court, so a range calls them too.</p><% } %>
   </section>
+  <% } %>
+
+  <% if (poomsaeOptions.length > 0) { %>
+    <section class="card">
+      <h2>Call a poomsae division</h2>
+      <p class="sub">Calls everyone in one division’s performance list or bracket to the warm-up area.</p>
+      <form method="post" action="/admin/competitions/<%= competition.id %>/calls" class="filters">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <input type="hidden" name="day" value="<%= day %>">
+        <div>
+          <label for="call-poomsae">Division</label>
+          <select id="call-poomsae" name="poomsae" required>
+            <% poomsaeOptions.forEach((o) => { %><option value="<%= o.key %>|<%= o.stage %>">Court <%= o.court %><%= o.time ? `, ${o.time}` : '' %> · <%= o.label %></option><% }) %>
+          </select>
+        </div>
+        <div class="actions"><button class="btn secondary" type="submit">Call this division</button></div>
+      </form>
+    </section>
+  <% } %>
 
   <section class="card">
     <div class="section-head">
@@ -65,6 +86,23 @@
       <p class="empty">Nothing has been called today yet.</p>
     <% } else { %>
       <p class="stats"><span><strong><%= current.text[0].toUpperCase() + current.text.slice(1) %></strong></span></p>
+      <% if (current.division_key) { %>
+        <% if (!currentDivision) { %>
+          <p class="empty">That division is no longer on the bout list.</p>
+        <% } else { %>
+          <% if (currentDivision.poomsae) { %><p class="stats"><span>Poomsae: <strong><%= currentDivision.poomsae.join(' · ') %></strong></span></p><% } %>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>#</th><th>Athletes</th><th>Club</th><th>Time</th><th>Status</th></tr></thead>
+              <tbody>
+                <% currentDivision.people.forEach((p) => { %>
+                  <tr class="<%= p.done ? 'result-row-done' : '' %>"><td class="num"><%= p.order || '' %></td><td><strong><%= p.name %></strong></td><td><%= p.club %></td><td class="nowrap"><%= p.time || '–' %></td><td><%= p.done ? 'Scored' : 'To perform' %></td></tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        <% } %>
+      <% } else { %>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Court</th><th>Bout</th><th>Time</th><th>Division</th><th>Blue</th><th>Red</th><th>Status</th></tr></thead>
@@ -83,6 +121,7 @@
           </tbody>
         </table>
       </div>
+      <% } %>
     <% } %>
     <% if (earlier.length > 0) { %>
       <h3>Earlier calls</h3>

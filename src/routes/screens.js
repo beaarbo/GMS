@@ -4,7 +4,7 @@
 // see only what has been published (the kyorugi bout list, each poomsae stage),
 // with short names when the organiser chose them, and photos are for staff only.
 const express = require('express');
-const { listBouts, getEventDates, poomsaeCourtItems, poomsaeCourtQueue, listBoutCalls, calledBouts, callTime, callText } = require('../services');
+const { listBouts, getEventDates, poomsaeCourtItems, poomsaeCourtQueue, listBoutCalls, calledBouts, calledDivision, callTime, callText } = require('../services');
 const { formatDay } = require('../divisions');
 const { hasPoomsae } = require('../poomsae');
 const { shortenNames } = require('../settings');
@@ -58,6 +58,23 @@ function nowPhotos(req, kind, now) {
     blue: sidePhotos(db, req.competition.id, kind, now.blue && now.blue.registrationId),
     red: sidePhotos(db, req.competition.id, kind, now.red && now.red.registrationId),
   };
+}
+
+// A call as a screen shows it: its text and time, and the bouts or, for a poomsae
+// division, the people it names. Those stay hidden from coaches and visitors
+// until that poomsae stage is published.
+function callForScreen(req, call) {
+  if (!call) return null;
+  const { db } = req.app.locals;
+  const competition = req.competition;
+  const shown = { ...call, at: callTime(call), text: callText(call), bouts: calledBouts(db, competition, call), division: null };
+  if (call.division_key) {
+    const published = call.stage === 'list' ? competition.poomsae_published_at : competition.poomsae_brackets_published_at;
+    if (isStaff(req.user) || published) shown.division = calledDivision(db, competition, call);
+  }
+  if (!isStaff(req.user) && !competition.bouts_published_at) shown.bouts = shown.bouts.filter((b) => b.event !== 'Kyorugi');
+  if (!isStaff(req.user) && !competition.poomsae_brackets_published_at) shown.bouts = shown.bouts.filter((b) => b.event !== 'Poomsae');
+  return shown;
 }
 
 const dayLabelOf = (dates, day) => (dates[day - 1] ? `Day ${day} · ${formatDay(dates[day - 1])}` : `Day ${day}`);
@@ -144,14 +161,14 @@ router.get('/:id(\\d+)/main/:day(\\d+)', screenCompetition('any'), (req, res) =>
     return { court, label: `Court ${court}`, ...courtState(items) };
   });
   if (courts.length === 0) return notFound(res);
-  const [current] = kyorugiVisible(req.user, competition) ? listBoutCalls(db, competition.id, day, 1) : [];
+  const [current] = listBoutCalls(db, competition.id, day, 1);
   res.render('screens/main', forVisitor(req, {
     title: 'Main screen',
     competition,
     day,
     dayLabel: dayLabelOf(getEventDates(db, competition.id), day),
     courts,
-    call: current ? { ...current, at: callTime(current), text: callText(current), bouts: calledBouts(db, competition.id, current) } : null,
+    call: callForScreen(req, current),
     refreshSeconds: REFRESH_SECONDS,
     updatedAt: updatedAt(),
   }));
@@ -159,12 +176,14 @@ router.get('/:id(\\d+)/main/:day(\\d+)', screenCompetition('any'), (req, res) =>
 
 // The call screen: the bouts staff last called for one day, for the warm-up
 // area, with the call before it. Live like the court screens.
-router.get('/:id(\\d+)/calls/:day(\\d+)', screenCompetition('kyorugi'), (req, res) => {
+router.get('/:id(\\d+)/calls/:day(\\d+)', screenCompetition('any'), (req, res) => {
   const { db } = req.app.locals;
   const day = Number(req.params.day);
-  if (!listBouts(db, req.competition.id).some((b) => b.day === day)) return notFound(res);
-  const [current, previous] = listBoutCalls(db, req.competition.id, day, 2).map((call) => ({ ...call, at: callTime(call), text: callText(call) }));
-  const bouts = current ? calledBouts(db, req.competition.id, current) : [];
+  if (day < 1 || day > getEventDates(db, req.competition.id).length) return notFound(res);
+  const [first, second] = listBoutCalls(db, req.competition.id, day, 2);
+  const current = callForScreen(req, first);
+  const previous = callForScreen(req, second);
+  const bouts = current ? current.bouts : [];
   res.render('screens/calls', forVisitor(req, {
     title: 'Now calling',
     competition: req.competition,
@@ -233,7 +252,7 @@ function changeStream(req, res) {
 
 router.get('/:id(\\d+)/:day(\\d+)/:court(\\d+)/events', screenCompetition('kyorugi'), changeStream);
 router.get('/:id(\\d+)/poomsae/:day(\\d+)/:court(\\d+)/events', screenCompetition('poomsae'), changeStream);
-router.get('/:id(\\d+)/calls/:day(\\d+)/events', screenCompetition('kyorugi'), changeStream);
+router.get('/:id(\\d+)/calls/:day(\\d+)/events', screenCompetition('any'), changeStream);
 router.get('/:id(\\d+)/main/:day(\\d+)/events', screenCompetition('any'), changeStream);
 
 module.exports = router;

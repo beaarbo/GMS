@@ -92,3 +92,60 @@ test('the Bout list sets each poomsae division\'s day', async () => {
   assert.equal(db.prepare('SELECT day FROM poomsae_divisions WHERE division_key = ?').get(key).day, 2);
   assert.equal(db.prepare('SELECT day FROM poomsae_bouts WHERE competition_id = ? AND is_bye = 0').get(id).day, 2, 'the bracket moved to day 2');
 });
+
+test('bout calling covers poomsae: ranges include its bracket bouts, and a whole division can be called', async () => {
+  const db = openDb(':memory:');
+  await ensureAdmin(db, 'admin@test.test', PASSWORD);
+  saveSettings(db, { require_document: '0' });
+  const clubId = createClub(db, { name: 'Tigers' });
+  const id = createCompetition(db, { name: 'Call Cup', event_date: `${YEAR}-12-01`, registration_deadline: `${YEAR}-11-01`, venue: 'Hall', status: 'open', events: 'both', poomsae_format: 'elimination' });
+  db.prepare("UPDATE competitions SET bout_courts = 1, bout_start = '09:00', bout_minutes = 10, poomsae_courts = 1, poomsae_start = '09:00', poomsae_minutes = 5 WHERE id = ?").run(id);
+  const competition = db.prepare('SELECT * FROM competitions WHERE id = ?').get(id);
+  const add = (first) => db.prepare('SELECT * FROM fighters WHERE id = ?').get(
+    db.prepare("INSERT INTO fighters (club_id, first_name, last_name, gender, date_of_birth, belt_rank) VALUES (?, ?, 'Lee', 'F', ?, 3)").run(clubId, first, `${YEAR - 16}-03-01`).lastInsertRowid
+  );
+  const ana = add('Ana');
+  const bea = add('Bea');
+  const weight = findWeightClass(divisionOptions({ fighter: ana, competition, ...loadDivisionSetup(db, id) }).classes, 48).id;
+  [ana, bea].forEach((f) => {
+    assert.ok(enterFighter(db, competition, f, weight).ok);
+    assert.ok(enterPoomsae(db, competition, clubId, 'individual', [f]).ok);
+  });
+  db.prepare("UPDATE registrations SET status = 'approved'").run();
+  db.prepare("UPDATE poomsae_entries SET status = 'approved'").run();
+  db.prepare("UPDATE competitions SET status = 'closed', bouts_published_at = datetime('now') WHERE id = ?").run(id);
+  const entry = db.prepare('SELECT * FROM poomsae_entries').get();
+  const key = [entry.event, entry.gender, entry.age_group_id, entry.belt_group_id].join('-');
+  generateBoutList(db, id);
+  assert.ok(drawPoomsaeBracket(db, db.prepare('SELECT * FROM competitions WHERE id = ?').get(id), key).ok);
+
+  const app = createApp({ db, sessionSecret: 'test-secret', mailer: { configured: true, send: async () => {} } });
+  const admin = request.agent(app);
+  const loginCsrf = (await admin.get('/login')).text.match(/name="_csrf" value="([^"]+)"/)[1];
+  await admin.post('/login').type('form').send({ _csrf: loginCsrf, email: 'admin@test.test', password: PASSWORD });
+  const calls = `/admin/competitions/${id}/calls`;
+  const call = async (fields) => {
+    const _csrf = (await admin.get(calls)).text.match(/name="_csrf" value="([^"]+)"/)[1];
+    return admin.post(calls).type('form').send({ _csrf, day: 1, ...fields });
+  };
+
+  // Bouts 1-2 on Court 1: the kyorugi bout, then the poomsae bracket bout after it.
+  await call({ court: 0, from: 1, to: 2 });
+  const screen = (await admin.get(`/screens/${id}/calls/1`)).text;
+  assert.equal((screen.match(/class="screen-number">/g) || []).length, 2, 'both bouts');
+
+  // A whole poomsae division: its bracket, with both entrants.
+  const page = (await admin.get(calls)).text;
+  assert.match(page, new RegExp(`<option value="${key}\|bracket">Court 1`));
+  assert.equal((await call({ poomsae: `${key}|bracket` })).headers.location, `${calls}?day=1`);
+  const divisionCall = (await admin.get(`/screens/${id}/calls/1`)).text;
+  assert.match(divisionCall, /Poomsae: Individual[^<]*bracket on court 1/);
+  assert.match(divisionCall, /Ana Lee/);
+  assert.match(divisionCall, /Bea Lee/);
+  assert.match((await admin.get(`/screens/${id}/main/1`)).text, /Bea Lee/);
+
+  // Visitors see the call, but not the names until the poomsae brackets are published.
+  const visitor = (await request(app).get(`/screens/${id}/calls/1`)).text;
+  assert.match(visitor, /Poomsae: Individual/);
+  assert.doesNotMatch(visitor, /Bea Lee/);
+});

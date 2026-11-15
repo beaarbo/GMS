@@ -385,7 +385,11 @@ CREATE TABLE IF NOT EXISTS bout_calls (
   from_number INTEGER NOT NULL,
   to_number INTEGER NOT NULL,
   called_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
-  called_at TEXT NOT NULL DEFAULT (datetime('now'))
+  called_at TEXT NOT NULL DEFAULT (datetime('now')),
+  -- A poomsae division called instead: its key, 'list' or 'bracket', and its title then.
+  division_key TEXT,
+  stage TEXT,
+  label TEXT
 );
 
 CREATE TABLE IF NOT EXISTS poomsae_divisions (
@@ -837,6 +841,17 @@ function migrateCourtOrder(db) {
   })();
 }
 
+// Version 28: a call can name a poomsae division (its list or bracket) instead
+// of bout numbers. Existing calls are all bout calls.
+function migratePoomsaeCalls(db) {
+  db.transaction(() => {
+    addColumnIfMissing(db, 'bout_calls', 'division_key', 'TEXT');
+    addColumnIfMissing(db, 'bout_calls', 'stage', 'TEXT');
+    addColumnIfMissing(db, 'bout_calls', 'label', 'TEXT');
+    db.pragma('user_version = 28');
+  })();
+}
+
 function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 1) migrateBelts(db);
   if (db.pragma('user_version', { simple: true }) < 2) migrateSchedule(db);
@@ -865,6 +880,7 @@ function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 25) migrateOwner(db);
   if (db.pragma('user_version', { simple: true }) < 26) migrateDesignatedPoomsae(db);
   if (db.pragma('user_version', { simple: true }) < 27) migrateCourtOrder(db);
+  if (db.pragma('user_version', { simple: true }) < 28) migratePoomsaeCalls(db);
 }
 
 // Safe on old databases: only tables that don't exist yet are created.
