@@ -72,4 +72,24 @@
     </div>
   </section>
 <% }) %>
+
+<%# The demo competition: the main admin's to make and remove. %>
+<% if (user.owner) { %>
+  <section class="card" id="demo">
+    <h2>Demo competition</h2>
+    <% if (demo) { %>
+      <p class="sub">The demo competition, its three clubs, their coaches and athletes are on the site. Remove them when you've finished showing the site; nothing else is touched.</p>
+      <form method="post" action="/admin/demo/remove" data-confirm="Remove the demo competition with its clubs, coaches and athletes? This cannot be undone.">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <button class="btn danger" type="submit">Remove demo data</button>
+      </form>
+    <% } else { %>
+      <p class="sub">Makes a ready-to-show competition with made-up clubs and athletes: three clubs with a coach each, about thirty athletes, and kyorugi and poomsae drawn on two courts and published, with no results yet, so you can record results, call bouts and show the screens live. It's public like any published competition.</p>
+      <form method="post" action="/admin/demo" data-confirm="Create the demo competition? It will be public on the site until you remove it.">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <button class="btn secondary" type="submit">Create demo competition</button>
+      </form>
+    <% } %>
+  </section>
+<% } %>
 <%- include('../partials/bottom') %>

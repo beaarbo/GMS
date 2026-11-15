@@ -75,6 +75,7 @@ const { writeBoutListPdf } = require('../boutlistPdf');
 const { entriesSheets, sendXlsx } = require('../exports');
 const { cardAthletes, cardClubs, writeAthleteCards } = require('../athleteCards');
 const { clean, toArray, requireRole, requireOwner, notFound, wrap, passwordError, readSetup, readPoomsaeAges } = require('./helpers');
+const { createDemoCompetition, removeDemoData, loadDemo } = require('../demo');
 const { resultsPath, poomsaeDrawSummary } = require('./competitionDay');
 const { createBackup, pruneBackups, listBackups } = require('../backups');
 const { readMapLocation } = require('../maps');
@@ -224,7 +225,30 @@ router.get('/', (req, res) => {
 });
 
 router.get('/competitions', (req, res) => {
-  res.render('admin/competitions', { title: 'Competitions', competitions: competitionsWithCounts(req.app.locals.db) });
+  res.render('admin/competitions', { title: 'Competitions', competitions: competitionsWithCounts(req.app.locals.db), demo: loadDemo(req.app.locals.db) });
+});
+
+// The demo competition, for showing the site off: the main admin makes it in one
+// click and removes it the same way. The coaches' password is shown once, here.
+router.post('/demo', requireOwner, wrap(async (req, res) => {
+  const result = await createDemoCompetition(req.app.locals.db);
+  if (!result.ok) {
+    req.flash('error', result.error);
+    return res.redirect('/admin/competitions');
+  }
+  req.logActivity('demo.created', 'Created the demo competition with its clubs, coaches and athletes', result.competitionId);
+  req.flash('success', `Demo competition created and published. Its coaches log in as ${result.coaches.map((c) => c.email).join(', ')} with the password ${result.password}. Note it now: it isn't shown again.`);
+  return res.redirect('/admin/competitions');
+}));
+
+router.post('/demo/remove', requireOwner, (req, res) => {
+  const result = removeDemoData(req.app.locals.db);
+  if (!result.ok) req.flash('error', result.error);
+  else {
+    req.logActivity('demo.removed', 'Removed the demo competition with its clubs, coaches and athletes');
+    req.flash('success', 'Demo competition removed, with its clubs, coaches and athletes.');
+  }
+  return res.redirect('/admin/competitions');
 });
 
 router.get('/competitions/new', (req, res) => {

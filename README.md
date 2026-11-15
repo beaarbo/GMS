@@ -234,6 +234,10 @@ The competition's format is the default. On **Divisions**, under **Change this d
 
 **Court screens** show one court on one day, for a TV or tablet at the mat: the bout on now with the blue and red athletes, the next three bouts and the latest results. They update live: the moment a result is recorded or a bracket or schedule changes, open screens swap in the new content, and a "Live" marker shows the connection is up. Without JavaScript they reload every 15 seconds instead. Admins and officials can open them once a bout list exists, and coaches once it's published. They need a login, because they show athletes' names.
 
+## Demo competition
+
+To show the site off, the main admin can click **Create demo competition** at the bottom of the admin **Competitions** page. It makes **Demo Open** (a month away, kyorugi and poomsae on two shared courts) with three made-up clubs from Singapore, Malaysia and Indonesia, a coach for each, and about thirty athletes. Everyone is entered and approved, registration is closed, the kyorugi bout list and the poomsae lists and bracket are drawn, the poomsae are drawn, and everything is published, with no results yet, so you can record results, call bouts and show the screens live. The coaches log in as `lioncity.coach@demo.invalid`, `harimau.coach@demo.invalid` and `garuda.coach@demo.invalid` with a password shown once when you create it. **Remove demo data** deletes exactly what it made, nothing else.
+
 ## Deploy it
 
 The app needs a host that runs a long-lived Node process **and** provides a persistent disk, because the database is a single SQLite file. Railway, Fly.io and Render (with a disk) all fit. Serverless hosts such as Vercel and Netlify do not, because their file systems are not persistent.
