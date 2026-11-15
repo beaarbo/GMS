@@ -1,27 +1,28 @@
 // Court screens: a page per court and day for a TV or tablet at the mat, showing
 // what's on now, what's next and recent results, for kyorugi courts and poomsae
-// courts. Logged-in users only, because they show athletes' names; coaches only
-// see what has been published (the kyorugi bout list, each poomsae stage).
+// courts. Anyone can open them, like the public bout list: visitors and coaches
+// see only what has been published (the kyorugi bout list, each poomsae stage),
+// with short names when the organiser chose them, and photos are for staff only.
 const express = require('express');
 const { listBouts, getEventDates, poomsaeCourtItems, poomsaeCourtQueue, listBoutCalls, calledBouts, callTime, callText } = require('../services');
 const { formatDay } = require('../divisions');
 const { hasPoomsae } = require('../poomsae');
+const { shortenNames } = require('../settings');
 const { notFound } = require('./helpers');
 
 const router = express.Router();
+// Visitors get the public pages' name setting ("Rossi A." when the organiser chose initials).
+const forVisitor = (req, data) => (!req.user && req.site.publicNames === 'initials' ? shortenNames(data) : data);
 const REFRESH_SECONDS = 15;
 
-const isStaff = (user) => ['admin', 'official'].includes(user.role);
+// Visitors (no account) see screens like coaches: published stages only, never photos.
+const isStaff = (user) => Boolean(user) && ['admin', 'official'].includes(user.role);
 const kyorugiVisible = (user, c) => isStaff(user) || Boolean(c.bouts_published_at);
 const poomsaeVisible = (user, c) => hasPoomsae(c) && (isStaff(user) || Boolean(c.poomsae_published_at || c.poomsae_brackets_published_at));
 
 // kind: 'any' for the screens list, or the event a screen belongs to.
 function screenCompetition(kind) {
   return (req, res, next) => {
-    if (!req.user) {
-      req.flash('error', 'Please log in to continue.');
-      return res.redirect('/login');
-    }
     const competition = req.app.locals.db.prepare('SELECT * FROM competitions WHERE id = ?').get(req.params.id);
     const allowed = competition && competition.status === 'closed' && (
       kind === 'kyorugi' ? kyorugiVisible(req.user, competition)
@@ -97,7 +98,7 @@ router.get('/:id(\\d+)/:day(\\d+)/:court(\\d+)', screenCompetition('kyorugi'), (
   const now = waiting.find((b) => b.blue && b.red) || null;
   const next = waiting.filter((b) => b !== now).slice(0, 3);
   const recent = bouts.filter((b) => b.winner).slice(-3).reverse();
-  res.render('screens/court', {
+  res.render('screens/court', forVisitor(req, {
     title: `Court ${court}`,
     competition: req.competition,
     court,
@@ -111,7 +112,7 @@ router.get('/:id(\\d+)/:day(\\d+)/:court(\\d+)', screenCompetition('kyorugi'), (
     total: bouts.length,
     refreshSeconds: REFRESH_SECONDS,
     updatedAt: updatedAt(),
-  });
+  }));
 });
 
 // What a court is doing: the first unfinished item that can start (a bout once
@@ -144,7 +145,7 @@ router.get('/:id(\\d+)/main/:day(\\d+)', screenCompetition('any'), (req, res) =>
   });
   if (courts.length === 0) return notFound(res);
   const [current] = kyorugiVisible(req.user, competition) ? listBoutCalls(db, competition.id, day, 1) : [];
-  res.render('screens/main', {
+  res.render('screens/main', forVisitor(req, {
     title: 'Main screen',
     competition,
     day,
@@ -153,7 +154,7 @@ router.get('/:id(\\d+)/main/:day(\\d+)', screenCompetition('any'), (req, res) =>
     call: current ? { ...current, at: callTime(current), text: callText(current), bouts: calledBouts(db, competition.id, current) } : null,
     refreshSeconds: REFRESH_SECONDS,
     updatedAt: updatedAt(),
-  });
+  }));
 });
 
 // The call screen: the bouts staff last called for one day, for the warm-up
@@ -164,7 +165,7 @@ router.get('/:id(\\d+)/calls/:day(\\d+)', screenCompetition('kyorugi'), (req, re
   if (!listBouts(db, req.competition.id).some((b) => b.day === day)) return notFound(res);
   const [current, previous] = listBoutCalls(db, req.competition.id, day, 2).map((call) => ({ ...call, at: callTime(call), text: callText(call) }));
   const bouts = current ? calledBouts(db, req.competition.id, current) : [];
-  res.render('screens/calls', {
+  res.render('screens/calls', forVisitor(req, {
     title: 'Now calling',
     competition: req.competition,
     day,
@@ -174,7 +175,7 @@ router.get('/:id(\\d+)/calls/:day(\\d+)', screenCompetition('kyorugi'), (req, re
     courts: [...new Set(bouts.map((b) => b.court))].map((court) => ({ court, bouts: bouts.filter((b) => b.court === court) })),
     refreshSeconds: REFRESH_SECONDS,
     updatedAt: updatedAt(),
-  });
+  }));
 });
 
 router.get('/:id(\\d+)/poomsae/:day(\\d+)/:court(\\d+)', screenCompetition('poomsae'), (req, res) => {
@@ -183,7 +184,7 @@ router.get('/:id(\\d+)/poomsae/:day(\\d+)/:court(\\d+)', screenCompetition('poom
   const court = Number(req.params.court);
   const queue = poomsaeCourtQueue(db, req.competition, day, court, { published: !isStaff(req.user) });
   if (queue.items.length === 0) return notFound(res);
-  res.render('screens/poomsae_court', {
+  res.render('screens/poomsae_court', forVisitor(req, {
     title: `Court ${court} · Poomsae`,
     competition: req.competition,
     court,
@@ -194,7 +195,7 @@ router.get('/:id(\\d+)/poomsae/:day(\\d+)/:court(\\d+)', screenCompetition('poom
     total: queue.items.length,
     refreshSeconds: REFRESH_SECONDS,
     updatedAt: updatedAt(),
-  });
+  }));
 });
 
 const HEARTBEAT_MS = 25000;

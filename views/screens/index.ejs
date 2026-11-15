@@ -1,5 +1,6 @@
 <%- include('../partials/top') %>
-<p class="breadcrumb"><% if (user.role === 'coach' && competition.bouts_published_at) { %><a href="/club/competitions/<%= competition.id %>/bouts">Bout list</a><% } else if (user.role === 'coach') { %><a href="/club/competitions/<%= competition.id %>/poomsae">Poomsae</a><% } else if (user.role === 'admin') { %><a href="/admin/competitions">Competitions</a><% } else { %><a href="/official">Competition day</a><% } %></p>
+<% const staff = user && user.role !== 'coach'; %>
+<p class="breadcrumb"><% if (!user) { %><a href="/competitions/<%= competition.id %>"><%= competition.name %></a><% } else if (user.role === 'coach' && competition.bouts_published_at) { %><a href="/club/competitions/<%= competition.id %>/bouts">Bout list</a><% } else if (user.role === 'coach') { %><a href="/club/competitions/<%= competition.id %>/poomsae">Poomsae</a><% } else if (user.role === 'admin') { %><a href="/admin/competitions">Competitions</a><% } else { %><a href="/official">Competition day</a><% } %></p>
 <div class="page-head">
   <div class="title-row">
     <%- include('../partials/comp_logo', { competition, size: 'md' }) %>
@@ -28,7 +29,7 @@
           <p class="sub">The bouts called to the warm-up area, every court</p>
           <div class="actions">
             <a class="btn" href="/screens/<%= competition.id %>/calls/<%= d.day %>">Open screen</a>
-            <% if (user.role !== 'coach') { %><a class="btn secondary" href="/admin/competitions/<%= competition.id %>/calls?day=<%= d.day %>">Call bouts</a><% } %>
+            <% if (staff) { %><a class="btn secondary" href="/admin/competitions/<%= competition.id %>/calls?day=<%= d.day %>">Call bouts</a><% } %>
           </div>
         </article>
       <% } %>
@@ -38,8 +39,8 @@
           <p class="sub"><%= c.done %> of <%= c.total %> <%= poomsae ? 'performances and bouts' : 'bouts' %> finished</p>
           <div class="actions">
             <a class="btn" href="/screens/<%= competition.id %>/<%= poomsae ? 'poomsae/' : '' %><%= c.day %>/<%= c.court %>">Open screen</a>
-            <% if (user.role !== 'coach') { %><a class="btn secondary" href="/admin/competitions/<%= competition.id %>/<%= poomsae ? 'poomsae/mat' : 'mat' %>/<%= c.day %>/<%= c.court %>">Record results</a><% } %>
-            <% if (user.role !== 'coach' && poomsae && competition.poomsae_judges > 1) { %><a class="btn secondary" href="/admin/competitions/<%= competition.id %>/poomsae/mat/<%= c.day %>/<%= c.court %>#judges">Judge</a><% } %>
+            <% if (staff) { %><a class="btn secondary" href="/admin/competitions/<%= competition.id %>/<%= poomsae ? 'poomsae/mat' : 'mat' %>/<%= c.day %>/<%= c.court %>">Record results</a><% } %>
+            <% if (staff && poomsae && competition.poomsae_judges > 1) { %><a class="btn secondary" href="/admin/competitions/<%= competition.id %>/poomsae/mat/<%= c.day %>/<%= c.court %>#judges">Judge</a><% } %>
           </div>
         </article>
       <% }) %>

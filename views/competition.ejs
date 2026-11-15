@@ -26,6 +26,7 @@
       <a class="btn" href="/competitions/<%= competition.id %>/bouts">Bout list</a>
       <% if (hasResults) { %><a class="btn approve" href="/competitions/<%= competition.id %>/results">Results and medals</a><% } %>
       <a class="btn secondary" href="/competitions/<%= competition.id %>/bouts.pdf">Download PDF</a>
+      <% if (competition.status === 'closed') { %><a class="btn secondary" href="/screens/<%= competition.id %>">Court screens</a><% } %>
     </div>
   </section>
 <% } %>

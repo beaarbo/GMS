@@ -1828,7 +1828,12 @@ test('court screens show the bout on now, what is next and recent results', asyn
   const coachIndex = await club.get(`/screens/${compId}`);
   assert.equal(coachIndex.status, 200);
   assert.match(coachIndex.text, new RegExp(`href="/club/competitions/${compId}/bouts">Bout list`), 'the way back goes to their bout list');
-  assert.equal((await request(app).get(`/screens/${compId}/1/1`)).headers.location, '/login');
+  // Visitors see the published screens too, without logging in.
+  const visitorScreen = await request(app).get(`/screens/${compId}/1/1`);
+  assert.equal(visitorScreen.status, 200);
+  assert.doesNotMatch(visitorScreen.text, /athlete-photo/, 'never photos');
+  assert.equal((await request(app).get(`/screens/${compId}`)).status, 200);
+  assert.doesNotMatch((await request(app).get(`/screens/${compId}`)).text, /Record results|Call bouts/, 'no staff buttons');
   assert.equal((await admin.get(`/screens/${compId}/1/9`)).status, 404);
 });
 
@@ -1912,11 +1917,11 @@ test('court screens get a live change event when a result is recorded', async ()
   await new Promise((r) => setTimeout(r, 500));
   assert.doesNotMatch(received, /event: change/);
 
-  // Visitors can't open the stream.
+  // Visitors see screens only once the bout list is published, and it isn't here.
   const anonymous = await new Promise((resolve) => {
-    http.get({ port, path: `/screens/${compId}/1/1/events` }, (res) => { res.resume(); resolve(res.statusCode); });
+    const visit = http.get({ port, path: `/screens/${compId}/1/1/events` }, (res) => { resolve(res.statusCode); visit.destroy(); });
   });
-  assert.equal(anonymous, 302);
+  assert.equal(anonymous, 404);
 
   // Closing the screen stops listening.
   stream.destroy();
