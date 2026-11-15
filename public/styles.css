@@ -891,3 +891,27 @@ body.mat { background: var(--page); }
 .fold[open] > summary::after { content: "Hide"; }
 .fold > summary h2 { margin: 0; }
 .fold[open] > summary { margin-bottom: var(--space-3); }
+
+/* TV screens read from across a hall: type scales with the screen (22px at full HD). */
+html.screen-page { font-size: clamp(16px, 1.15vw, 30px); }
+.screen-page .screen-label { font-size: 1.05rem; }
+.screen-page .screen-sub { font-size: 0.95rem; }
+.screen-bout { display: flex; align-items: center; gap: var(--space-4); font-size: 1.4rem; font-weight: 600; color: #e2e8f0; margin: 0 0 var(--space-2); }
+.screen-bout-number { font-size: 2rem; font-weight: 800; line-height: 1; padding: 6px 16px; border-radius: var(--radius); background: #1e293b; color: #f8fafc; }
+.screen-category { font-size: 1.3rem; font-weight: 600; color: #cbd5e1; margin: 0 0 var(--space-4); }
+.screen-page .screen-list li { font-size: 1.35rem; padding: var(--space-4) 0; align-items: center; }
+.screen-page .screen-list .screen-sub { font-size: 1rem; }
+.screen-page .screen-number { min-width: 3.2rem; padding: 6px 10px; font-size: 1.3em; }
+/* The call screen: a card per called bout, blue and red on their own lines. */
+.screen-call-courts .screen-list li.screen-call-bout { align-items: center; gap: var(--space-4); padding: var(--space-4); margin-bottom: var(--space-3); border: 0; border-radius: var(--radius-lg); background: #111a2e; }
+.screen-call-sides p { margin: 0; line-height: 1.35; }
+.screen-call-sides strong { font-size: 1.45rem; }
+.screen-call-time { color: #94a3b8; font-size: 1rem; font-weight: 600; }
+/* Tighter spacing so a full court screen fits a 1080p TV without scrolling. */
+.screen-page .screen-head { padding: var(--space-4) var(--space-6); }
+.screen-page .screen-main { padding: var(--space-4) var(--space-6); }
+.screen-page .screen-now { padding: var(--space-4) var(--space-5); margin-bottom: var(--space-4); }
+.screen-page .screen-corner { padding: var(--space-4) var(--space-5); }
+.screen-page .screen-list li { padding: var(--space-2) 0; }
+.screen-page .screen-category { margin-bottom: var(--space-3); }
+.screen-page .screen-time { display: inline-block; min-width: 3.2em; }

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="screen-page">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -54,11 +54,12 @@
           <h2 class="screen-label">Court <%= c.court %></h2>
           <ol class="screen-list">
             <% c.bouts.forEach((b) => { const blue = side(b, 'blue'); const red = side(b, 'red'); const done = b.winner || b.noContest; %>
-              <li class="<%= done ? 'screen-done' : '' %>">
+              <li class="screen-call-bout<%= done ? ' screen-done' : '' %>">
                 <span class="screen-number"><%= b.number %></span>
-                <div>
-                  <strong><span class="blue-text"><%= blue.name %></span> vs <span class="red-text"><%= red.name %></span></strong><br>
-                  <span class="screen-sub"><%= b.time %> · <%= [blue.club, red.club].filter(Boolean).join(' / ') %><%= done ? ' · finished' : '' %></span>
+                <div class="screen-call-sides">
+                  <p class="screen-call-time"><%= b.time %><%= done ? ' · finished' : '' %></p>
+                  <p><strong class="blue-text"><%= blue.name %></strong><% if (blue.club) { %> <span class="screen-sub"><%= blue.club %></span><% } %></p>
+                  <p><strong class="red-text"><%= red.name %></strong><% if (red.club) { %> <span class="screen-sub"><%= red.club %></span><% } %></p>
                 </div>
               </li>
             <% }) %>

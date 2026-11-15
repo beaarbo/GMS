@@ -1804,7 +1804,7 @@ test('court screens show the bout on now, what is next and recent results', asyn
   const screen = await admin.get(`/screens/${compId}/1/1`);
   assert.equal(screen.status, 200);
   assert.match(screen.text, /<meta http-equiv="refresh" content="15">/);
-  assert.match(screen.text, /Now fighting[\s\S]*Bout 1 /);
+  assert.match(screen.text, /Now fighting[\s\S]*class="screen-bout-number">Bout 1</);
   assert.match(screen.text, /Up next[\s\S]*Winner of Bout 1/);
   assert.match(screen.text, /No results yet/);
   assert.doesNotMatch(screen.text, /class="nav"/, 'no site menu on a court screen');
@@ -1814,7 +1814,7 @@ test('court screens show the bout on now, what is next and recent results', asyn
   await post(admin, `/admin/competitions/${compId}/results/${first.id}`, { winner: 'blue' }, `/admin/competitions/${compId}/results`);
   const winner = db.prepare('SELECT f.last_name, f.first_name FROM registrations r JOIN fighters f ON f.id = r.fighter_id WHERE r.id = ?').get(first.blue_registration_id);
   const later = (await admin.get(`/screens/${compId}/1/1`)).text;
-  assert.match(later, /Now fighting[\s\S]*Bout 2 /);
+  assert.match(later, /Now fighting[\s\S]*class="screen-bout-number">Bout 2</);
   assert.match(later, new RegExp(`Recent results[\\s\\S]*${winner.last_name} ${winner.first_name}</strong> won`));
 
   // Coaches only once published, visitors never, and unknown courts don't exist.
