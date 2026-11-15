@@ -179,7 +179,9 @@ function entryResult(entry, division) {
 // day with the least poomsae so far. Bout numbering runs on per court and day,
 // as in kyorugi; performers aren't numbered. Returns { places: key → { day,
 // court }, slots: id → { number, start } } with start in minutes after midnight.
-function schedulePoomsae(units, { days, courts, start, minutes, rest }) {
+// startAt(day, court), when given, is when a court shared with kyorugi is free
+// that day, { end (minutes), count (its last bout number) }, or undefined.
+function schedulePoomsae(units, { days, courts, start, minutes, rest, startAt = () => undefined }) {
   const courtsAt = new Map();
   const dayLoad = Array(days + 1).fill(0);
   const places = new Map();
@@ -195,7 +197,10 @@ function schedulePoomsae(units, { days, courts, start, minutes, rest }) {
       places.set(d.key, { day, court: null });
       return;
     }
-    const at = (court) => courtsAt.get(`${day}:${court}`) || { clock: start, count: 0 };
+    const at = (court) => {
+      const taken = startAt(day, court);
+      return courtsAt.get(`${day}:${court}`) || { clock: Math.max(start, taken ? taken.end : start), count: taken ? taken.count : 0 };
+    };
     let court = 1;
     for (let c = 2; c <= courts; c += 1) if (at(c).clock < at(court).clock) court = c;
     const free = at(court);

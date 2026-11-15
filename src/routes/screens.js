@@ -131,19 +131,17 @@ router.get('/:id(\\d+)/main/:day(\\d+)', screenCompetition('any'), (req, res) =>
   const { db } = req.app.locals;
   const competition = req.competition;
   const day = Number(req.params.day);
-  const courts = [];
-  if (kyorugiVisible(req.user, competition)) {
-    const bouts = listBouts(db, competition.id).filter((b) => b.day === day);
-    [...new Set(bouts.map((b) => b.court))].sort((a, b) => a - b).forEach((court) => {
-      courts.push({ kind: 'kyorugi', court, label: `Court ${court}`, ...courtState(bouts.filter((b) => b.court === court)) });
-    });
-  }
-  if (poomsaeVisible(req.user, competition)) {
-    const items = poomsaeCourtItems(db, competition, { published: !isStaff(req.user) }).filter((i) => i.day === day);
-    [...new Set(items.map((i) => i.court))].sort((a, b) => a - b).forEach((court) => {
-      courts.push({ kind: 'poomsae', court, label: `Poomsae court ${court}`, ...courtState(items.filter((i) => i.court === court)) });
-    });
-  }
+  // Kyorugi and poomsae share the courts: one tile per court, its items in the
+  // order the court runs them (the competition's court_order, each in time order).
+  const kyorugi = kyorugiVisible(req.user, competition) ? listBouts(db, competition.id).filter((b) => b.day === day && b.court) : [];
+  const poomsae = poomsaeVisible(req.user, competition)
+    ? poomsaeCourtItems(db, competition, { published: !isStaff(req.user) }).filter((i) => i.day === day && i.court)
+    : [];
+  const courts = [...new Set([...kyorugi, ...poomsae].map((i) => i.court))].sort((a, b) => a - b).map((court) => {
+    const parts = [kyorugi.filter((b) => b.court === court), poomsae.filter((i) => i.court === court)];
+    const items = competition.court_order === 'poomsae' ? [...parts[1], ...parts[0]] : [...parts[0], ...parts[1]];
+    return { court, label: `Court ${court}`, ...courtState(items) };
+  });
   if (courts.length === 0) return notFound(res);
   const [current] = kyorugiVisible(req.user, competition) ? listBoutCalls(db, competition.id, day, 1) : [];
   res.render('screens/main', {
@@ -186,7 +184,7 @@ router.get('/:id(\\d+)/poomsae/:day(\\d+)/:court(\\d+)', screenCompetition('poom
   const queue = poomsaeCourtQueue(db, req.competition, day, court, { published: !isStaff(req.user) });
   if (queue.items.length === 0) return notFound(res);
   res.render('screens/poomsae_court', {
-    title: `Poomsae court ${court}`,
+    title: `Court ${court} · Poomsae`,
     competition: req.competition,
     court,
     day,

@@ -81,13 +81,15 @@ CREATE TABLE IF NOT EXISTS competitions (
   -- How poomsae divisions are decided, and how many go from a score round into the bracket.
   poomsae_format TEXT NOT NULL DEFAULT 'score' CHECK (poomsae_format IN ('score', 'elimination', 'cut')),
   poomsae_cut INTEGER NOT NULL DEFAULT 16,
-  -- Poomsae brackets run on their own courts, numbered "Poomsae court 1" and up.
+  -- Poomsae shares the kyorugi courts (Court 1 and up); poomsae_courts is how many it uses.
   poomsae_courts INTEGER NOT NULL DEFAULT 1,
   poomsae_start TEXT NOT NULL DEFAULT '09:00',
   poomsae_minutes INTEGER NOT NULL DEFAULT 5,
   poomsae_rest_minutes INTEGER NOT NULL DEFAULT 0,
   -- Judges scoring each poomsae performance. One: the official enters the final score.
   poomsae_judges INTEGER NOT NULL DEFAULT 1,
+  -- Kyorugi and poomsae share the courts: which runs first on a court each day.
+  court_order TEXT NOT NULL DEFAULT 'kyorugi' CHECK (court_order IN ('kyorugi', 'poomsae')),
   -- When the poomsae performance lists, and separately the brackets, were published.
   poomsae_published_at TEXT,
   poomsae_brackets_published_at TEXT,
@@ -826,6 +828,15 @@ function migrateDesignatedPoomsae(db) {
   })();
 }
 
+// Version 27: kyorugi and poomsae share the courts. Each competition chooses
+// which runs first on a court; existing ones keep kyorugi first.
+function migrateCourtOrder(db) {
+  db.transaction(() => {
+    addColumnIfMissing(db, 'competitions', 'court_order', "TEXT NOT NULL DEFAULT 'kyorugi'");
+    db.pragma('user_version = 27');
+  })();
+}
+
 function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 1) migrateBelts(db);
   if (db.pragma('user_version', { simple: true }) < 2) migrateSchedule(db);
@@ -853,6 +864,7 @@ function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 24) migrateClubCountry(db);
   if (db.pragma('user_version', { simple: true }) < 25) migrateOwner(db);
   if (db.pragma('user_version', { simple: true }) < 26) migrateDesignatedPoomsae(db);
+  if (db.pragma('user_version', { simple: true }) < 27) migrateCourtOrder(db);
 }
 
 // Safe on old databases: only tables that don't exist yet are created.

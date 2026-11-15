@@ -756,6 +756,45 @@ function nextPoomsaeSeq(db, competitionId) {
   return db.prepare('SELECT COALESCE(MAX(MAX(COALESCE(list_seq, 0), COALESCE(bracket_seq, 0))), 0) + 1 AS n FROM poomsae_divisions WHERE competition_id = ?').get(competitionId).n;
 }
 
+// Kyorugi and poomsae share Court 1 and up. On each court each day, the event
+// named by competitions.court_order runs first, and the other starts once it has
+// finished there, its bout numbers carrying on. These give when each court is
+// free of one event: `day:court` to { end (minutes after midnight), count (last bout number) }.
+const toMinutes = (time) => { const [hours, mins] = String(time).split(':').map(Number); return hours * 60 + mins; };
+const sharesCourts = (competition) => hasKyorugi(competition) && hasPoomsae(competition);
+
+function kyorugiCourtEnds(db, competition) {
+  return new Map(db.prepare('SELECT day, court, MAX(start_time) AS last, MAX(bout_number) AS count FROM bouts WHERE competition_id = ? AND start_time IS NOT NULL GROUP BY day, court').all(competition.id)
+    .map((row) => [`${row.day}:${row.court}`, { end: toMinutes(row.last) + competition.bout_minutes, count: row.count || 0 }]));
+}
+
+function poomsaeCourtEnds(db, competition) {
+  const rows = [
+    ...db.prepare('SELECT day, court, MAX(start_time) AS last, MAX(bout_number) AS count FROM poomsae_bouts WHERE competition_id = ? AND start_time IS NOT NULL GROUP BY day, court').all(competition.id),
+    ...db.prepare(
+      `SELECT d.list_day AS day, d.list_court AS court, MAX(e.perform_time) AS last FROM poomsae_entries e
+       JOIN poomsae_divisions d ON d.competition_id = e.competition_id AND d.division_key = e.event || '-' || e.gender || '-' || e.age_group_id || '-' || e.belt_group_id
+       WHERE e.competition_id = ? AND e.perform_time IS NOT NULL AND d.list_court IS NOT NULL GROUP BY d.list_day, d.list_court`
+    ).all(competition.id),
+  ];
+  const ends = new Map();
+  rows.forEach((row) => {
+    const key = `${row.day}:${row.court}`;
+    const was = ends.get(key) || { end: 0, count: 0 };
+    ends.set(key, { end: Math.max(was.end, toMinutes(row.last) + competition.poomsae_minutes), count: Math.max(was.count, row.count || 0) });
+  });
+  return ends;
+}
+
+// Times everything again in the right order: the event that goes first on the
+// courts, then the other after it.
+function applyAllSchedules(db, competitionId) {
+  const competition = db.prepare('SELECT * FROM competitions WHERE id = ?').get(competitionId);
+  const hasBouts = Boolean(db.prepare('SELECT 1 FROM bouts WHERE competition_id = ? LIMIT 1').get(competitionId));
+  if (competition.court_order === 'poomsae' || !hasBouts) applyPoomsaeSchedule(db, competitionId);
+  else applySchedule(db, competitionId);
+}
+
 function applyPoomsaeSchedule(db, competitionId) {
   const competition = db.prepare('SELECT * FROM competitions WHERE id = ?').get(competitionId);
   const settings = loadPoomsaeSettings(db, competitionId);
@@ -785,6 +824,7 @@ function applyPoomsaeSchedule(db, competitionId) {
     start: hours * 60 + mins,
     minutes: competition.poomsae_minutes,
     rest: competition.poomsae_rest_minutes,
+    startAt: sharesCourts(competition) && competition.court_order === 'kyorugi' ? ((ends) => (day, court) => ends.get(`${day}:${court}`))(kyorugiCourtEnds(db, competition)) : undefined,
   });
   const update = db.prepare('UPDATE poomsae_bouts SET day = ?, court = ?, bout_number = ?, start_time = ? WHERE id = ?');
   const time = db.prepare('UPDATE poomsae_entries SET perform_time = ? WHERE id = ?');
@@ -800,6 +840,8 @@ function applyPoomsaeSchedule(db, competitionId) {
       if (unit.list) listPlace.run(places.get(unit.key).day, places.get(unit.key).court, competitionId, unit.division);
     });
   })();
+  // Poomsae first: kyorugi starts where poomsae now ends.
+  if (sharesCourts(competition) && competition.court_order === 'poomsae') applySchedule(db, competitionId, { kyorugiOnly: true });
 }
 
 // A random performance order for ranked divisions and score rounds: key, or
@@ -861,7 +903,7 @@ function poomsaeBoutList(db, competition, { clubId = null, published = false } =
       if (d.order.length > 0) {
         pages.push({
           kind: 'list', key: d.key, title: boutListTitle(d), day: d.listDay, court: d.listCourt, start: d.order[0].perform_time || '',
-          meta: [`Day: ${dayLabel(d.listDay)}`, `Poomsae court: ${d.listCourt || '-'}`, `Entries: ${d.order.length}`, `Starts: ${d.order[0].perform_time || '-'}`, ...(d.listPoomsae ? [`Poomsae: ${d.listPoomsae.join(' · ')}`] : [])],
+          meta: [`Day: ${dayLabel(d.listDay)}`, `Court: ${d.listCourt || '-'}`, `Entries: ${d.order.length}`, `Starts: ${d.order[0].perform_time || '-'}`, ...(d.listPoomsae ? [`Poomsae: ${d.listPoomsae.join(' · ')}`] : [])],
           performers: d.order.map((e) => ({ id: e.id, name: e.names, club: e.club_label, clubId: e.club_id, time: e.perform_time })),
           dayLabel: dayLabel(d.listDay),
         });
@@ -871,7 +913,7 @@ function poomsaeBoutList(db, competition, { clubId = null, published = false } =
         const times = d.bouts.map((b) => b.time).filter(Boolean).sort();
         pages.push({
           kind: 'bracket', key: d.key, title: `${boutListTitle(d)}${d.mode === 'cut' ? ' - FINAL ROUND' : ''}`, day: d.day, court: d.court, start: times[0] || '',
-          meta: [`Day: ${dayLabel(d.day)}`, `Poomsae court: ${d.court || '-'}`, `Entries: ${d.bouts.filter((b) => b.round === 1).reduce((n, b) => n + (b.blue ? 1 : 0) + (b.red ? 1 : 0), 0)}`, `Bouts: ${matches}`, ...(d.bracketPoomsae ? [`Poomsae: ${d.bracketPoomsae.join(' · ')}`] : [])],
+          meta: [`Day: ${dayLabel(d.day)}`, `Court: ${d.court || '-'}`, `Entries: ${d.bouts.filter((b) => b.round === 1).reduce((n, b) => n + (b.blue ? 1 : 0) + (b.red ? 1 : 0), 0)}`, `Bouts: ${matches}`, ...(d.bracketPoomsae ? [`Poomsae: ${d.bracketPoomsae.join(' · ')}`] : [])],
           bouts: d.bouts, matches, layout: d.layout, dayLabel: dayLabel(d.day),
         });
       }
@@ -941,11 +983,12 @@ function competitionProgramme(db, competition, { published = false, event = null
   if (event !== 'kyorugi' && hasPoomsae(competition)) {
     poomsaeBoutList(db, competition, { published, clubId }).forEach((p) => parts.push({
       ...p, event: 'Poomsae', anchor: `poomsae-${p.kind}-${p.key}`, courtOrder: 1,
-      courtLabel: p.court ? `Poomsae court ${p.court}` : 'No court',
+      courtLabel: p.court ? `Court ${p.court}` : 'No court',
     }));
   }
-  return parts.sort((a, b) => (a.day || 99) - (b.day || 99) || a.courtOrder - b.courtOrder
-    || (a.court || 99) - (b.court || 99) || String(a.start).localeCompare(String(b.start)));
+  // Both events share the courts, so a court's kyorugi and poomsae sort by start time.
+  return parts.sort((a, b) => (a.day || 99) - (b.day || 99) || (a.court || 99) - (b.court || 99)
+    || String(a.start).localeCompare(String(b.start)) || a.courtOrder - b.courtOrder);
 }
 
 // Bout calling. A call names bout numbers fromNumber..toNumber on one day, on
@@ -1010,12 +1053,12 @@ function clubCompetitors(db, competition, clubId, { event = null } = {}) {
           const next = d.bouts.find((b) => !b.isBye && !b.winner && [b.blue, b.red].some((side) => side && side.registrationId === e.id));
           rows.push({
             name: e.names, event: 'Poomsae', division: d.title, day: d.day, dayLabel: dayLabel(d.day),
-            court: d.court ? `Poomsae court ${d.court}` : '–', next: next ? `Bout ${next.number}` : '–', time: next ? next.time : '', poomsae: d.bracketPoomsae, status,
+            court: d.court ? `Court ${d.court}` : '–', next: next ? `Bout ${next.number}` : '–', time: next ? next.time : '', poomsae: d.bracketPoomsae, status,
           });
         } else if (lists && e.perform_order !== null) {
           rows.push({
             name: e.names, event: 'Poomsae', division: d.title, day: d.listDay, dayLabel: dayLabel(d.listDay),
-            court: d.listCourt ? `Poomsae court ${d.listCourt}` : '–', next: e.score === null ? `Performs ${e.perform_order} of ${d.order.length}` : '–',
+            court: d.listCourt ? `Court ${d.listCourt}` : '–', next: e.score === null ? `Performs ${e.perform_order} of ${d.order.length}` : '–',
             time: e.score === null ? e.perform_time || '' : '', poomsae: d.listPoomsae, status,
           });
         }
@@ -1096,12 +1139,36 @@ function clearPoomsaeOrder(db, competition, key) {
 }
 
 // The poomsae courts and timings. Callers validate first. Reschedules every bracket.
-function savePoomsaeSchedule(db, competitionId, { courts, start, minutes, rest, judges }) {
+function savePoomsaeSchedule(db, competitionId, { courts, start, minutes, rest, judges, courtOrder = null }) {
   db.transaction(() => {
-    db.prepare('UPDATE competitions SET poomsae_courts = ?, poomsae_start = ?, poomsae_minutes = ?, poomsae_rest_minutes = ?, poomsae_judges = ? WHERE id = ?')
-      .run(courts, start, minutes, rest, judges, competitionId);
-    applyPoomsaeSchedule(db, competitionId);
+    db.prepare('UPDATE competitions SET poomsae_courts = ?, poomsae_start = ?, poomsae_minutes = ?, poomsae_rest_minutes = ?, poomsae_judges = ?, court_order = COALESCE(?, court_order) WHERE id = ?')
+      .run(courts, start, minutes, rest, judges, courtOrder, competitionId);
+    applyAllSchedules(db, competitionId);
   })();
+}
+
+// The day each poomsae division competes on, from the Bout list's Division
+// days: key -> day number, or null for any day. Only divisions with entries are
+// changed, and everything is timed again. Returns how many changed.
+function savePoomsaeDays(db, competition, days) {
+  const keys = new Set(listPoomsaeEntries(db, competition.id).filter((e) => e.status !== 'rejected').map(poomsaeKey));
+  const count = getEventDates(db, competition.id).length;
+  const now = loadPoomsaeSettings(db, competition.id);
+  let changed = 0;
+  const save = db.prepare(
+    `INSERT INTO poomsae_divisions (competition_id, division_key, day) VALUES (?, ?, ?)
+     ON CONFLICT (competition_id, division_key) DO UPDATE SET day = excluded.day`
+  );
+  db.transaction(() => {
+    days.forEach((day, key) => {
+      if (!keys.has(key) || (day !== null && !(Number.isInteger(day) && day >= 1 && day <= count))) return;
+      if (((now.get(key) || {}).day ?? null) === day) return;
+      save.run(competition.id, key, day);
+      changed += 1;
+    });
+    if (changed > 0) applyAllSchedules(db, competition.id);
+  })();
+  return changed;
 }
 
 // One division's own format, cut and day (null keeps the competition's, or an
@@ -1177,6 +1244,9 @@ function hasBoutList(db, competitionId) {
 
 function deleteBoutList(db, competitionId) {
   db.prepare('DELETE FROM bouts WHERE competition_id = ?').run(competitionId);
+  // Poomsae no longer waits for kyorugi on the shared courts.
+  const competition = db.prepare('SELECT * FROM competitions WHERE id = ?').get(competitionId);
+  if (competition && sharesCourts(competition) && competition.court_order === 'kyorugi') applyPoomsaeSchedule(db, competitionId);
 }
 
 function secureRandom() {
@@ -1236,7 +1306,8 @@ function saveDivisionDays(db, competitionId, choices) {
 // Sets each division's day and court, then numbers and times its bouts, keeping
 // each fighter's rest between bouts. Numbering restarts for each court on each
 // day. Doesn't change who fights whom.
-function applySchedule(db, competitionId) {
+// kyorugiOnly: called back by the poomsae schedule, so don't call it again.
+function applySchedule(db, competitionId, { kyorugiOnly = false } = {}) {
   const competition = db.prepare('SELECT * FROM competitions WHERE id = ?').get(competitionId);
   const rows = db
     .prepare(
@@ -1278,8 +1349,12 @@ function applySchedule(db, competitionId) {
     courts.set(key, [...(courts.get(key) || []), bouts]);
   });
   const times = new Map();
-  courts.forEach((courtDivisions) => {
-    scheduleCourt(courtDivisions, options).forEach((slot, id) => times.set(id, slot));
+  // Poomsae first on shared courts: each court's kyorugi starts when its poomsae ends, numbers carrying on.
+  const taken = sharesCourts(competition) && competition.court_order === 'poomsae' ? poomsaeCourtEnds(db, competition) : new Map();
+  courts.forEach((courtDivisions, key) => {
+    const before = taken.get(key);
+    const start = before ? Math.max(options.start, before.end) : options.start;
+    scheduleCourt(courtDivisions, { ...options, start }).forEach((slot, id) => times.set(id, before ? { ...slot, number: slot.number + before.count } : slot));
   });
 
   const update = db.prepare('UPDATE bouts SET day = ?, court = ?, bout_number = ?, start_time = ? WHERE id = ?');
@@ -1292,6 +1367,8 @@ function applySchedule(db, competitionId) {
       });
     });
   })();
+  // Kyorugi first: poomsae starts where kyorugi now ends.
+  if (!kyorugiOnly && sharesCourts(competition) && competition.court_order === 'kyorugi') applyPoomsaeSchedule(db, competitionId);
 }
 
 // Athletes who didn't turn up or were disqualified at weigh-in aren't drawn.
@@ -2144,6 +2221,8 @@ module.exports = {
   countRegistrations,
   saveDivisionSetup,
   savePoomsaeAgeGroups,
+  applyAllSchedules,
+  savePoomsaeDays,
   listDesignatedPoomsae,
   saveDesignatedPoomsae,
   drawDivisionPoomsae,

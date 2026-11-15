@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <%# With JavaScript the page updates live as scores come in. Without it, it reloads itself. %>
   <noscript><meta http-equiv="refresh" content="<%= refreshSeconds %>"></noscript>
-  <title>Poomsae court <%= court %> · <%= competition.name %></title>
+  <title>Court <%= court %> · Poomsae · <%= competition.name %></title>
   <link rel="stylesheet" href="/styles.css">
   <script src="/app.js" defer></script>
 </head>
@@ -14,7 +14,7 @@
 
 <header class="screen-head">
   <div>
-    <p class="screen-court">Poomsae court <%= court %></p>
+    <p class="screen-court">Court <%= court %> · Poomsae</p>
     <p class="screen-sub"><%= competition.name %> · <%= dayLabel %></p>
   </div>
   <div class="screen-sub screen-right">

@@ -652,7 +652,7 @@ test('schedule migration clears old draws and keeps competitions', () => {
 
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM bouts').get().n, 0);
   assert.equal(db.prepare('SELECT bout_courts FROM competitions WHERE id = ?').get(compId).bout_courts, 2);
-  assert.equal(db.pragma('user_version', { simple: true }), 26);
+  assert.equal(db.pragma('user_version', { simple: true }), 27);
 });
 
 test('admin creates a club, a coach applies, and only approval unlocks athlete registration', async () => {
@@ -817,7 +817,7 @@ test('migrating old club accounts keeps logins and fighters and approves each co
   const clubColumns = db.pragma('table_info(clubs)').map((c) => c.name);
   assert.ok(!clubColumns.includes('coach_name'));
   assert.equal(db.pragma('foreign_key_check').length, 0);
-  assert.equal(db.pragma('user_version', { simple: true }), 26);
+  assert.equal(db.pragma('user_version', { simple: true }), 27);
 });
 
 test('a fighter alone in a division has no bout number', async () => {
@@ -991,7 +991,7 @@ test('migration turns a day count into consecutive dates', () => {
   const { id } = db.prepare('SELECT id FROM competitions').get();
   assert.deepEqual(getEventDates(db, id), ['2030-01-30', '2030-01-31', '2030-02-01']);
   assert.ok(!db.pragma('table_info(competitions)').some((c) => c.name === 'bout_days'));
-  assert.equal(db.pragma('user_version', { simple: true }), 26);
+  assert.equal(db.pragma('user_version', { simple: true }), 27);
 });
 
 const tokenIn = (message) => message.text.match(/reset-password\/([0-9a-f]{64})/)[1];
@@ -1236,7 +1236,7 @@ test('the results migration removes declared weights and keeps registrations', (
   db.pragma('user_version = 4');
   migrate(db);
   assert.ok(!db.pragma('table_info(registrations)').some((c) => c.name === 'declared_weight_kg'));
-  assert.equal(db.pragma('user_version', { simple: true }), 26);
+  assert.equal(db.pragma('user_version', { simple: true }), 27);
 });
 
 test('athletes need the right document before they can enter', async () => {
@@ -1853,7 +1853,7 @@ test('rebuilding the users table for officials keeps every linked row', async ()
   db.close();
 
   db = openDb(file);
-  assert.equal(db.pragma('user_version', { simple: true }), 26);
+  assert.equal(db.pragma('user_version', { simple: true }), 27);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM club_applications').get().n, 1);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM password_resets').get().n, 1);
   assert.equal(db.prepare('SELECT author_id FROM news_posts').get().author_id, coachId);
@@ -2337,7 +2337,7 @@ test('migrating to version 13 moves poomsae entries onto poomsae age groups', ()
   db.pragma('user_version = 12');
 
   migrate(db);
-  assert.equal(db.pragma('user_version', { simple: true }), 26);
+  assert.equal(db.pragma('user_version', { simple: true }), 27);
   const moved = db.prepare('SELECT a.name, e.status FROM poomsae_entries e JOIN poomsae_age_groups a ON a.id = e.age_group_id WHERE e.id = ?').get(entry);
   assert.deepEqual(moved, { name: 'U40', status: 'approved' });
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM poomsae_members').get().n, 1);
@@ -2473,7 +2473,7 @@ test('poomsae divisions choose their own format and day, and brackets get courts
   assert.equal(db.prepare('SELECT DISTINCT day FROM poomsae_bouts WHERE division_key = ?').get(female).day, 1);
   await post(admin, `${review}/publish`, { stage: 'brackets' }, review);
   const mine = (await club.get(page)).text;
-  assert.match(mine, /Day: <strong>1 \([^)]+\)<\/strong><\/span><span>Poomsae court: <strong>1<\/strong>/);
+  assert.match(mine, /Day: <strong>1 \([^)]+\)<\/strong><\/span><span>Court: <strong>1<\/strong>/);
   assert.match(mine, /09:30/);
 
   // Officials can't change the schedule.
@@ -2512,7 +2512,7 @@ test('ranked poomsae gets a random performance order with times, published to co
   ['M', 'F'].forEach((gender) => {
     assert.deepEqual(lists.filter((e) => e.gender === gender).map((e) => e.perform_order), gender === 'M' ? [1, 2] : [1, 2, 3]);
   });
-  assert.match((await admin.get(review.replace(/poomsae$/, 'bouts'))).text, /Day: <strong>1 \([^)]+\)<\/strong><\/span><span>Poomsae court: <strong>1<\/strong>[\s\S]*?Performance order/);
+  assert.match((await admin.get(review.replace(/poomsae$/, 'bouts'))).text, /Day: <strong>1 \([^)]+\)<\/strong><\/span><span>Court: <strong>1<\/strong>[\s\S]*?Performance order/);
 
   // An entry in a list can't be rejected, and a scored list can't be redrawn or cleared.
   const [first] = db.prepare("SELECT id, event, gender, age_group_id, belt_group_id FROM poomsae_entries WHERE gender = 'F' ORDER BY perform_order").all();
@@ -2609,7 +2609,7 @@ test('published bout lists are public: kyorugi, and poomsae order and brackets a
   const e = db.prepare('SELECT event, gender, age_group_id, belt_group_id FROM poomsae_entries WHERE id = ?').get(entries[0].id);
   await post(admin, `${review}/draw`, { division: [e.event, e.gender, e.age_group_id, e.belt_group_id].join('-') }, review);
   // The admin page shows where each part runs: the list in the header, the bracket above it.
-  assert.match((await admin.get(review.replace(/poomsae$/, 'bouts'))).text, /Poomsae court: <strong>1<\/strong>[\s\S]*?<h3>Bracket<\/h3>[\s\S]*?>Delete bracket<[\s\S]*?<p class="stats">[\s\S]*?Poomsae court: <strong>2<\/strong>/);
+  assert.match((await admin.get(review.replace(/poomsae$/, 'bouts'))).text, /Court: <strong>1<\/strong>[\s\S]*?<h3>Bracket<\/h3>[\s\S]*?>Delete bracket<[\s\S]*?<p class="stats">[\s\S]*?Court: <strong>2<\/strong>/);
   assert.doesNotMatch((await visitor.get(publicPage)).text, /<svg class="bracket"/);
   assert.match((await admin.get(review.replace(/poomsae$/, 'bouts'))).text, /Publish poomsae brackets/);
   await post(admin, `${review}/publish`, { stage: 'brackets' }, review);
@@ -2757,7 +2757,8 @@ test('poomsae on court screens and the mat page, judges\' scores, and final resu
   // One bout list for both events, in running order, with the same filters as the results.
   const list = `/competitions/${compId}/bouts`;
   const both = (await visitor.get(list)).text;
-  assert.match(both, /Running order[\s\S]*?Court 1[\s\S]*?Poomsae court 1/, 'kyorugi courts, then poomsae courts');
+  // Both events share Court 1: kyorugi first (the default), then poomsae after it.
+  assert.match(both, /Running order[\s\S]*?Court 1<\/td>[\s\S]*?Kyorugi[\s\S]*?Court 1<\/td>[\s\S]*?Poomsae/, 'kyorugi first on the shared court, then poomsae');
   assert.match(both, /id="kyorugi-[^"]+"[\s\S]*?id="poomsae-list-[^"]+"/);
   assert.match(both, /<a href="\/competitions\/\d+\/results"[^>]*>Results and medals/);
   assert.doesNotMatch((await visitor.get(`${list}?event=kyorugi`)).text, /id="poomsae-/);

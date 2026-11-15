@@ -34,7 +34,7 @@
       <% } %>
       <% d.courts.forEach((c) => { const poomsae = c.kind === 'poomsae'; %>
         <article class="card">
-          <h3 class="card-title"><%= poomsae ? 'Poomsae court' : 'Court' %> <%= c.court %></h3>
+          <h3 class="card-title">Court <%= c.court %><%= poomsae ? ' · Poomsae' : '' %></h3>
           <p class="sub"><%= c.done %> of <%= c.total %> <%= poomsae ? 'performances and bouts' : 'bouts' %> finished</p>
           <div class="actions">
             <a class="btn" href="/screens/<%= competition.id %>/<%= poomsae ? 'poomsae/' : '' %><%= c.day %>/<%= c.court %>">Open screen</a>

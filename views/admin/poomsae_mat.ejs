@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Poomsae court <%= court %> results · <%= competition.name %></title>
+  <title>Court <%= court %> poomsae results · <%= competition.name %></title>
   <script src="/theme.js"></script>
   <link rel="stylesheet" href="/styles.css">
   <script src="/app.js" defer></script>
@@ -14,7 +14,7 @@
 <% const judges = competition.poomsae_judges; %>
 <header class="mat-head">
   <div>
-    <h1>Poomsae court <%= court %></h1>
+    <h1>Court <%= court %> · Poomsae</h1>
     <p class="sub"><%= competition.name %> · <%= dayLabel %></p>
   </div>
   <nav class="actions" aria-label="Court">

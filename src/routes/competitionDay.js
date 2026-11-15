@@ -22,6 +22,7 @@ const {
   savePoomsaeSchedule,
   savePoomsaeDivision,
   saveDesignatedPoomsae,
+  savePoomsaeDays,
   recordBoutCall,
   callTime,
   callText,
@@ -314,7 +315,8 @@ router.get('/competitions/:id(\\d+)/calls', (req, res) => {
   const day = dayNumbers.includes(asked) ? asked : (bouts.find((b) => !b.winner && !b.noContest) || bouts[0] || {}).day || null;
   const calls = (day ? listBoutCalls(db, req.competition.id, day) : []).map((call) => ({ ...call, at: callTime(call), text: callText(call) }));
   const current = calls[0] || null;
-  const next = current ? current.to_number + 1 : 1;
+  // After the last call, else from the day's first bout number (poomsae may come first on the courts).
+  const next = current ? current.to_number + 1 : Math.min(...bouts.filter((b) => b.day === day && b.number).map((b) => b.number), Infinity) || 1;
   res.render('admin/calls', {
     title: 'Bout calling',
     competition: req.competition,
@@ -454,7 +456,7 @@ router.get('/competitions/:id(\\d+)/poomsae/mat/:day(\\d+)/:court(\\d+)', (req, 
   const date = getEventDates(db, req.competition.id)[day - 1];
   const last = queue.recent[0] || null;
   return res.render('admin/poomsae_mat', {
-    title: `Poomsae court ${court} results`,
+    title: `Court ${court} poomsae results`,
     competition: req.competition,
     day,
     court,
@@ -512,7 +514,7 @@ router.post('/competitions/:id(\\d+)/poomsae/judge/:day(\\d+)/:court(\\d+)/:judg
       : submitJudgeMark(db, req.competition, req.seat, req.body.entry, parsed.score);
   if (!result.ok) req.flash('error', result.error);
   else {
-    req.logActivity('poomsae.judge_mark', `Judge ${judge} (poomsae court ${court}, day ${day}) scored ${result.performer.name} (${result.performer.club})`, req.competition.id);
+    req.logActivity('poomsae.judge_mark', `Judge ${judge} (court ${court} poomsae, day ${day}) scored ${result.performer.name} (${result.performer.club})`, req.competition.id);
     if (result.complete) {
       req.logActivity('poomsae.scored', `Poomsae score ${formatScore(result.score)} for ${result.performer.name} (${result.performer.club}) from the judges`, req.competition.id);
     }
@@ -563,13 +565,15 @@ router.post('/competitions/:id(\\d+)/poomsae/schedule', requireRole('admin'), (r
     rest: number(req.body.rest),
     // Left out of the form: keep the current number of judges.
     judges: req.body.judges === undefined ? req.competition.poomsae_judges : number(req.body.judges),
+    // Which event runs first on the shared courts; left out keeps the current order.
+    courtOrder: ['kyorugi', 'poomsae'].includes(req.body.court_order) ? req.body.court_order : null,
   };
   const errors = [];
   if (!JUDGE_COUNTS.includes(values.judges)) errors.push('Choose 1, 3, 5 or 7 judges.');
   else if (values.judges !== req.competition.poomsae_judges && hasPoomsaeScores(db, req.competition.id)) {
     errors.push('Poomsae already has scores, so the number of judges stays as it is. Clear the scores to change it.');
   }
-  if (!(values.courts >= 1 && values.courts <= 20)) errors.push('Enter from 1 to 20 poomsae courts.');
+  if (!(values.courts >= 1 && values.courts <= 20)) errors.push('Enter from 1 to 20 courts for poomsae.');
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(values.start)) errors.push('Enter a valid start time.');
   if (!(values.minutes >= 1 && values.minutes <= 60)) errors.push('Enter from 1 to 60 minutes per bout.');
   if (!(values.rest >= 0 && values.rest <= 120)) errors.push('Enter a rest from 0 to 120 minutes.');
@@ -615,6 +619,19 @@ router.post('/competitions/:id(\\d+)/poomsae/division', requireRole('admin'), (r
     }
   }
   return res.redirect(sharedPageReturn(req, `division-${key}`) || poomsaePath(competition, null, key));
+});
+
+// Each poomsae division's day, from the Bout list's Division days table:
+// day_<division key> = a day number, or blank for any day.
+router.post('/competitions/:id(\\d+)/poomsae/days', requireRole('admin'), (req, res) => {
+  const { db } = req.app.locals;
+  const days = new Map(Object.entries(req.body)
+    .filter(([name]) => name.startsWith('day_'))
+    .map(([name, value]) => [name.slice(4), /^\d{1,2}$/.test(String(value)) ? Number(value) : null]));
+  const changed = savePoomsaeDays(db, req.competition, days);
+  if (changed > 0) req.logActivity('poomsae.days', `Set the day of ${changed} poomsae division${changed === 1 ? '' : 's'}: ${req.competition.name}`, req.competition.id);
+  req.flash('success', changed > 0 ? 'Poomsae division days saved. Everything has been timed again.' : 'No days changed.');
+  return res.redirect(sharedPageReturn(req, 'poomsae-days') || poomsaePath(req.competition));
 });
 
 // One age group's designated poomsae, from the Divisions page.
