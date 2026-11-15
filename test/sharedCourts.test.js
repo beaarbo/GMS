@@ -149,3 +149,64 @@ test('bout calling covers poomsae: ranges include its bracket bouts, and a whole
   assert.match(visitor, /Poomsae: Individual/);
   assert.doesNotMatch(visitor, /Bea Lee/);
 });
+
+test('the admin puts kyorugi and poomsae divisions on chosen courts', async () => {
+  const db = openDb(':memory:');
+  await ensureAdmin(db, 'admin@test.test', PASSWORD);
+  saveSettings(db, { require_document: '0' });
+  const clubId = createClub(db, { name: 'Tigers' });
+  const id = createCompetition(db, { name: 'Court Cup', event_date: `${YEAR}-12-01`, registration_deadline: `${YEAR}-11-01`, venue: 'Hall', status: 'open', events: 'both', poomsae_format: 'elimination' });
+  db.prepare("UPDATE competitions SET bout_courts = 2, bout_start = '09:00', bout_minutes = 10, poomsae_courts = 1, poomsae_start = '09:00', poomsae_minutes = 5 WHERE id = ?").run(id);
+  const competition = db.prepare('SELECT * FROM competitions WHERE id = ?').get(id);
+  const add = (first) => db.prepare('SELECT * FROM fighters WHERE id = ?').get(
+    db.prepare("INSERT INTO fighters (club_id, first_name, last_name, gender, date_of_birth, belt_rank) VALUES (?, ?, 'Lee', 'F', ?, 3)").run(clubId, first, `${YEAR - 16}-03-01`).lastInsertRowid
+  );
+  const ana = add('Ana');
+  const bea = add('Bea');
+  const weight = findWeightClass(divisionOptions({ fighter: ana, competition, ...loadDivisionSetup(db, id) }).classes, 48).id;
+  [ana, bea].forEach((f) => {
+    assert.ok(enterFighter(db, competition, f, weight).ok);
+    assert.ok(enterPoomsae(db, competition, clubId, 'individual', [f]).ok);
+  });
+  db.prepare("UPDATE registrations SET status = 'approved'").run();
+  db.prepare("UPDATE poomsae_entries SET status = 'approved'").run();
+  db.prepare("UPDATE competitions SET status = 'closed' WHERE id = ?").run(id);
+  const entry = db.prepare('SELECT * FROM poomsae_entries').get();
+  const poomsaeKey = [entry.event, entry.gender, entry.age_group_id, entry.belt_group_id].join('-');
+  generateBoutList(db, id);
+  assert.ok(drawPoomsaeBracket(db, db.prepare('SELECT * FROM competitions WHERE id = ?').get(id), poomsaeKey).ok);
+  const bout = db.prepare('SELECT gender, age_group_id, belt_group_id, weight_class_id FROM bouts WHERE competition_id = ? AND is_bye = 0').get(id);
+  const kyorugiKey = [bout.gender, bout.age_group_id, bout.belt_group_id, bout.weight_class_id].join('-');
+  const kyorugiBout = () => db.prepare('SELECT court, bout_number, start_time FROM bouts WHERE competition_id = ? AND is_bye = 0').get(id);
+  const poomsaeBout = () => db.prepare('SELECT court, bout_number, start_time FROM poomsae_bouts WHERE competition_id = ? AND is_bye = 0').get(id);
+  assert.equal(kyorugiBout().court, 1, 'Auto: the first court');
+
+  const app = createApp({ db, sessionSecret: 'test-secret', mailer: { configured: true, send: async () => {} } });
+  const admin = request.agent(app);
+  const loginCsrf = (await admin.get('/login')).text.match(/name="_csrf" value="([^"]+)"/)[1];
+  await admin.post('/login').type('form').send({ _csrf: loginCsrf, email: 'admin@test.test', password: PASSWORD });
+  const bouts = `/admin/competitions/${id}/bouts`;
+  const page = (await admin.get(bouts)).text;
+  assert.match(page, /Division courts/);
+  assert.match(page, new RegExp(`name="court_${kyorugiKey}"`));
+  assert.match(page, new RegExp(`name="court_${poomsaeKey}"`), 'poomsae can use any shared court');
+  const csrf = page.match(/name="_csrf" value="([^"]+)"/)[1];
+
+  // Kyorugi on Court 2.
+  await admin.post(`/admin/competitions/${id}/bouts/days`).type('form').send({ _csrf: csrf, [`court_${kyorugiKey}`]: '2' });
+  assert.deepEqual(kyorugiBout(), { court: 2, bout_number: 1, start_time: '09:00' });
+  assert.deepEqual(poomsaeBout(), { court: 1, bout_number: 1, start_time: '09:00' }, 'poomsae has Court 1 to itself now');
+
+  // The main screen names each bout's event and division.
+  const main = (await admin.get(`/screens/${id}/main/1`)).text;
+  assert.match(main, /class="main-category">Poomsae · Individual/);
+  assert.match(main, /class="main-category">KYORUGI/);
+
+  // Poomsae on Court 2 too: after the kyorugi there (kyorugi first), as bout 2.
+  await admin.post(`/admin/competitions/${id}/poomsae/days`).type('form').send({ _csrf: csrf, [`court_${poomsaeKey}`]: '2', back: 'bouts' });
+  assert.deepEqual(poomsaeBout(), { court: 2, bout_number: 2, start_time: '09:10' });
+
+  // Back to Auto.
+  await admin.post(`/admin/competitions/${id}/bouts/days`).type('form').send({ _csrf: csrf, [`court_${kyorugiKey}`]: '' });
+  assert.equal(kyorugiBout().court, 1);
+});

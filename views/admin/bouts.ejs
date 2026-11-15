@@ -104,22 +104,24 @@
   </section>
 <% } %>
 
-<% if (divisions.length > 0 && dayCount > 1) { %>
+<% if (divisions.length > 0 && (dayCount > 1 || competition.bout_courts > 1)) { %>
   <section class="card">
-    <h2>Division days</h2>
-    <p class="sub">Choose the day each division fights. Divisions left on Auto fill the days in order around the ones you choose. Your choices are kept if you redraw.</p>
+    <% const pickDay = dayCount > 1; const pickCourt = competition.bout_courts > 1; %>
+    <h2><%= pickDay && pickCourt ? 'Division days and courts' : pickDay ? 'Division days' : 'Division courts' %></h2>
+    <p class="sub">Choose <%= pickDay && pickCourt ? 'the day and court' : pickDay ? 'the day' : 'the court' %> each division fights on. Divisions left on Auto share out around the ones you choose. Your choices are kept if you redraw.</p>
     <form method="post" action="/admin/competitions/<%= competition.id %>/bouts/days">
       <input type="hidden" name="_csrf" value="<%= csrf %>">
 <input type="hidden" name="event" value="<%= event || '' %>">
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Division</th><th class="num">Matches</th><th>Now on</th><th>Fights on</th></tr></thead>
+          <thead><tr><th>Division</th><th class="num">Matches</th><th>Now on</th><% if (pickDay) { %><th>Day</th><% } %><% if (pickCourt) { %><th>Court</th><% } %></tr></thead>
           <tbody>
-            <% divisions.forEach((division) => { const chosen = pinnedDays.get(division.key); %>
+            <% divisions.forEach((division) => { const chosen = pinnedDays.get(division.key); const chosenCourt = pinnedCourts.get(division.key); %>
               <tr>
-                <td><label for="day_<%= division.key %>"><%= division.title %></label></td>
+                <td><label for="<%= pickDay ? 'day' : 'court' %>_<%= division.key %>"><%= division.title %></label></td>
                 <td class="num"><%= division.matches %></td>
                 <td class="nowrap">Day <%= division.day %><%= division.court ? `, Court ${division.court}` : '' %></td>
+                <% if (pickDay) { %>
                 <td>
                   <select id="day_<%= division.key %>" name="day_<%= division.key %>">
                     <option value="" <%= chosen ? '' : 'selected' %>>Auto</option>
@@ -128,13 +130,22 @@
                     <% }) %>
                   </select>
                 </td>
+                <% } %>
+                <% if (pickCourt) { %>
+                <td>
+                  <select id="court_<%= division.key %>" name="court_<%= division.key %>" aria-label="Court for <%= division.title %>">
+                    <option value="" <%= chosenCourt ? '' : 'selected' %>>Auto</option>
+                    <% for (let n = 1; n <= competition.bout_courts; n += 1) { %><option value="<%= n %>" <%= chosenCourt === n ? 'selected' : '' %>>Court <%= n %></option><% } %>
+                  </select>
+                </td>
+                <% } %>
               </tr>
             <% }) %>
           </tbody>
         </table>
       </div>
       <div class="actions">
-        <button class="btn" type="submit">Save days</button>
+        <button class="btn" type="submit">Save <%= pickDay && pickCourt ? 'days and courts' : pickDay ? 'days' : 'courts' %></button>
       </div>
     </form>
   </section>

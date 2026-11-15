@@ -301,6 +301,17 @@ CREATE TABLE IF NOT EXISTS division_days (
   PRIMARY KEY (competition_id, gender, age_group_id, belt_group_id, weight_class_id)
 );
 
+-- A kyorugi division the admin put on a chosen court (Auto otherwise), like division_days.
+CREATE TABLE IF NOT EXISTS division_courts (
+  competition_id INTEGER NOT NULL REFERENCES competitions(id) ON DELETE CASCADE,
+  gender TEXT NOT NULL,
+  age_group_id INTEGER NOT NULL REFERENCES age_groups(id) ON DELETE CASCADE,
+  belt_group_id INTEGER NOT NULL REFERENCES belt_groups(id) ON DELETE CASCADE,
+  weight_class_id INTEGER NOT NULL REFERENCES weight_classes(id) ON DELETE CASCADE,
+  court INTEGER NOT NULL,
+  PRIMARY KEY (competition_id, gender, age_group_id, belt_group_id, weight_class_id)
+);
+
 -- Poomsae has its own age groups (Under 30, Under 40...), apart from kyorugi's.
 CREATE TABLE IF NOT EXISTS poomsae_age_groups (
   id INTEGER PRIMARY KEY,
@@ -406,6 +417,8 @@ CREATE TABLE IF NOT EXISTS poomsae_divisions (
   -- The two poomsae drawn for the performance list and for the bracket (JSON lists).
   list_draw TEXT,
   bracket_draw TEXT,
+  -- The court the admin chose for this division (NULL: any court).
+  court_pin INTEGER,
   PRIMARY KEY (competition_id, division_key)
 );
 
@@ -852,6 +865,15 @@ function migratePoomsaeCalls(db) {
   })();
 }
 
+// Version 29: the admin can put a division on a chosen court. Kyorugi choices go
+// in the new division_courts table; poomsae's in poomsae_divisions.court_pin.
+function migrateCourtPins(db) {
+  db.transaction(() => {
+    addColumnIfMissing(db, 'poomsae_divisions', 'court_pin', 'INTEGER');
+    db.pragma('user_version = 29');
+  })();
+}
+
 function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 1) migrateBelts(db);
   if (db.pragma('user_version', { simple: true }) < 2) migrateSchedule(db);
@@ -881,6 +903,7 @@ function migrate(db) {
   if (db.pragma('user_version', { simple: true }) < 26) migrateDesignatedPoomsae(db);
   if (db.pragma('user_version', { simple: true }) < 27) migrateCourtOrder(db);
   if (db.pragma('user_version', { simple: true }) < 28) migratePoomsaeCalls(db);
+  if (db.pragma('user_version', { simple: true }) < 29) migrateCourtPins(db);
 }
 
 // Safe on old databases: only tables that don't exist yet are created.

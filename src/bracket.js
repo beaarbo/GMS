@@ -118,7 +118,8 @@ function roundsFromSlots(slots) {
 // the others fill days in order, around the pinned ones, so they stay in
 // sequence. Within a day each division goes to the least busy court. Divisions
 // with no fights need no court.
-function assignCourts(fightCounts, { courts, days, fixedDays = [] }) {
+// fixedCourts: a court chosen per division (null for any); the rest share the courts around them.
+function assignCourts(fightCounts, { courts, days, fixedDays = [], fixedCourts = [] }) {
   const pinned = fightCounts.map((_, i) => {
     const day = Number(fixedDays[i]);
     return Number.isInteger(day) && day >= 1 && day <= days ? day : null;
@@ -140,9 +141,18 @@ function assignCourts(fightCounts, { courts, days, fixedDays = [] }) {
   });
 
   const load = new Map();
+  const chosenCourt = fightCounts.map((_, i) => {
+    const court = Number(fixedCourts[i]);
+    return Number.isInteger(court) && court >= 1 && court <= courts ? court : null;
+  });
+  // Chosen courts first, so the automatic ones balance around them.
+  fightCounts.forEach((fights, i) => {
+    if (chosenCourt[i] && fights > 0) load.set(`${dayOf[i]}:${chosenCourt[i]}`, (load.get(`${dayOf[i]}:${chosenCourt[i]}`) || 0) + fights);
+  });
   return fightCounts.map((fights, i) => {
     const day = dayOf[i];
     if (fights === 0) return { day, court: null };
+    if (chosenCourt[i]) return { day, court: chosenCourt[i] };
     let court = 1;
     for (let c = 2; c <= courts; c += 1) {
       if ((load.get(`${day}:${c}`) || 0) < (load.get(`${day}:${court}`) || 0)) court = c;

@@ -181,7 +181,9 @@ function entryResult(entry, division) {
 // court }, slots: id → { number, start } } with start in minutes after midnight.
 // startAt(day, court), when given, is when a court shared with kyorugi is free
 // that day, { end (minutes), count (its last bout number) }, or undefined.
-function schedulePoomsae(units, { days, courts, start, minutes, rest, startAt = () => undefined }) {
+// A unit's own court (d.court, up to maxCourt, e.g. a shared kyorugi court) is kept;
+// the others go to whichever of the poomsae courts is free soonest.
+function schedulePoomsae(units, { days, courts, start, minutes, rest, startAt = () => undefined, maxCourt = courts }) {
   const courtsAt = new Map();
   const dayLoad = Array(days + 1).fill(0);
   const places = new Map();
@@ -203,6 +205,7 @@ function schedulePoomsae(units, { days, courts, start, minutes, rest, startAt = 
     };
     let court = 1;
     for (let c = 2; c <= courts; c += 1) if (at(c).clock < at(court).clock) court = c;
+    if (Number.isInteger(d.court) && d.court >= 1 && d.court <= maxCourt) court = d.court;
     const free = at(court);
     if (d.list) {
       d.list.forEach((id, i) => slots.set(id, { number: null, start: free.clock + i * minutes }));

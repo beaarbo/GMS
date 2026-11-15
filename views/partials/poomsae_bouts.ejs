@@ -91,33 +91,44 @@
       <% } %>
     </section>
 
-    <% if (ready.length > 0 && dayOptions.length > 1) { %>
+    <% const courtCount = Math.max(competition.poomsae_courts, hasKyorugi(competition) ? competition.bout_courts : 0); const pickDay = dayOptions.length > 1; const pickCourt = courtCount > 1; %>
+    <% if (ready.length > 0 && (pickDay || pickCourt)) { %>
       <section class="card" id="poomsae-days">
-        <h2>Division days</h2>
-        <p class="sub">Choose the day each division competes. Divisions left on Auto fill the days in order around the ones you choose. Lists and brackets are timed again when you save.</p>
+        <h2><%= pickDay && pickCourt ? 'Division days and courts' : pickDay ? 'Division days' : 'Division courts' %></h2>
+        <p class="sub">Choose <%= pickDay && pickCourt ? 'the day and court' : pickDay ? 'the day' : 'the court' %> each division competes on. Divisions left on Auto share out around the ones you choose. Lists and brackets are timed again when you save.</p>
         <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/days">
           <input type="hidden" name="_csrf" value="<%= csrf %>"><%- back %>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>Division</th><th class="num">Entries</th><th>Now on</th><th>Competes on</th></tr></thead>
+              <thead><tr><th>Division</th><th class="num">Entries</th><th>Now on</th><% if (pickDay) { %><th>Day</th><% } %><% if (pickCourt) { %><th>Court</th><% } %></tr></thead>
               <tbody>
                 <% ready.forEach((d) => { const onDay = d.listDay || d.day; const onCourt = d.listCourt || d.court; %>
                   <tr>
-                    <td><label for="pday_<%= d.key %>"><%= d.title %></label></td>
+                    <td><label for="<%= pickDay ? 'pday' : 'pcourt' %>_<%= d.key %>"><%= d.title %></label></td>
                     <td class="num"><%= d.approved %></td>
                     <td class="nowrap"><%= onDay ? 'Day ' + onDay + (onCourt ? ', Court ' + onCourt : '') : 'Not scheduled yet' %></td>
+                    <% if (pickDay) { %>
                     <td>
                       <select id="pday_<%= d.key %>" name="day_<%= d.key %>">
                         <option value="" <%= d.pinnedDay ? '' : 'selected' %>>Auto</option>
                         <% dayOptions.forEach((o) => { %><option value="<%= o.value %>" <%= d.pinnedDay === o.value ? 'selected' : '' %>><%= o.label %></option><% }) %>
                       </select>
                     </td>
+                    <% } %>
+                    <% if (pickCourt) { %>
+                    <td>
+                      <select id="pcourt_<%= d.key %>" name="court_<%= d.key %>" aria-label="Court for <%= d.title %>">
+                        <option value="" <%= d.pinnedCourt ? '' : 'selected' %>>Auto</option>
+                        <% for (let n = 1; n <= courtCount; n += 1) { %><option value="<%= n %>" <%= d.pinnedCourt === n ? 'selected' : '' %>>Court <%= n %></option><% } %>
+                      </select>
+                    </td>
+                    <% } %>
                   </tr>
                 <% }) %>
               </tbody>
             </table>
           </div>
-          <div class="actions"><button class="btn" type="submit">Save days</button></div>
+          <div class="actions"><button class="btn" type="submit">Save <%= pickDay && pickCourt ? 'days and courts' : pickDay ? 'days' : 'courts' %></button></div>
         </form>
       </section>
     <% } %>

@@ -11,6 +11,8 @@
 </head>
 <body class="screen main-screen" data-live-events="/screens/<%= competition.id %>/main/<%= day %>/events">
 <% const side = (item, color) => item[color] || { name: item[`${color}Placeholder`] || 'To be decided', club: '' }; %>
+<%# The event and division of a bout or performer. Kyorugi titles already start with KYORUGI; poomsae ones don't name the event. %>
+<% const category = (item) => (item.kind || item.event === 'Poomsae' ? `Poomsae · ${item.title}` : item.title || ''); %>
 <header class="screen-head">
   <div>
     <p class="screen-court">All courts</p>
@@ -34,10 +36,12 @@
           <p class="screen-empty"><%= c.next ? 'Waiting for earlier results.' : 'All finished.' %></p>
         <% } else if (c.now.kind === 'perform') { %>
           <p class="main-now"><span class="screen-number"><%= c.now.place %></span><span class="screen-sub"><%= c.now.time %> · performing</span></p>
+          <p class="main-category"><%= category(c.now) %></p>
           <p class="main-name"><%= c.now.name %></p>
           <p class="screen-sub"><%= c.now.club %></p>
         <% } else { const blue = side(c.now, 'blue'); const red = side(c.now, 'red'); %>
           <p class="main-now"><span class="screen-number"><%= c.now.number %></span><span class="screen-sub"><%= c.now.time %> · Bout <%= c.now.number %></span></p>
+          <p class="main-category"><%= category(c.now) %></p>
           <p class="main-name blue-text"><%= blue.name %></p>
           <p class="screen-sub"><%= blue.club %></p>
           <p class="main-name red-text"><%= red.name %></p>
@@ -67,7 +71,7 @@
           <li class="<%= p.done ? 'screen-done' : '' %>"><span class="screen-number"><%= p.order || i + 1 %></span><span><%= p.time || '' %><br><strong><%= p.name %></strong></span></li>
         <% }) %>
         <% shownBouts.forEach((b) => { %>
-          <li class="<%= b.winner || b.noContest ? 'screen-done' : '' %>"><span class="screen-number"><%= b.number %></span><span>Court <%= b.court %> · <%= b.time %><br><span class="blue-text"><%= side(b, 'blue').name %></span> vs <span class="red-text"><%= side(b, 'red').name %></span></span></li>
+          <li class="<%= b.winner || b.noContest ? 'screen-done' : '' %>"><span class="screen-number"><%= b.number %></span><span>Court <%= b.court %> · <%= b.time %><br><span class="main-call-category"><%= category(b) %></span><br><span class="blue-text"><%= side(b, 'blue').name %></span> vs <span class="red-text"><%= side(b, 'red').name %></span></span></li>
         <% }) %>
         <% if (more > 0) { %><li class="main-call-more">+<%= more %> more on the call screen</li><% } %>
       </ol>

@@ -686,6 +686,7 @@ function poomsaeDivisions(entries, competition, brackets = new Map(), settings =
       ownFormat: Boolean(setting && setting.format),
       ownCut: setting ? setting.cut : null,
       pinnedDay: setting ? setting.day : null,
+      pinnedCourt: setting ? setting.court_pin : null,
       day: place ? place.day : null,
       court: place ? place.court : null,
       locked: Boolean(bouts) || approved.some((e) => e.score !== null) || order.length > 0,
@@ -761,6 +762,8 @@ function nextPoomsaeSeq(db, competitionId) {
 // finished there, its bout numbers carrying on. These give when each court is
 // free of one event: `day:court` to { end (minutes after midnight), count (last bout number) }.
 const toMinutes = (time) => { const [hours, mins] = String(time).split(':').map(Number); return hours * 60 + mins; };
+// How many courts a poomsae division can be put on: the poomsae courts, or all the shared courts.
+const poomsaeCourtCount = (competition) => Math.max(competition.poomsae_courts, hasKyorugi(competition) ? competition.bout_courts : 0);
 const sharesCourts = (competition) => hasKyorugi(competition) && hasPoomsae(competition);
 
 function kyorugiCourtEnds(db, competition) {
@@ -804,7 +807,7 @@ function applyPoomsaeSchedule(db, competitionId) {
   rows.forEach((row) => {
     if (!units.has(row.division_key)) {
       // Brackets drawn before sequence numbers existed go after the rest, in draw order.
-      units.set(row.division_key, { key: row.division_key, seq: setting(row.division_key).bracket_seq ?? 1e9 + row.id, day: setting(row.division_key).day ?? null, bouts: [] });
+      units.set(row.division_key, { key: row.division_key, seq: setting(row.division_key).bracket_seq ?? 1e9 + row.id, day: setting(row.division_key).day ?? null, court: setting(row.division_key).court_pin ?? null, bouts: [] });
     }
     units.get(row.division_key).bouts.push({ ...row, isBye: row.is_bye === 1 });
   });
@@ -814,13 +817,15 @@ function applyPoomsaeSchedule(db, competitionId) {
   performers.forEach((entry) => {
     const key = poomsaeKey(entry);
     const unit = `list:${key}`;
-    if (!units.has(unit)) units.set(unit, { key: unit, division: key, seq: setting(key).list_seq ?? 0, day: setting(key).day ?? null, list: [] });
+    if (!units.has(unit)) units.set(unit, { key: unit, division: key, seq: setting(key).list_seq ?? 0, day: setting(key).day ?? null, court: setting(key).court_pin ?? null, list: [] });
     units.get(unit).list.push(`e${entry.id}`);
   });
   const [hours, mins] = competition.poomsae_start.split(':').map(Number);
   const { places, slots } = schedulePoomsae([...units.values()].sort((a, b) => a.seq - b.seq), {
     days: getEventDates(db, competitionId).length,
     courts: competition.poomsae_courts,
+    // A chosen court can be any of the shared courts, even past the ones poomsae fills by itself.
+    maxCourt: poomsaeCourtCount(competition),
     start: hours * 60 + mins,
     minutes: competition.poomsae_minutes,
     rest: competition.poomsae_rest_minutes,
@@ -1207,7 +1212,8 @@ function savePoomsaeSchedule(db, competitionId, { courts, start, minutes, rest, 
 // The day each poomsae division competes on, from the Bout list's Division
 // days: key -> day number, or null for any day. Only divisions with entries are
 // changed, and everything is timed again. Returns how many changed.
-function savePoomsaeDays(db, competition, days) {
+// courts: key -> court number or null for any court, set the same way (optional).
+function savePoomsaeDays(db, competition, days, courts = new Map()) {
   const keys = new Set(listPoomsaeEntries(db, competition.id).filter((e) => e.status !== 'rejected').map(poomsaeKey));
   const count = getEventDates(db, competition.id).length;
   const now = loadPoomsaeSettings(db, competition.id);
@@ -1216,11 +1222,22 @@ function savePoomsaeDays(db, competition, days) {
     `INSERT INTO poomsae_divisions (competition_id, division_key, day) VALUES (?, ?, ?)
      ON CONFLICT (competition_id, division_key) DO UPDATE SET day = excluded.day`
   );
+  const courtLimit = poomsaeCourtCount(competition);
+  const saveCourt = db.prepare(
+    `INSERT INTO poomsae_divisions (competition_id, division_key, court_pin) VALUES (?, ?, ?)
+     ON CONFLICT (competition_id, division_key) DO UPDATE SET court_pin = excluded.court_pin`
+  );
   db.transaction(() => {
     days.forEach((day, key) => {
       if (!keys.has(key) || (day !== null && !(Number.isInteger(day) && day >= 1 && day <= count))) return;
       if (((now.get(key) || {}).day ?? null) === day) return;
       save.run(competition.id, key, day);
+      changed += 1;
+    });
+    courts.forEach((court, key) => {
+      if (!keys.has(key) || (court !== null && !(Number.isInteger(court) && court >= 1 && court <= courtLimit))) return;
+      if (((now.get(key) || {}).court_pin ?? null) === court) return;
+      saveCourt.run(competition.id, key, court);
       changed += 1;
     });
     if (changed > 0) applyAllSchedules(db, competition.id);
@@ -1326,6 +1343,39 @@ function loadDivisionDays(db, competitionId) {
   );
 }
 
+// Courts chosen per division, by division key. Courts beyond the competition's are ignored.
+function loadDivisionCourts(db, competitionId) {
+  const courts = db.prepare('SELECT bout_courts FROM competitions WHERE id = ?').get(competitionId).bout_courts;
+  return new Map(db.prepare('SELECT * FROM division_courts WHERE competition_id = ?').all(competitionId)
+    .filter((row) => row.court >= 1 && row.court <= courts)
+    .map((row) => [divisionKey(row), row.court]));
+}
+
+// Puts divisions on chosen courts, like saveDivisionDays. `choices` maps division
+// key to a court number, or to null/blank for Auto. Returns how many are chosen.
+function saveDivisionCourts(db, competitionId, choices) {
+  const courts = db.prepare('SELECT bout_courts FROM competitions WHERE id = ?').get(competitionId).bout_courts;
+  const known = new Map(db.prepare('SELECT DISTINCT gender, age_group_id, belt_group_id, weight_class_id FROM bouts WHERE competition_id = ?')
+    .all(competitionId).map((row) => [divisionKey(row), row]));
+  const remove = db.prepare('DELETE FROM division_courts WHERE competition_id = ? AND gender = ? AND age_group_id = ? AND belt_group_id = ? AND weight_class_id = ?');
+  const insert = db.prepare('INSERT INTO division_courts (competition_id, gender, age_group_id, belt_group_id, weight_class_id, court) VALUES (?, ?, ?, ?, ?, ?)');
+  let chosen = 0;
+  db.transaction(() => {
+    Object.entries(choices).forEach(([key, value]) => {
+      const division = known.get(key);
+      if (!division) return;
+      const ids = [competitionId, division.gender, division.age_group_id, division.belt_group_id, division.weight_class_id];
+      remove.run(...ids);
+      const court = Number(value);
+      if (value !== null && value !== '' && Number.isInteger(court) && court >= 1 && court <= courts) {
+        insert.run(...ids, court);
+        chosen += 1;
+      }
+    });
+  })();
+  return chosen;
+}
+
 // Pins divisions to days. `choices` maps division key to a day number, or to
 // null for automatic. Keys that aren't divisions in the bout list are ignored.
 function saveDivisionDays(db, competitionId, choices) {
@@ -1387,12 +1437,14 @@ function applySchedule(db, competitionId, { kyorugiOnly = false } = {}) {
   const keys = [...divisions.keys()];
   const list = [...divisions.values()];
   const pinned = loadDivisionDays(db, competitionId);
+  const chosenCourts = loadDivisionCourts(db, competitionId);
   const places = assignCourts(
     list.map((bouts) => bouts.filter((b) => !b.isBye).length),
     {
       courts: competition.bout_courts,
       days: getEventDates(db, competitionId).length,
       fixedDays: keys.map((key) => pinned.get(key) ?? null),
+      fixedCourts: keys.map((key) => chosenCourts.get(key) ?? null),
     }
   );
   const [startHours, startMinutes] = competition.bout_start.split(':').map(Number);
@@ -2173,6 +2225,7 @@ function deleteCompetition(db, competitionId) {
   db.transaction(() => {
     db.prepare('DELETE FROM bouts WHERE competition_id = ?').run(competitionId);
     db.prepare('DELETE FROM division_days WHERE competition_id = ?').run(competitionId);
+    db.prepare('DELETE FROM division_courts WHERE competition_id = ?').run(competitionId);
     db.prepare('DELETE FROM poomsae_bouts WHERE competition_id = ?').run(competitionId);
     db.prepare('DELETE FROM registrations WHERE competition_id = ?').run(competitionId);
     db.prepare('DELETE FROM poomsae_entries WHERE competition_id = ?').run(competitionId);
@@ -2361,6 +2414,9 @@ module.exports = {
   recordWeighIn,
   applySchedule,
   loadDivisionDays,
+  loadDivisionCourts,
+  saveDivisionCourts,
+  poomsaeCourtCount,
   saveDivisionDays,
   loadBoutList,
   listBouts,

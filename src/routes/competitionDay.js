@@ -651,9 +651,12 @@ router.post('/competitions/:id(\\d+)/poomsae/days', requireRole('admin'), (req, 
   const days = new Map(Object.entries(req.body)
     .filter(([name]) => name.startsWith('day_'))
     .map(([name, value]) => [name.slice(4), /^\d{1,2}$/.test(String(value)) ? Number(value) : null]));
-  const changed = savePoomsaeDays(db, req.competition, days);
-  if (changed > 0) req.logActivity('poomsae.days', `Set the day of ${changed} poomsae division${changed === 1 ? '' : 's'}: ${req.competition.name}`, req.competition.id);
-  req.flash('success', changed > 0 ? 'Poomsae division days saved. Everything has been timed again.' : 'No days changed.');
+  const courts = new Map(Object.entries(req.body)
+    .filter(([name]) => name.startsWith('court_'))
+    .map(([name, value]) => [name.slice(6), /^\d{1,2}$/.test(String(value)) ? Number(value) : null]));
+  const changed = savePoomsaeDays(db, req.competition, days, courts);
+  if (changed > 0) req.logActivity('poomsae.days', `Set ${changed} poomsae division day${changed === 1 ? '' : 's'} and courts: ${req.competition.name}`, req.competition.id);
+  req.flash('success', changed > 0 ? 'Poomsae division days and courts saved. Everything has been timed again.' : 'Nothing changed.');
   return res.redirect(sharedPageReturn(req, 'poomsae-days') || poomsaePath(req.competition));
 });
 

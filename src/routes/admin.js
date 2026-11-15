@@ -22,6 +22,8 @@ const {
   generateBoutList,
   applySchedule,
   loadDivisionDays,
+  loadDivisionCourts,
+  saveDivisionCourts,
   saveDivisionDays,
   loadBoutList,
   hasResults,
@@ -919,6 +921,7 @@ router.get('/competitions/:id(\\d+)/bouts', (req, res) => {
     dayCount: eventDates.length,
     dayOptions: eventDates.map((date, i) => ({ value: i + 1, label: `Day ${i + 1} (${formatDay(date)})` })),
     pinnedDays: loadDivisionDays(db, req.competition.id),
+    pinnedCourts: loadDivisionCourts(db, req.competition.id),
     resultsRecorded: hasResults(db, req.competition.id),
     weighIn: weighInCounts(db, req.competition.id),
     withdrawn: listWithdrawn(db, req.competition.id),
@@ -1086,13 +1089,20 @@ router.post('/competitions/:id(\\d+)/bouts/days', (req, res) => {
       .map(([name, value]) => [name.slice(4), clean(value, 3)])
   );
   const pinned = saveDivisionDays(db, req.competition.id, choices);
+  // Courts too, when the form has them (court_<key>: a court number, or blank for Auto).
+  const courtChoices = Object.fromEntries(
+    Object.entries(req.body)
+      .filter(([name]) => /^court_[MF]-\d+-\d+-\d+$/.test(name))
+      .map(([name, value]) => [name.slice(6), clean(value, 3)])
+  );
+  const onCourts = saveDivisionCourts(db, req.competition.id, courtChoices);
   applySchedule(db, req.competition.id);
   req.logActivity(
     'bouts.days_set',
-    `Set division days for ${req.competition.name}: ${pinned} division${pinned === 1 ? '' : 's'} on a chosen day, the rest automatic`,
+    `Set division days and courts for ${req.competition.name}: ${pinned} on a chosen day, ${onCourts} on a chosen court, the rest automatic`,
     req.competition.id
   );
-  req.flash('success', 'Division days saved and the schedule updated. The draw has not changed.');
+  req.flash('success', 'Division days and courts saved and the schedule updated. The draw has not changed.');
   return res.redirect(boutListPath(req.competition, req.body.event));
 });
 
