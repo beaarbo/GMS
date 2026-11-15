@@ -95,3 +95,16 @@ test('staff call bout numbers, and the call screen shows the called bouts live',
   assert.equal((await coach.get(`/screens/${id}/main/1`)).status, 200, 'and the main screen');
   assert.notEqual((await coach.get(calls)).status, 200);
 });
+
+test('the main screen\'s calling band shows at most 12, then how many more', async () => {
+  const ejs = require('ejs');
+  const path = require('path');
+  const bouts = Array.from({ length: 20 }, (_, i) => ({ number: i + 1, court: 1, time: '09:00', blue: { name: `Blue ${i + 1}`, club: '' }, red: { name: `Red ${i + 1}`, club: '' } }));
+  const html = await ejs.renderFile(path.join(__dirname, '..', 'views', 'screens', 'main.ejs'), {
+    competition: { id: 1, name: 'Cup' }, day: 1, dayLabel: 'Day 1', refreshSeconds: 15, updatedAt: '09:00',
+    courts: [{ court: 1, label: 'Court 1', now: null, next: null, done: 0, total: 20 }],
+    call: { text: 'bouts 1-20', at: '09:00', bouts, division: null, division_key: null },
+  });
+  assert.equal((html.match(/class="screen-number">/g) || []).length, 12);
+  assert.match(html, /\+8 more on the call screen/);
+});

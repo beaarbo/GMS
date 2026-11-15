@@ -853,3 +853,5 @@ body.mat { background: var(--page); }
 .main-screen .main-call-text { font-size: clamp(2rem, 3vw, 3.2rem); }
 .main-screen .main-call-list { font-size: 1.25rem; }
 .main-screen .main-call .screen-label { font-size: 1.2rem; }
+.main-screen .main-call-text.long { font-size: clamp(1.4rem, 1.9vw, 2.2rem); }
+.main-call-list .main-call-more { font-weight: 700; color: #e3eaff; }

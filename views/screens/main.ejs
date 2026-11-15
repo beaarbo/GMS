@@ -58,15 +58,18 @@
     <% } else { %>
       <div class="main-call-head">
         <p class="screen-label">Now calling · <%= call.at %></p>
-        <p class="main-call-text"><%= call.text[0].toUpperCase() + call.text.slice(1) %></p>
+        <p class="main-call-text<%= call.division_key ? ' long' : '' %>"><%= call.text[0].toUpperCase() + call.text.slice(1) %></p>
       </div>
+      <%# The band holds at most 12, so a big call never pushes the courts off a TV; the call screen lists them all. %>
+      <% const people = call.division ? call.division.people : []; const shownPeople = people.slice(0, 12); const shownBouts = call.bouts.slice(0, 12 - shownPeople.length); const more = people.length + call.bouts.length - shownPeople.length - shownBouts.length; %>
       <ol class="main-call-list">
-        <% if (call.division) { call.division.people.forEach((p, i) => { %>
+        <% shownPeople.forEach((p, i) => { %>
           <li class="<%= p.done ? 'screen-done' : '' %>"><span class="screen-number"><%= p.order || i + 1 %></span><span><%= p.time || '' %><br><strong><%= p.name %></strong></span></li>
-        <% }) } %>
-        <% call.bouts.forEach((b) => { %>
+        <% }) %>
+        <% shownBouts.forEach((b) => { %>
           <li class="<%= b.winner || b.noContest ? 'screen-done' : '' %>"><span class="screen-number"><%= b.number %></span><span>Court <%= b.court %> · <%= b.time %><br><span class="blue-text"><%= side(b, 'blue').name %></span> vs <span class="red-text"><%= side(b, 'red').name %></span></span></li>
         <% }) %>
+        <% if (more > 0) { %><li class="main-call-more">+<%= more %> more on the call screen</li><% } %>
       </ol>
     <% } %>
   </section>
