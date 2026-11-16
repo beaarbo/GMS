@@ -29,6 +29,7 @@ const adminNewsRoutes = require('./routes/adminNews');
 const adminBackupRoutes = require('./routes/adminBackups');
 const adminEmailRoutes = require('./routes/adminEmail');
 const adminSettingsRoutes = require('./routes/adminSettings');
+const notificationRoutes = require('./routes/notifications');
 const { loadSettings } = require('./settings');
 const { EMAIL_KINDS } = require('./notifications');
 const { AUDIENCES, formatBody, summary } = require('./news');
@@ -274,7 +275,8 @@ function createApp({
       const user = db
         .prepare(
           `SELECT u.id, u.email, u.role, u.full_name, u.club_id, c.name AS club_name, u.theme,
-             u.totp_secret IS NOT NULL AS two_step, u.owner, u.must_change_password
+             u.totp_secret IS NOT NULL AS two_step, u.owner, u.must_change_password,
+             (SELECT COUNT(*) FROM notifications n WHERE n.user_id = u.id AND n.read_at IS NULL) AS unread
            FROM users u LEFT JOIN clubs c ON c.id = u.club_id WHERE u.id = ?`
         )
         .get(req.session.userId);
@@ -362,6 +364,7 @@ function createApp({
   app.use('/club', clubRoutes);
   app.use('/coach', coachRoutes);
   app.use('/account', accountRoutes);
+  app.use('/notifications', notificationRoutes);
   app.use('/admin/clubs', adminClubRoutes);
   app.use('/admin/news', adminNewsRoutes);
   app.use('/admin/backups', adminBackupRoutes);

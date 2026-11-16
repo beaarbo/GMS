@@ -403,6 +403,17 @@ CREATE TABLE IF NOT EXISTS bout_calls (
   label TEXT
 );
 
+-- In-app notices for coaches and admins, shown on /notifications.
+CREATE TABLE IF NOT EXISTS notifications (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  at TEXT NOT NULL DEFAULT (datetime('now')),
+  text TEXT NOT NULL,
+  link TEXT,
+  read_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, id);
+
 CREATE TABLE IF NOT EXISTS poomsae_divisions (
   competition_id INTEGER NOT NULL REFERENCES competitions(id) ON DELETE CASCADE,
   division_key TEXT NOT NULL,

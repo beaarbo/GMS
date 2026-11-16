@@ -915,3 +915,12 @@ html.screen-page { font-size: clamp(16px, 1.15vw, 30px); }
 .screen-page .screen-list li { padding: var(--space-2) 0; }
 .screen-page .screen-category { margin-bottom: var(--space-3); }
 .screen-page .screen-time { display: inline-block; min-width: 3.2em; }
+
+/* Notifications: the nav count and the page's list, new ones marked by a bar. */
+.nav-count { display: inline-block; min-width: 1.25rem; margin-left: var(--space-1); padding: 0 0.35rem; border-radius: 999px; background: var(--hong-fill); color: #fff; font-size: var(--text-xs); font-weight: 700; line-height: 1.25rem; text-align: center; }
+.notice-list { list-style: none; margin: 0; padding: 0; }
+.notice-list li { padding: var(--space-3) var(--space-3); border-bottom: 1px solid var(--line); border-left: 3px solid transparent; }
+.notice-list li:last-child { border-bottom: 0; }
+.notice-list li.unread { border-left-color: var(--chung); background: var(--chung-soft); }
+.notice-list p { margin: 0; }
+.notice-list .sub { font-size: var(--text-sm); }

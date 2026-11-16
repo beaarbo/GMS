@@ -4,7 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const { formatEventDates } = require('./divisions');
-const { getEventDates } = require('./services');
+const { getEventDates, addNotifications, adminIds } = require('./services');
 const { loadSettings } = require('./settings');
 
 const DAY_MS = 24 * 3600000;
@@ -31,6 +31,10 @@ function clubCoachEmails(db, clubId, kind) {
   return db.prepare(`SELECT u.email FROM users u WHERE u.role = 'coach' AND u.club_id = ? AND ${wants(kind)}`).all(clubId).map((u) => u.email);
 }
 
+// Every coach of the club, for in-app notices (email choices don't apply).
+const clubCoachIds = (db, clubId) => db.prepare("SELECT id FROM users WHERE role = 'coach' AND club_id = ?").all(clubId).map((u) => u.id);
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
 function sendAll(ctx, emails, subject, text) {
   return Promise.all(emails.map((to) => ctx.mailer.send({ to, subject, text })));
 }
@@ -51,6 +55,7 @@ function notifyAdminsOfApplication(ctx, userId, clubId) {
   const club = db.prepare('SELECT name FROM clubs WHERE id = ?').get(clubId);
   const admins = db.prepare(`SELECT u.email FROM users u WHERE u.role = 'admin' AND ${wants('applications')}`).all().map((u) => u.email);
   const request = coach.current ? `has asked to move from ${coach.current} to ${club.name}` : `has applied to join ${club.name}`;
+  addNotifications(db, adminIds(db), `${coach.full_name} ${request}.`, '/admin/clubs');
   return sendAll(
     ctx,
     admins,
@@ -82,10 +87,11 @@ function notifyAccountChange(ctx, email, what) {
 function notifyApplicationApproved(ctx, applicationId) {
   const row = ctx.db
     .prepare(
-      `SELECT u.email, c.name AS club FROM club_applications a
+      `SELECT u.id, u.email, c.name AS club FROM club_applications a
        JOIN users u ON u.id = a.user_id JOIN clubs c ON c.id = a.club_id WHERE a.id = ?`
     )
     .get(applicationId);
+  addNotifications(ctx.db, [row.id], `You're approved as a coach for ${row.club}. You can now register its athletes.`, '/club');
   return ctx.mailer.send({
     to: row.email,
     subject: `You're approved for ${row.club}`,
@@ -96,10 +102,11 @@ function notifyApplicationApproved(ctx, applicationId) {
 function notifyApplicationRejected(ctx, applicationId, note) {
   const row = ctx.db
     .prepare(
-      `SELECT u.email, c.name AS club FROM club_applications a
+      `SELECT u.id, u.email, c.name AS club FROM club_applications a
        JOIN users u ON u.id = a.user_id JOIN clubs c ON c.id = a.club_id WHERE a.id = ?`
     )
     .get(applicationId);
+  addNotifications(ctx.db, [row.id], `Your application to join ${row.club} was rejected: ${note}`, '/coach');
   return ctx.mailer.send({
     to: row.email,
     subject: `Your application to ${row.club} was rejected`,
@@ -108,6 +115,8 @@ function notifyApplicationRejected(ctx, applicationId, note) {
 }
 
 function notifyCoachRemoved(ctx, email, clubName) {
+  const coach = ctx.db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+  if (coach) addNotifications(ctx.db, [coach.id], `You were removed as a coach for ${clubName}.`, '/coach');
   return ctx.mailer.send({
     to: email,
     subject: `You were removed from ${clubName}`,
@@ -132,6 +141,7 @@ function notifyRegistrationDecisions(ctx, competition, registrationIds, decision
 
   const sends = [...clubs.entries()].map(([clubId, list]) => {
     const lines = list.map((r) => `- ${r.first_name} ${r.last_name}${decision === 'rejected' ? `: ${r.review_note}` : ''}`);
+    addNotifications(db, clubCoachIds(db, clubId), `${plural(list.length, 'registration')} for ${competition.name} ${decision}: ${list.map((r) => `${r.first_name} ${r.last_name}`).join(', ')}.`, `/club/competitions/${competition.id}`);
     return sendAll(
       ctx,
       clubCoachEmails(db, clubId, 'decisions'),
@@ -150,6 +160,7 @@ function notifyPoomsaeDecisions(ctx, competition, entries, decision) {
   return Promise.all(
     [...clubs.entries()].map(([clubId, list]) => {
       const lines = list.map((e) => `- ${e.names} (${e.event})${decision === 'rejected' ? `: ${e.review_note}` : ''}`);
+      addNotifications(ctx.db, clubCoachIds(ctx.db, clubId), `${list.length} poomsae entr${list.length === 1 ? 'y' : 'ies'} for ${competition.name} ${decision}: ${list.map((e) => e.names).join(', ')}.`, `/club/competitions/${competition.id}/poomsae`);
       return sendAll(
         ctx,
         clubCoachEmails(ctx.db, clubId, 'decisions'),
@@ -165,6 +176,7 @@ function notifyPoomsaeDecisions(ctx, competition, entries, decision) {
 function notifyPoomsaePublished(ctx, competition, what = 'performance order') {
   const { db } = ctx;
   const clubs = db.prepare("SELECT DISTINCT club_id FROM poomsae_entries WHERE competition_id = ? AND status = 'approved'").all(competition.id);
+  addNotifications(db, clubs.flatMap((club) => clubCoachIds(db, club.club_id)), `The poomsae ${what} for ${competition.name} ${what === 'brackets' ? 'are' : 'is'} published.`, `/club/competitions/${competition.id}/poomsae`);
   return sendAll(
     ctx,
     clubs.flatMap((club) => clubCoachEmails(db, club.club_id, 'published')),
@@ -183,6 +195,7 @@ function notifyBoutListPublished(ctx, competition) {
     )
     .all(competition.id);
   const emails = clubs.flatMap((club) => clubCoachEmails(db, club.club_id, 'published'));
+  addNotifications(db, clubs.flatMap((club) => clubCoachIds(db, club.club_id)), `The bout list for ${competition.name} is published.`, `/club/competitions/${competition.id}/bouts`);
   return sendAll(
     ctx,
     emails,
@@ -202,11 +215,13 @@ async function sendDeadlineReminders(ctx, now = Date.now()) {
     return closesAt > now && closesAt - now <= window;
   });
   if (due.length === 0) return 0;
+  const coachIds = db.prepare("SELECT id FROM users WHERE role = 'coach' AND club_id IS NOT NULL").all().map((u) => u.id);
 
   const emails = db.prepare(`SELECT u.email FROM users u WHERE u.role = 'coach' AND u.club_id IS NOT NULL AND ${wants('reminders')}`).all().map((u) => u.email);
   await Promise.all(
     due.map((competition) => {
       db.prepare("UPDATE competitions SET reminder_sent_at = datetime('now') WHERE id = ?").run(competition.id);
+      addNotifications(db, coachIds, `Registration for ${competition.name} closes on ${deadlineText(competition)}.`, `/club/competitions/${competition.id}`);
       return sendAll(
         ctx,
         emails,
@@ -221,6 +236,7 @@ async function sendDeadlineReminders(ctx, now = Date.now()) {
 // A news post, emailed to every coach who asked for it on publishing. Returns how many.
 async function notifyNewsPosted(ctx, post) {
   const coaches = ctx.db.prepare(`SELECT u.email FROM users u WHERE u.role = 'coach' AND ${wants('news')}`).all().map((u) => u.email);
+  addNotifications(ctx.db, ctx.db.prepare("SELECT id FROM users WHERE role = 'coach'").all().map((u) => u.id), `News: ${post.title}`, `/news/${post.id}`);
   await sendAll(ctx, coaches, `News: ${post.title}`, `${post.title}\n\n${post.body}\n\nRead it on the site: ${ctx.publicUrl}/news/${post.id}\n`);
   return coaches.length;
 }
@@ -230,6 +246,7 @@ async function notifyNewsPosted(ctx, post) {
 function notifyDivisionMerged(ctx, competition, moves) {
   const byClub = new Map();
   moves.forEach((m) => byClub.set(m.clubId, [...(byClub.get(m.clubId) || []), m]));
+  byClub.forEach((clubMoves, clubId) => addNotifications(ctx.db, clubCoachIds(ctx.db, clubId), `Division change for ${competition.name}: ${clubMoves.map((m) => `${m.name} moved from ${m.from} to ${m.to}`).join('; ')}.`, `/club/competitions/${competition.id}`));
   return Promise.all([...byClub.entries()].map(([clubId, clubMoves]) => sendAll(
     ctx,
     clubCoachEmails(ctx.db, clubId, 'divisions'),

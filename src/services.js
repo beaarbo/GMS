@@ -42,6 +42,18 @@ function isRegistrationOpen(competition) {
 }
 
 // Runs on each request, so a competition closes by itself when its deadline passes.
+// In-app notices, shown on the Notifications page. They go to everyone named,
+// whatever their email choices, and are kept for 90 days.
+function addNotifications(db, userIds, text, link = null) {
+  const insert = db.prepare('INSERT INTO notifications (user_id, text, link) VALUES (?, ?, ?)');
+  db.transaction(() => {
+    [...new Set(userIds)].forEach((id) => insert.run(id, text, link));
+    db.prepare("DELETE FROM notifications WHERE at < datetime('now', '-90 days')").run();
+  })();
+}
+
+const adminIds = (db) => db.prepare("SELECT id FROM users WHERE role = 'admin'").all().map((u) => u.id);
+
 function closeExpiredCompetitions(db) {
   const expired = db
     .prepare(
@@ -56,6 +68,18 @@ function closeExpiredCompetitions(db) {
       summary: `Registration closed at the deadline: ${competition.name}`,
       competitionId: competition.id,
     });
+    const pending = db
+      .prepare(
+        `SELECT (SELECT COUNT(*) FROM registrations WHERE competition_id = ? AND status = 'pending')
+           + (SELECT COUNT(*) FROM poomsae_entries WHERE competition_id = ? AND status = 'pending') AS n`
+      )
+      .get(competition.id, competition.id).n;
+    addNotifications(
+      db,
+      adminIds(db),
+      `Registration closed for ${competition.name}${pending ? `: ${pending} entr${pending === 1 ? 'y' : 'ies'} to review` : ''}.`,
+      `/admin/competitions/${competition.id}/registrations`
+    );
   });
 }
 
@@ -2315,6 +2339,8 @@ function cleanUpDocuments(db, days) {
 }
 
 module.exports = {
+  addNotifications,
+  adminIds,
   listCompetitionPhotos,
   getCompetitionPhoto,
   addCompetitionPhoto,

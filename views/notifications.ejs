@@ -1,0 +1,23 @@
+<%- include('partials/top') %>
+<div class="page-head">
+  <div>
+    <h1>Notifications</h1>
+    <p class="sub">Updates about your <%= user.role === 'admin' ? 'competitions and coaches' : 'club and competitions' %> from the last 90 days. They appear here even if you've turned the matching emails off on <a href="/account">My account</a>.</p>
+  </div>
+</div>
+
+<section class="card">
+  <% if (notices.length === 0) { %>
+    <p class="empty">No notifications yet.</p>
+  <% } else { %>
+    <ul class="notice-list">
+      <% notices.forEach((n) => { %>
+        <li<%- n.unread ? ' class="unread"' : '' %>>
+          <p><% if (n.unread) { %><span class="visually-hidden">New: </span><% } %><% if (n.link) { %><a href="<%= n.link %>"><%= n.text %></a><% } else { %><%= n.text %><% } %></p>
+          <p class="sub"><%= formatActivityTime(n.at) %></p>
+        </li>
+      <% }) %>
+    </ul>
+  <% } %>
+</section>
+<%- include('partials/bottom') %>

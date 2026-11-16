@@ -1079,6 +1079,36 @@ test('coach application decisions and registration decisions send email', async 
   assert.equal(mailer.sent.length, before + 1, 'no email when nothing changed');
 });
 
+test('coaches and admins see their notifications, even with the email turned off', async () => {
+  const { db, app } = await setup();
+  const clubId = createClub(db, { name: 'Tigers', city: 'Manila' });
+  const admin = await login(app, 'admin@test.test');
+  const coach = await signUpCoach(app, 'coach@test.test');
+  db.prepare(`UPDATE users SET email_opt_out = '["decisions"]' WHERE email = 'coach@test.test'`).run();
+
+  await post(coach, '/coach/apply', { club_id: String(clubId) }, '/coach');
+  let page = await admin.get('/admin');
+  assert.match(page.text, /Notifications <span class="nav-count">1</, 'admins see an unread count');
+  page = await admin.get('/notifications');
+  assert.match(page.text, /class="unread"[\s\S]*has applied to join Tigers/);
+  assert.doesNotMatch(page.text, /class="nav-count"/, 'opening the page marks them read');
+  assert.doesNotMatch((await admin.get('/notifications')).text, /class="unread"/);
+
+  const application = db.prepare('SELECT id FROM club_applications').get();
+  await post(admin, `/admin/clubs/applications/${application.id}/approve`, {}, '/admin/clubs');
+  const compId = openCompetition(db);
+  await addFighter(coach, { date_of_birth: JUNIOR_DOB });
+  const fighter = db.prepare('SELECT * FROM fighters').get();
+  await post(coach, `/club/competitions/${compId}/enter`, { fighter_ids: String(fighter.id), ...weightField(db, fighter, 50) }, `/club/competitions/${compId}`);
+  const reg = db.prepare('SELECT id FROM registrations').get();
+  await post(admin, `/admin/competitions/${compId}/registrations/review`, { single: `approved:${reg.id}` }, `/admin/competitions/${compId}/registrations`);
+
+  page = await coach.get('/notifications');
+  assert.match(page.text, /1 registration for Open approved: [^<]*Reyes/, 'in-app notices ignore email opt-outs');
+  assert.match(page.text, /You&#39;re approved as a coach for Tigers/);
+  assert.equal((await request(app).get('/notifications')).status, 302, 'visitors are sent to log in');
+});
+
 test('deadline reminders go out once, only inside the 3-day window, and again after a new deadline', async () => {
   const { db, app, mailer } = await setup();
   await signUpClub(app, 'Tigers', 'tigers@test.test');
