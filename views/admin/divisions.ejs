@@ -99,8 +99,8 @@
       <span>Competition format: <strong><%= POOMSAE_FORMATS[competition.poomsae_format] %><%= competition.poomsae_format === 'cut' ? ` (top ${competition.poomsae_cut})` : '' %></strong></span>
     </p>
   </div>
-  <section class="card" id="designated-poomsae">
-    <h2>Designated poomsae</h2>
+  <details class="card fold" id="designated-poomsae"<%= designated.some((g) => g.designated.length < 2) ? ' open' : '' %>>
+    <summary><h2>Designated poomsae</h2></summary>
     <p class="sub">Each division draws two poomsae at random from its age group's list: one draw for the performance list, and another for the bracket if it has one. Draw them on the Bout list. Changing a list doesn't change poomsae already drawn.</p>
     <div class="table-wrap">
       <table>
@@ -124,7 +124,7 @@
         </tbody>
       </table>
     </div>
-  </section>
+  </details>
 
   <div class="notice info">Each division uses the competition's format unless you change it here. A format is fixed once the division has a performance list, scores or a bracket; its day can still change.</div>
 

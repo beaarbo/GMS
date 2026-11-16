@@ -356,3 +356,14 @@ document.addEventListener('change', (event) => {
   document.addEventListener('click', (event) => closeAll(event.target.closest('details.menu')));
   document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeAll(null); });
 }());
+
+// Opening a link to a section inside a folded card (<details class="fold">) unfolds it.
+(() => {
+  const unfold = () => {
+    const target = window.location.hash && document.getElementById(decodeURIComponent(window.location.hash.slice(1)));
+    const fold = target && target.closest('details.fold');
+    if (fold) fold.open = true;
+  };
+  unfold();
+  window.addEventListener('hashchange', unfold);
+})();

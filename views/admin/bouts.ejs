@@ -6,7 +6,6 @@
     <p class="sub"><%= competition.name %> · <%= competition.venue %>, <%= eventDatesText(competition) %></p>
   </div>
   <div class="actions">
-    <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/results">Record results</a>
     <details class="menu">
       <summary class="btn secondary">Downloads</summary>
       <div class="menu-list"><%- include('../partials/cards_download') %></div>
@@ -24,7 +23,7 @@
   <% if (divisions.length > 0) { %>
     <div class="actions">
     <% if (competition.bouts_published_at) { %>
-        <span class="badge approved">Kyorugi bout list published</span> <a class="btn secondary small" href="/competitions/<%= competition.id %>/bouts?event=kyorugi">Public page</a>
+        <span class="badge approved">Kyorugi bout list published</span>
         <form method="post" action="/admin/competitions/<%= competition.id %>/bouts/unpublish">
           <input type="hidden" name="_csrf" value="<%= csrf %>">
 <input type="hidden" name="event" value="<%= event || '' %>">
@@ -37,14 +36,21 @@
           <button class="btn approve small" type="submit">Publish kyorugi bout list</button>
         </form>
       <% } %>
-      <a class="btn secondary small" href="/admin/competitions/<%= competition.id %>/bouts.pdf">Download PDF</a>
-      <% if (!resultsRecorded) { %>
-      <form method="post" action="/admin/competitions/<%= competition.id %>/bouts/delete" data-confirm="Delete the kyorugi bout list?">
-        <input type="hidden" name="_csrf" value="<%= csrf %>">
-<input type="hidden" name="event" value="<%= event || '' %>">
-        <button class="btn danger small" type="submit">Delete kyorugi bout list</button>
-      </form>
-      <% } %>
+      <details class="menu">
+        <summary class="btn secondary small">More</summary>
+        <div class="menu-list">
+          <% if (competition.bouts_published_at) { %><a href="/competitions/<%= competition.id %>/bouts?event=kyorugi">Public page</a><% } %>
+          <a href="/admin/competitions/<%= competition.id %>/bouts.pdf">Download PDF</a>
+          <% if (!resultsRecorded) { %>
+            <hr>
+            <form method="post" action="/admin/competitions/<%= competition.id %>/bouts/delete" data-confirm="Delete the kyorugi bout list?">
+              <input type="hidden" name="_csrf" value="<%= csrf %>">
+              <input type="hidden" name="event" value="<%= event || '' %>">
+              <button class="menu-danger" type="submit">Delete kyorugi bout list</button>
+            </form>
+          <% } %>
+        </div>
+      </details>
     </div>
   <% } %>
 </div>
@@ -54,8 +60,8 @@
     <p class="empty">Close registration on the <a href="/admin/competitions">Competitions</a> page to generate the bout list.</p>
   </section>
 <% } else { %>
-  <section class="card">
-    <h2>Draw and schedule</h2>
+  <details class="card fold"<%= divisions.length === 0 ? ' open' : '' %>>
+    <summary><h2>Draw and schedule</h2></summary>
     <% if (divisions.length > 0) { %><p class="stats"><span><strong><%= divisions.length %></strong> division<%= divisions.length === 1 ? '' : 's' %></span><span><strong><%= totalBouts %></strong> bout<%= totalBouts === 1 ? '' : 's' %></span></p><% } %>
     <% if (divisions.length === 0) { %>
       <% const out = weighIn.no_show + weighIn.disqualified; %>
@@ -107,13 +113,13 @@
         <% } %>
       </div>
     </form>
-  </section>
+  </details>
 <% } %>
 
 <% if (divisions.length > 0 && (dayCount > 1 || competition.bout_courts > 1)) { %>
-  <section class="card">
+  <details class="card fold">
     <% const pickDay = dayCount > 1; const pickCourt = competition.bout_courts > 1; %>
-    <h2><%= pickDay && pickCourt ? 'Division days and courts' : pickDay ? 'Division days' : 'Division courts' %></h2>
+    <summary><h2><%= pickDay && pickCourt ? 'Division days and courts' : pickDay ? 'Division days' : 'Division courts' %></h2></summary>
     <p class="sub">Choose <%= pickDay && pickCourt ? 'the day and court' : pickDay ? 'the day' : 'the court' %> each division fights on. Divisions left on Auto share out around the ones you choose. Your choices are kept if you redraw.</p>
     <form method="post" action="/admin/competitions/<%= competition.id %>/bouts/days">
       <input type="hidden" name="_csrf" value="<%= csrf %>">
@@ -154,7 +160,7 @@
         <button class="btn" type="submit">Save <%= pickDay && pickCourt ? 'days and courts' : pickDay ? 'days' : 'courts' %></button>
       </div>
     </form>
-  </section>
+  </details>
 <% } %>
 
 <% if (withdrawn.length > 0) { %>

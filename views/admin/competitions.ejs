@@ -110,7 +110,7 @@
         <button class="btn danger" type="submit">Remove demo data</button>
       </form>
     <% } else { %>
-      <p class="sub">Makes a ready-to-show competition with made-up clubs and athletes: three clubs with a coach each, about thirty athletes, and kyorugi and poomsae drawn on two courts and published, with no results yet, so you can record results, call bouts and show the screens live. It's public like any published competition.</p>
+      <p class="sub">A ready-to-show competition with three made-up clubs and about thirty athletes, drawn and published with no results yet. It's public until you remove it.</p>
       <form method="post" action="/admin/demo" data-confirm="Create the demo competition? It will be public on the site until you remove it.">
         <input type="hidden" name="_csrf" value="<%= csrf %>">
         <button class="btn secondary" type="submit">Create demo competition</button>

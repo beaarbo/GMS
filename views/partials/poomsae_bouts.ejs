@@ -25,8 +25,15 @@
           </form>
         <% } %>
       <% }) %>
-      <% if (competition.poomsae_published_at || competition.poomsae_brackets_published_at) { %><a class="btn secondary small" href="/competitions/<%= competition.id %>/bouts?event=poomsae">Public page</a><% } %>
-      <% if (lists > 0 || brackets > 0) { %><a class="btn secondary small" href="/admin/competitions/<%= competition.id %>/poomsae.pdf">Download PDF</a><% } %>
+      <% if (lists > 0 || brackets > 0) { %>
+        <details class="menu">
+          <summary class="btn secondary small">More</summary>
+          <div class="menu-list">
+            <% if (competition.poomsae_published_at || competition.poomsae_brackets_published_at) { %><a href="/competitions/<%= competition.id %>/bouts?event=poomsae">Public page</a><% } %>
+            <a href="/admin/competitions/<%= competition.id %>/poomsae.pdf">Download PDF</a>
+          </div>
+        </details>
+      <% } %>
     </div>
   </div>
 
@@ -36,8 +43,8 @@
       <p class="empty">Close registration on the <a href="/admin/competitions">Competitions</a> page to make the performance lists and draw the brackets.</p>
     </section>
   <% } else { %>
-    <section class="card">
-      <h2>Draw and schedule</h2>
+    <details class="card fold"<%= poomsae.orderable > 0 || poomsae.drawable > 0 || poomsae.pending > 0 || lists + brackets === 0 ? ' open' : '' %>>
+      <summary><h2>Draw and schedule</h2></summary>
       <p class="stats">
         <span><strong><%= ready.length %></strong> division<%= ready.length === 1 ? '' : 's' %></span>
         <span><strong><%= lists %></strong> performance list<%= lists === 1 ? '' : 's' %></span>
@@ -89,12 +96,12 @@
           <% } %>
         </div>
       <% } %>
-    </section>
+    </details>
 
     <% const courtCount = Math.max(competition.poomsae_courts, hasKyorugi(competition) ? competition.bout_courts : 0); const pickDay = dayOptions.length > 1; const pickCourt = courtCount > 1; %>
     <% if (ready.length > 0 && (pickDay || pickCourt)) { %>
-      <section class="card" id="poomsae-days">
-        <h2><%= pickDay && pickCourt ? 'Division days and courts' : pickDay ? 'Division days' : 'Division courts' %></h2>
+      <details class="card fold" id="poomsae-days">
+        <summary><h2><%= pickDay && pickCourt ? 'Division days and courts' : pickDay ? 'Division days' : 'Division courts' %></h2></summary>
         <p class="sub">Choose <%= pickDay && pickCourt ? 'the day and court' : pickDay ? 'the day' : 'the court' %> each division competes on. Divisions left on Auto share out around the ones you choose. Lists and brackets are timed again when you save.</p>
         <form method="post" action="/admin/competitions/<%= competition.id %>/poomsae/days">
           <input type="hidden" name="_csrf" value="<%= csrf %>"><%- back %>
@@ -130,7 +137,7 @@
           </div>
           <div class="actions"><button class="btn" type="submit">Save <%= pickDay && pickCourt ? 'days and courts' : pickDay ? 'days' : 'courts' %></button></div>
         </form>
-      </section>
+      </details>
     <% } %>
 
     <% if (ready.length === 0) { %><section class="card"><p class="empty">No approved poomsae entries yet.</p></section><% } %>
