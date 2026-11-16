@@ -938,3 +938,11 @@ html.screen-page { font-size: clamp(16px, 1.15vw, 30px); }
 .comp-tabs .menu-list { left: 0; right: auto; }
 @media (max-width: 600px) { .comp-tabs > a, .comp-tabs > .menu > summary { padding: 8px 7px; } }
 @media print { .comp-nav { display: none; } }
+
+/* Touch screens: tick boxes and the fold toggles get at least the 24px a finger
+   needs (WCAG 2.2 target size). Mouse users keep the compact sizes. */
+@media (pointer: coarse) {
+  input[type="checkbox"], input[type="radio"] { width: 24px; height: 24px; }
+  .fold > summary { min-height: 44px; }
+  .division-edit summary { padding-block: 12px; }
+}

@@ -15,4 +15,7 @@ router.get('/', requireRole(['admin', 'coach']), (req, res) => {
   res.render('notifications', { title: 'Notifications', notices, formatActivityTime });
 });
 
+// The unread count, for public/app.js to keep the nav's badge current without a reload.
+router.get('/count', requireRole(['admin', 'coach']), (req, res) => res.json({ unread: req.user.unread }));
+
 module.exports = router;

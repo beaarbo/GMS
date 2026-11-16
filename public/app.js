@@ -11,7 +11,8 @@
   const set = (open) => {
     button.setAttribute('aria-expanded', String(open));
     nav.classList.toggle('open', open);
-    button.textContent = open ? 'Close menu' : 'Menu';
+    // Only the label changes, so the unread notifications badge beside it stays.
+    (button.querySelector('.nav-toggle-label') || button).textContent = open ? 'Close menu' : 'Menu';
   };
   button.addEventListener('click', () => set(button.getAttribute('aria-expanded') !== 'true'));
   document.addEventListener('keydown', (event) => {
@@ -366,4 +367,52 @@ document.addEventListener('change', (event) => {
   };
   unfold();
   window.addEventListener('hashchange', unfold);
+})();
+
+// Coaches and admins: keeps the unread notifications count current while a page
+// stays open, checking once a minute while the tab is visible. A rise is announced.
+(function liveNotificationCount() {
+  const link = document.querySelector('#main-nav a[href="/notifications"]');
+  if (!link) return;
+  const toggle = document.querySelector('.nav-toggle');
+  const status = document.createElement('span');
+  status.className = 'visually-hidden';
+  status.setAttribute('role', 'status');
+  document.body.append(status);
+  let shown = Number((link.querySelector('.nav-count') || { firstChild: { textContent: '0' } }).firstChild.textContent) || 0;
+
+  const badge = (count, words) => {
+    const span = document.createElement('span');
+    span.className = 'nav-count';
+    span.textContent = count > 99 ? '99+' : String(count);
+    const hidden = document.createElement('span');
+    hidden.className = 'visually-hidden';
+    hidden.textContent = words;
+    span.append(hidden);
+    return span;
+  };
+  const place = (element, count, words) => {
+    if (!element) return;
+    const old = element.querySelector('.nav-count');
+    if (old) old.remove();
+    if (count > 0) element.append(badge(count, words));
+  };
+
+  const check = async () => {
+    if (document.visibilityState !== 'visible') return;
+    try {
+      const response = await fetch('/notifications/count', { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
+      if (!response.ok || !(response.headers.get('content-type') || '').includes('json')) return;
+      const { unread } = await response.json();
+      if (unread === shown) return;
+      place(link, unread, ' unread');
+      place(toggle, unread, ' unread notifications');
+      if (unread > shown) status.textContent = `${unread} unread notification${unread === 1 ? '' : 's'}`;
+      shown = unread;
+    } catch (error) {
+      // Offline or logged out: try again next time.
+    }
+  };
+  setInterval(check, 60000);
+  document.addEventListener('visibilitychange', check);
 })();
