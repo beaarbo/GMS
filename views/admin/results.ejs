@@ -4,7 +4,7 @@
 <% const showPoomsae = Boolean(poomsaeDivisions) && event !== 'kyorugi'; %>
 <% const poomsaeOpen = poomsaeDivisions ? poomsaeDivisions.filter((d) => d.approved > 0) : []; %>
 <% const poomsaeDone = poomsaeOpen.filter((d) => d.medalists.gold.length > 0).length; %>
-<p class="breadcrumb"><% if (isAdmin) { %><a href="/admin/competitions/<%= competition.id %>/bouts">Bout list</a><% } else { %><a href="/official">Competition day</a><% } %></p>
+<%- include('../partials/comp_nav', { page: 'results' }) %>
 <div class="page-head">
   <div>
     <h1>Results</h1>

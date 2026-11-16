@@ -1,6 +1,6 @@
 <%- include('../partials/top') %>
 <% const isAdmin = user.role === 'admin'; %>
-<p class="breadcrumb"><% if (isAdmin) { %><a href="/admin/competitions">Competitions</a><% } else { %><a href="/official">Competition day</a><% } %></p>
+<%- include('../partials/comp_nav', { page: null }) %>
 <div class="page-head">
   <div class="title-row">
     <%- include('../partials/athlete_photo', { url: photoUrl, name: `${fighter.first_name} ${fighter.last_name}`, size: 'lg' }) %>

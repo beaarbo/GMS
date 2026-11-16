@@ -1734,7 +1734,15 @@ test('officials run the weigh-in and results, and nothing else', async () => {
   const alpha = regOf(db, 'Alpha');
   await post(official, `/admin/competitions/${compId}/weigh-in/${alpha.id}`, { action: 'no_show' }, `/admin/competitions/${compId}/weigh-in`);
   assert.equal(regOf(db, 'Alpha').weigh_status, 'no_show');
-  assert.equal((await official.get(`/admin/competitions/${compId}/results`)).status, 200);
+  const results = await official.get(`/admin/competitions/${compId}/results`);
+  assert.equal(results.status, 200);
+  // The competition's tabs show officials only their pages.
+  const tabs = results.text.match(/<div class="comp-tabs">[\s\S]*?<\/div>/)[0];
+  assert.match(tabs, /href="[^"]*\/results" aria-current="page">Results</);
+  assert.match(tabs, /Weigh-in[\s\S]*Bout calling/);
+  assert.doesNotMatch(tabs, /Registrations|Bout list|Settings/);
+  const adminTabs = (await admin.get(`/admin/competitions/${compId}/registrations`)).text;
+  assert.match(adminTabs, /aria-current="page">Registrations<[\s\S]*Bout list[\s\S]*<summary>Settings</);
 
   // Everything else stays admin-only.
   for (const page of ['/admin', `/admin/competitions/${compId}/bouts`, '/admin/accounts', '/admin/clubs', '/admin/backups', `/admin/competitions/${compId}/registrations`]) {

@@ -1,12 +1,11 @@
 <%- include('../partials/top') %>
-<p class="breadcrumb"><a href="/admin/competitions">Competitions</a></p>
+<%- include('../partials/comp_nav', { page: 'registrations' }) %>
 <div class="page-head">
   <div>
     <h1>Registrations</h1>
     <p class="sub"><%= competition.name %><%= hasKyorugi(competition) && hasPoomsae(competition) ? ' · kyorugi and poomsae' : '' %></p>
   </div>
   <div class="actions">
-    <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/divisions">View divisions</a>
     <details class="menu">
       <summary class="btn secondary">Downloads</summary>
       <div class="menu-list">

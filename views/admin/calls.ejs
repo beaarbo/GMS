@@ -1,7 +1,7 @@
 <%- include('../partials/top') %>
 <% const isAdmin = user.role === 'admin'; %>
 <% const side = (bout, color) => bout[color] ? `${bout[color].name} (${bout[color].club})` : (bout[`${color}Placeholder`] || 'To be decided'); %>
-<p class="breadcrumb"><% if (isAdmin) { %><a href="/admin/competitions/<%= competition.id %>/results">Results</a><% } else { %><a href="/official">Competition day</a><% } %></p>
+<%- include('../partials/comp_nav', { page: 'calls' }) %>
 <div class="page-head">
   <div>
     <h1>Bout calling</h1>

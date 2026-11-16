@@ -1,5 +1,6 @@
 <%- include('../partials/top') %>
-<p class="breadcrumb"><a href="/admin/competitions">Competitions</a></p>
+<% if (competition.id) { %><%- include('../partials/comp_nav', { page: 'edit' }) %>
+<% } else { %><p class="breadcrumb"><a href="/admin/competitions">Competitions</a></p><% } %>
 <div class="card medium">
   <h1><%= title %></h1>
   <%- include('../partials/errors') %>

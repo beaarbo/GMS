@@ -1,14 +1,13 @@
 <%- include('../partials/top') %>
 <% const kyorugi = hasKyorugi(competition); %>
 <% const poomsaeList = poomsae ? poomsae.divisions : []; %>
-<p class="breadcrumb"><a href="/admin/competitions">Competitions</a></p>
+<%- include('../partials/comp_nav', { page: 'divisions' }) %>
 <div class="page-head">
   <div>
     <h1>Divisions</h1>
     <p class="sub"><%= competition.name %> · divisions with entries</p>
   </div>
   <div class="actions">
-    <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/registrations">Review registrations</a>
     <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/setup">Division setup</a>
     <% if (kyorugi) { %><a class="btn secondary" href="/admin/competitions/<%= competition.id %>/export.csv">Export approved (CSV)</a><% } %>
   </div>

@@ -1,0 +1,28 @@
+<%# A competition's pages as tabs, at the top of every admin and official page for it. Pass page: the current tab's key (null for none). Staff see only the pages their role reaches. %>
+<% const navAdmin = user.role === 'admin'; %>
+<% const navClosed = competition.status === 'closed'; %>
+<% const navBase = `/admin/competitions/${competition.id}`; %>
+<% const navTabs = [
+  ['registrations', 'Registrations', navAdmin],
+  ['divisions', 'Divisions', navAdmin],
+  ['weigh-in', 'Weigh-in', hasKyorugi(competition) && navClosed],
+  ['bouts', 'Bout list', navAdmin && navClosed],
+  ['results', 'Results', navClosed],
+  ['calls', 'Bout calling', navClosed],
+].filter(([, , shown]) => shown); %>
+<% const navSettings = [['edit', 'Details'], ['setup', 'Division setup'], ['files', 'Logo and files']]; %>
+<nav class="comp-nav" aria-label="<%= competition.name %> pages">
+  <p class="breadcrumb"><% if (navAdmin) { %><a href="/admin/competitions">Competitions</a><% } else { %><a href="/official">Competition day</a><% } %> <span aria-hidden="true">›</span> <%= competition.name %></p>
+  <div class="comp-tabs">
+    <% navTabs.forEach(([path, label]) => { %><a href="<%= navBase %>/<%= path %>"<%- page === path ? ' aria-current="page"' : '' %>><%= label %></a><% }) %>
+    <% if (navAdmin) { %>
+      <details class="menu<%= navSettings.some(([path]) => path === page) || page === 'delete' ? ' current' : '' %>">
+        <summary>Settings</summary>
+        <div class="menu-list">
+          <% navSettings.forEach(([path, label]) => { %><a href="<%= navBase %>/<%= path %>"<%- page === path ? ' aria-current="page"' : '' %>><%= label %></a><% }) %>
+          <a href="/competitions/<%= competition.id %>">Public page</a>
+        </div>
+      </details>
+    <% } %>
+  </div>
+</nav>

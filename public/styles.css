@@ -924,3 +924,17 @@ html.screen-page { font-size: clamp(16px, 1.15vw, 30px); }
 .notice-list li.unread { border-left-color: var(--chung); background: var(--chung-soft); }
 .notice-list p { margin: 0; }
 .notice-list .sub { font-size: var(--text-sm); }
+
+/* A competition's pages as tabs: where you are, and one click to the rest. They wrap
+   rather than scroll, so the Settings menu isn't clipped. */
+.comp-nav { margin-bottom: var(--space-5); border-bottom: 1px solid var(--line); }
+.comp-nav .breadcrumb { margin-bottom: var(--space-2); color: var(--muted); }
+.comp-nav .breadcrumb span { margin: 0 2px; }
+.comp-nav .breadcrumb a::before { content: none; }
+.comp-tabs { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0 var(--space-1); }
+.comp-tabs > a, .comp-tabs > .menu > summary { display: inline-block; padding: 10px 12px; margin-bottom: -1px; border-bottom: 2px solid transparent; color: var(--ink-2); font-size: var(--text-sm); font-weight: 600; text-decoration: none; }
+.comp-tabs > a:hover, .comp-tabs > .menu > summary:hover { color: var(--ink); border-bottom-color: var(--line-strong); }
+.comp-tabs > a[aria-current="page"], .comp-tabs > .menu.current > summary { color: var(--chung-dark); border-bottom-color: var(--chung); }
+.comp-tabs .menu-list { left: 0; right: auto; }
+@media (max-width: 600px) { .comp-tabs > a, .comp-tabs > .menu > summary { padding: 8px 7px; } }
+@media print { .comp-nav { display: none; } }
