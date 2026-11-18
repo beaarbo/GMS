@@ -16,6 +16,7 @@ const {
   defaultDesignated, pickPoomsae, entryResult,
 } = require('./poomsae');
 const { logActivity } = require('./activity');
+const { signalUsers } = require('./noticeSignals');
 const { documentLabel, documentTypeFor } = require('./documents');
 const { loadSettings } = require('./settings');
 
@@ -50,6 +51,7 @@ function addNotifications(db, userIds, text, link = null) {
     [...new Set(userIds)].forEach((id) => insert.run(id, text, link));
     db.prepare("DELETE FROM notifications WHERE at < datetime('now', '-90 days')").run();
   })();
+  signalUsers(userIds);
 }
 
 const adminIds = (db) => db.prepare("SELECT id FROM users WHERE role = 'admin'").all().map((u) => u.id);

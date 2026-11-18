@@ -370,7 +370,7 @@ document.addEventListener('change', (event) => {
 })();
 
 // Coaches and admins: keeps the unread notifications count current while a page
-// stays open, checking once a minute while the tab is visible. A rise is announced.
+// stays open, through the /notifications/events stream. A rise is announced.
 (function liveNotificationCount() {
   const link = document.querySelector('#main-nav a[href="/notifications"]');
   if (!link) return;
@@ -397,18 +397,28 @@ document.addEventListener('change', (event) => {
     if (old) old.remove();
     if (count > 0) element.append(badge(count, words));
   };
+  const show = (unread) => {
+    if (!Number.isInteger(unread) || unread === shown) return;
+    place(link, unread, ' unread');
+    place(toggle, unread, ' unread notifications');
+    if (unread > shown) status.textContent = `${unread} unread notification${unread === 1 ? '' : 's'}`;
+    shown = unread;
+  };
 
+  // Live: the server sends the count as soon as a notice is added or read.
+  if (window.EventSource) {
+    const events = new EventSource('/notifications/events');
+    events.addEventListener('unread', (event) => show(Number(event.data)));
+    return;
+  }
+
+  // Without event streams, check once a minute while the tab is visible.
   const check = async () => {
     if (document.visibilityState !== 'visible') return;
     try {
       const response = await fetch('/notifications/count', { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
       if (!response.ok || !(response.headers.get('content-type') || '').includes('json')) return;
-      const { unread } = await response.json();
-      if (unread === shown) return;
-      place(link, unread, ' unread');
-      place(toggle, unread, ' unread notifications');
-      if (unread > shown) status.textContent = `${unread} unread notification${unread === 1 ? '' : 's'}`;
-      shown = unread;
+      show((await response.json()).unread);
     } catch (error) {
       // Offline or logged out: try again next time.
     }

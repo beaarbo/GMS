@@ -1112,6 +1112,69 @@ test('coaches and admins see their notifications, even with the email turned off
   assert.equal((await request(app).get('/notifications/count')).status, 302);
 });
 
+test('notifications reach open pages live, without a reload', async () => {
+  const http = require('http');
+  const { addNotifications } = require('../src/services');
+  const { db, app } = await setup();
+  const clubId = createClub(db, { name: 'Tigers', city: 'Manila' });
+  const admin = await login(app, 'admin@test.test');
+  const coach = await signUpCoach(app, 'coach@test.test');
+  const adminId = db.prepare("SELECT id FROM users WHERE email = 'admin@test.test'").get().id;
+
+  // A logged-in session cookie for the raw stream.
+  const browser = request.agent(app);
+  const token = await csrfFrom(browser, '/login');
+  const signIn = await browser.post('/login').type('form').send({ _csrf: token, email: 'admin@test.test', password: PASSWORD });
+  const cookie = signIn.headers['set-cookie'].map((c) => c.split(';')[0]).join('; ');
+
+  const server = app.listen(0);
+  const { port } = server.address();
+  let received = '';
+  const stream = await new Promise((resolve, reject) => {
+    const req = http.get({ port, path: '/notifications/events', headers: { Cookie: cookie } }, (res) => {
+      assert.equal(res.statusCode, 200);
+      assert.match(res.headers['content-type'], /^text\/event-stream/);
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => { received += chunk; });
+      resolve(req);
+    });
+    req.on('error', reject);
+  });
+  const waitFor = async (pattern) => {
+    for (let i = 0; i < 50 && !pattern.test(received); i += 1) await new Promise((r) => setTimeout(r, 50));
+    return pattern.test(received);
+  };
+  try {
+    assert.ok(await waitFor(/event: unread\ndata: 0\n/), 'the stream opens with the current count');
+
+    received = '';
+    await post(coach, '/coach/apply', { club_id: String(clubId) }, '/coach');
+    assert.ok(await waitFor(/event: unread\ndata: 1\n/), 'a new notice reaches the open page at once');
+
+    received = '';
+    await admin.get('/notifications');
+    assert.ok(await waitFor(/event: unread\ndata: 0\n/), 'reading them clears the badge in other tabs');
+
+    // Someone else's notices don't reach this stream.
+    received = '';
+    const coachId = db.prepare("SELECT id FROM users WHERE email = 'coach@test.test'").get().id;
+    addNotifications(db, [coachId], 'For the coach only');
+    await new Promise((r) => setTimeout(r, 500));
+    assert.doesNotMatch(received, /event: unread/);
+    addNotifications(db, [adminId], 'For the admin');
+    assert.ok(await waitFor(/event: unread\ndata: 1\n/));
+  } finally {
+    stream.destroy();
+    server.close();
+  }
+
+  const anonymous = await new Promise((resolve) => {
+    const s = app.listen(0);
+    const visit = http.get({ port: s.address().port, path: '/notifications/events' }, (res) => { resolve(res.statusCode); visit.destroy(); s.close(); });
+  });
+  assert.equal(anonymous, 302, 'visitors get no stream');
+});
+
 test('deadline reminders go out once, only inside the 3-day window, and again after a new deadline', async () => {
   const { db, app, mailer } = await setup();
   await signUpClub(app, 'Tigers', 'tigers@test.test');
