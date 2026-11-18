@@ -54,6 +54,97 @@ function addNotifications(db, userIds, text, link = null) {
 
 const adminIds = (db) => db.prepare("SELECT id FROM users WHERE role = 'admin'").all().map((u) => u.id);
 
+// Entry numbers for a competition's Stats page. Totals count every entry; the
+// breakdowns count entries still in (pending or approved), each as
+// [{ label, count }] in the competition's own group order.
+function competitionStats(db, competitionId) {
+  const id = competitionId;
+  const status = (table) =>
+    db.prepare(`SELECT COUNT(*) AS total, COALESCE(SUM(status = 'pending'), 0) AS pending,
+      COALESCE(SUM(status = 'approved'), 0) AS approved, COALESCE(SUM(status = 'rejected'), 0) AS rejected
+      FROM ${table} WHERE competition_id = ?`).get(id);
+  // Athletes still entered in either event, with their club.
+  const athletes = `SELECT fighter_id, club_id FROM registrations WHERE competition_id = ? AND status != 'rejected'
+    UNION SELECT m.fighter_id, e.club_id FROM poomsae_members m JOIN poomsae_entries e ON e.id = m.entry_id
+    WHERE e.competition_id = ? AND e.status != 'rejected'`;
+  const rows = (sql, ...params) => db.prepare(sql).all(...params).map((r) => ({ label: r.label, count: r.count }));
+
+  const byClub = db
+    .prepare(
+      `SELECT * FROM (
+         SELECT c.name AS label,
+           (SELECT COUNT(*) FROM registrations r WHERE r.competition_id = ? AND r.club_id = c.id AND r.status != 'rejected') AS kyorugi,
+           (SELECT COUNT(*) FROM poomsae_entries e WHERE e.competition_id = ? AND e.club_id = c.id AND e.status != 'rejected') AS poomsae,
+           (SELECT COUNT(*) FROM (${athletes}) a WHERE a.club_id = c.id) AS athletes
+         FROM clubs c
+       ) WHERE kyorugi + poomsae > 0 ORDER BY athletes DESC, label`
+    )
+    .all(id, id, id, id);
+
+  return {
+    kyorugi: status('registrations'),
+    poomsae: status('poomsae_entries'),
+    athletes: db.prepare(`SELECT COUNT(DISTINCT fighter_id) AS n FROM (${athletes})`).get(id, id).n,
+    clubs: byClub.length,
+    byClub,
+    kyorugiBy: {
+      gender: rows(
+        `SELECT CASE f.gender WHEN 'M' THEN 'Male' ELSE 'Female' END AS label, COUNT(*) AS count
+         FROM registrations r JOIN fighters f ON f.id = r.fighter_id
+         WHERE r.competition_id = ? AND r.status != 'rejected' GROUP BY f.gender ORDER BY f.gender DESC`,
+        id
+      ),
+      age: rows(
+        `SELECT g.name AS label, COUNT(r.id) AS count FROM age_groups g
+         LEFT JOIN registrations r ON r.age_group_id = g.id AND r.status != 'rejected'
+         WHERE g.competition_id = ? GROUP BY g.id ORDER BY g.min_age`,
+        id
+      ),
+      belt: rows(
+        `SELECT g.name AS label, COUNT(r.id) AS count FROM belt_groups g
+         LEFT JOIN registrations r ON r.belt_group_id = g.id AND r.status != 'rejected'
+         WHERE g.competition_id = ? GROUP BY g.id ORDER BY g.min_rank`,
+        id
+      ),
+    },
+    poomsaeBy: {
+      event: rows(
+        `SELECT CASE event WHEN 'individual' THEN 'Individual' WHEN 'pair' THEN 'Pair' ELSE 'Team' END AS label, COUNT(*) AS count
+         FROM poomsae_entries WHERE competition_id = ? AND status != 'rejected'
+         GROUP BY event ORDER BY CASE event WHEN 'individual' THEN 1 WHEN 'pair' THEN 2 ELSE 3 END`,
+        id
+      ),
+      gender: rows(
+        `SELECT CASE gender WHEN 'M' THEN 'Male' WHEN 'F' THEN 'Female' ELSE 'Mixed' END AS label, COUNT(*) AS count
+         FROM poomsae_entries WHERE competition_id = ? AND status != 'rejected'
+         GROUP BY gender ORDER BY CASE gender WHEN 'M' THEN 1 WHEN 'F' THEN 2 ELSE 3 END`,
+        id
+      ),
+      age: rows(
+        `SELECT g.name AS label, COUNT(e.id) AS count FROM poomsae_age_groups g
+         LEFT JOIN poomsae_entries e ON e.age_group_id = g.id AND e.status != 'rejected'
+         WHERE g.competition_id = ? GROUP BY g.id ORDER BY g.min_age`,
+        id
+      ),
+      belt: rows(
+        `SELECT g.name AS label, COUNT(e.id) AS count FROM belt_groups g
+         LEFT JOIN poomsae_entries e ON e.belt_group_id = g.id AND e.status != 'rejected'
+         WHERE g.competition_id = ? GROUP BY g.id ORDER BY g.min_rank`,
+        id
+      ),
+    },
+    // Every entry made, by the day it came in (the server's time zone).
+    perDay: rows(
+      `SELECT day AS label, COUNT(*) AS count FROM (
+         SELECT date(created_at, 'localtime') AS day FROM registrations WHERE competition_id = ?
+         UNION ALL SELECT date(created_at, 'localtime') FROM poomsae_entries WHERE competition_id = ?
+       ) GROUP BY day ORDER BY day`,
+      id,
+      id
+    ),
+  };
+}
+
 function closeExpiredCompetitions(db) {
   const expired = db
     .prepare(
@@ -2339,6 +2430,7 @@ function cleanUpDocuments(db, days) {
 }
 
 module.exports = {
+  competitionStats,
   addNotifications,
   adminIds,
   listCompetitionPhotos,

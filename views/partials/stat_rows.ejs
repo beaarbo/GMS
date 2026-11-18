@@ -1,0 +1,18 @@
+<%# One breakdown as a table: label, count, and a bar scaled to the largest row. The bar only repeats the number, so it's hidden from screen readers. Pass rows ([{ label, count }]) and heading (the label column's name). %>
+<% const statMax = Math.max(1, ...rows.map((r) => r.count)); %>
+<% if (rows.every((r) => r.count === 0)) { %>
+  <p class="empty">No entries yet.</p>
+<% } else { %>
+  <table class="stat-table">
+    <thead><tr><th scope="col"><%= heading %></th><th scope="col" class="num">Entries</th><th scope="col" class="stat-bar-cell"><span class="visually-hidden">Share of the largest</span></th></tr></thead>
+    <tbody>
+      <% rows.forEach((r) => { %>
+        <tr>
+          <th scope="row"><%= r.label %></th>
+          <td class="num"><%= r.count %></td>
+          <td class="stat-bar-cell"><svg class="stat-bar" viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true" focusable="false"><% if (r.count > 0) { %><rect width="<%= (r.count / statMax) * 100 %>" height="8"></rect><% } %></svg></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+<% } %>

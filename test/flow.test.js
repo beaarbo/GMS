@@ -1743,12 +1743,19 @@ test('officials run the weigh-in and results, and nothing else', async () => {
   const tabs = results.text.match(/<div class="comp-tabs">[\s\S]*?<\/div>/)[0];
   assert.match(tabs, /href="[^"]*\/results" aria-current="page">Results</);
   assert.match(tabs, /Weigh-in[\s\S]*Bout calling/);
-  assert.doesNotMatch(tabs, /Registrations|Bout list|Settings/);
+  assert.doesNotMatch(tabs, /Registrations|Bout list|Stats|Settings/);
   const adminTabs = (await admin.get(`/admin/competitions/${compId}/registrations`)).text;
-  assert.match(adminTabs, /aria-current="page">Registrations<[\s\S]*Bout list[\s\S]*<summary>Settings</);
+  assert.match(adminTabs, /aria-current="page">Registrations<[\s\S]*Bout list[\s\S]*Stats[\s\S]*<summary>Settings</);
+
+  // The Stats page counts the competition's athletes and entries.
+  const stats = await admin.get(`/admin/competitions/${compId}/stats`);
+  assert.equal(stats.status, 200);
+  assert.match(stats.text, /Athletes<\/span>\s*<strong class="stat-value">2</);
+  assert.match(stats.text, /Kyorugi entries<\/span>\s*<strong class="stat-value">2<\/strong>\s*<span class="stat-detail">2 approved · 0 pending/);
+  assert.match(stats.text, /<h2>Kyorugi<\/h2>[\s\S]*<th scope="row">Female<\/th>\s*<td class="num">2<\/td>/, 'both test athletes are female');
 
   // Everything else stays admin-only.
-  for (const page of ['/admin', `/admin/competitions/${compId}/bouts`, '/admin/accounts', '/admin/clubs', '/admin/backups', `/admin/competitions/${compId}/registrations`]) {
+  for (const page of ['/admin', `/admin/competitions/${compId}/bouts`, `/admin/competitions/${compId}/stats`, '/admin/accounts', '/admin/clubs', '/admin/backups', `/admin/competitions/${compId}/registrations`]) {
     assert.equal((await official.get(page)).status, 403, page);
   }
   const clear = await post(official, `/admin/competitions/${compId}/results/clear-all`, {}, '/official');

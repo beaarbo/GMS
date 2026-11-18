@@ -1,0 +1,87 @@
+<%- include('../partials/top') %>
+<%- include('../partials/comp_nav', { page: 'stats' }) %>
+<% const kyorugi = hasKyorugi(competition); const poomsae = hasPoomsae(competition); %>
+<% const entryText = (s) => `${s.approved} approved · ${s.pending} pending${s.rejected ? ` · ${s.rejected} rejected` : ''}`; %>
+<div class="page-head">
+  <div>
+    <h1>Stats</h1>
+    <p class="sub"><%= competition.name %> · counts leave out rejected entries, except the totals under each event</p>
+  </div>
+</div>
+
+<section class="section">
+  <div class="stat-grid">
+    <div class="stat-tile">
+      <span class="stat-label">Athletes</span>
+      <strong class="stat-value"><%= stats.athletes %></strong>
+      <span class="stat-detail"><%= kyorugi && poomsae ? 'In either event' : 'Entered' %></span>
+    </div>
+    <div class="stat-tile">
+      <span class="stat-label">Clubs</span>
+      <strong class="stat-value"><%= stats.clubs %></strong>
+      <span class="stat-detail">With entries</span>
+    </div>
+    <% if (kyorugi) { %>
+      <div class="stat-tile">
+        <span class="stat-label">Kyorugi entries</span>
+        <strong class="stat-value"><%= stats.kyorugi.total %></strong>
+        <span class="stat-detail"><%= entryText(stats.kyorugi) %></span>
+      </div>
+    <% } %>
+    <% if (poomsae) { %>
+      <div class="stat-tile">
+        <span class="stat-label">Poomsae entries</span>
+        <strong class="stat-value"><%= stats.poomsae.total %></strong>
+        <span class="stat-detail"><%= entryText(stats.poomsae) %></span>
+      </div>
+    <% } %>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Clubs</h2>
+  <% if (stats.byClub.length === 0) { %>
+    <p class="empty">No entries yet.</p>
+  <% } else { %>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Club</th><th scope="col" class="num">Athletes</th><% if (kyorugi) { %><th scope="col" class="num">Kyorugi</th><% } %><% if (poomsae) { %><th scope="col" class="num">Poomsae</th><% } %></tr></thead>
+        <tbody>
+          <% stats.byClub.forEach((c) => { %>
+            <tr><th scope="row"><%= c.label %></th><td class="num"><%= c.athletes %></td><% if (kyorugi) { %><td class="num"><%= c.kyorugi %></td><% } %><% if (poomsae) { %><td class="num"><%= c.poomsae %></td><% } %></tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</section>
+
+<% if (kyorugi) { %>
+  <section class="card">
+    <h2>Kyorugi</h2>
+    <div class="stat-columns">
+      <div><h3>Gender</h3><%- include('../partials/stat_rows', { rows: stats.kyorugiBy.gender, heading: 'Gender' }) %></div>
+      <div><h3>Age group</h3><%- include('../partials/stat_rows', { rows: stats.kyorugiBy.age, heading: 'Age group' }) %></div>
+      <div><h3>Belt group</h3><%- include('../partials/stat_rows', { rows: stats.kyorugiBy.belt, heading: 'Belt group' }) %></div>
+    </div>
+  </section>
+<% } %>
+
+<% if (poomsae) { %>
+  <section class="card">
+    <h2>Poomsae</h2>
+    <div class="stat-columns">
+      <div><h3>Event</h3><%- include('../partials/stat_rows', { rows: stats.poomsaeBy.event, heading: 'Event' }) %></div>
+      <div><h3>Gender</h3><%- include('../partials/stat_rows', { rows: stats.poomsaeBy.gender, heading: 'Gender' }) %></div>
+      <div><h3>Age group</h3><%- include('../partials/stat_rows', { rows: stats.poomsaeBy.age, heading: 'Age group' }) %></div>
+      <div><h3>Belt group</h3><%- include('../partials/stat_rows', { rows: stats.poomsaeBy.belt, heading: 'Belt group' }) %></div>
+    </div>
+  </section>
+<% } %>
+
+<section class="card">
+  <h2>Entries by day</h2>
+  <p class="sub">Every entry made, including any later rejected, by the day the coach sent it.</p>
+  <%- include('../partials/stat_rows', { rows: stats.perDay.map((d) => ({ label: formatDate(d.label), count: d.count })), heading: 'Day' }) %>
+</section>
+<%- include('../partials/bottom') %>

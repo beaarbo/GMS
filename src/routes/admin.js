@@ -11,6 +11,7 @@ const {
 const {
   loadDivisionSetup,
   countRegistrations,
+  competitionStats,
   saveDivisionSetup,
   savePoomsaeAgeGroups,
   getEventDates,
@@ -609,6 +610,12 @@ function setupRowsForForm(setup) {
 function setupPage(res, competition, { status = 200, ageRows, poomsaeRows, beltRows, errors = [], locked = false }) {
   return res.status(status).render('admin/setup', { title: 'Division setup', competition, ageRows, poomsaeRows, beltRows, errors, locked });
 }
+
+// Entry numbers for planning and reports: totals, clubs, and each event by gender, age and belt.
+router.get('/competitions/:id(\\d+)/stats', (req, res) => {
+  const stats = competitionStats(req.app.locals.db, req.competition.id);
+  res.render('admin/stats', { title: 'Stats', competition: req.competition, stats });
+});
 
 router.get('/competitions/:id(\\d+)/setup', (req, res) => {
   const { db } = req.app.locals;
