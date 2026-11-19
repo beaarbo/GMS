@@ -105,7 +105,7 @@ function applicationText(db, id) {
 router.post('/applications/:id(\\d+)/approve', (req, res) => {
   if (approveApplication(req.app.locals.db, Number(req.params.id))) {
     req.logActivity('coach.approved', `Approved ${applicationText(req.app.locals.db, Number(req.params.id))}`);
-    req.flash('success', 'Coach approved. They can now register athletes for this club.');
+    req.flash('success', 'Coach approved. They can now enter athletes for this club.');
     notifyApplicationApproved(req.app.locals.notify, Number(req.params.id));
   } else {
     req.flash('error', 'That application is no longer waiting for approval.');

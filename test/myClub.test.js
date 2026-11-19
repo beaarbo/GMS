@@ -51,7 +51,7 @@ test('My club on the bout list lists only the coach\'s own competitors, kyorugi 
   await coach.post('/login').type('form').send({ _csrf: csrf, email: 'coach@test.test', password: PASSWORD });
 
   const mine = (await coach.get(`/competitions/${id}/bouts?club=mine`)).text;
-  const table = mine.slice(mine.indexOf('Your competitors'), mine.indexOf('</table>', mine.indexOf('Your competitors')));
+  const table = mine.slice(mine.indexOf('Your athletes'), mine.indexOf('</table>', mine.indexOf('Your athletes')));
   assert.match(table, /Lee Ana<\/strong><\/td>\s*<td>Kyorugi/, 'their kyorugi athlete');
   assert.match(table, /Bout \d+/);
   assert.match(table, /Ana Lee<\/strong><\/td>\s*<td>Poomsae/, 'their poomsae entry');
@@ -77,6 +77,6 @@ test('My club on the bout list lists only the coach\'s own competitors, kyorugi 
   // The event tab narrows it; everyone else gets the normal bout list.
   assert.doesNotMatch((await coach.get(`/competitions/${id}/bouts?club=mine&event=kyorugi`)).text, /<td>Poomsae<\/td>/);
   const visitor = (await request(app).get(`/competitions/${id}/bouts?club=mine`)).text;
-  assert.doesNotMatch(visitor, /Your competitors/);
+  assert.doesNotMatch(visitor, /Your athletes/);
   assert.match(visitor, /<h2>Running order<\/h2>/);
 });

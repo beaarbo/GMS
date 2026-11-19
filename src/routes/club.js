@@ -38,7 +38,7 @@ router.use(requireRole('coach'));
 // Only coaches approved for a club can manage fighters and registrations.
 router.use((req, res, next) => {
   if (req.user.club_id) return next();
-  req.flash('error', 'An admin must approve you for a club before you can register athletes.');
+  req.flash('error', 'An admin must approve you for a club before you can enter athletes.');
   return res.redirect('/coach');
 });
 
@@ -429,7 +429,7 @@ router.post('/competitions/:id(\\d+)/enter', (req, res) => {
 
   const fighterIds = toArray(req.body.fighter_ids);
   if (fighterIds.length === 0) {
-    req.flash('error', 'Select at least one fighter.');
+    req.flash('error', 'Select at least one athlete.');
     return res.redirect(back);
   }
 

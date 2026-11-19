@@ -2249,7 +2249,7 @@ function recordResult(db, competitionId, boutId, side, { winType = null, score =
     const bout = db.prepare('SELECT * FROM bouts WHERE id = ? AND competition_id = ?').get(boutId, competitionId);
     if (!bout || bout.is_bye) return { ok: false, error: 'That bout was not found.' };
     if (!bout.blue_registration_id || !bout.red_registration_id) {
-      return { ok: false, error: 'Both fighters must be known before recording this bout.' };
+      return { ok: false, error: 'Both athletes must be known before recording this bout.' };
     }
     const winnerId = side === 'blue' ? bout.blue_registration_id : side === 'red' ? bout.red_registration_id : null;
     if (!winnerId) return { ok: false, error: 'Choose a winner.' };

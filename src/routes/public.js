@@ -19,7 +19,7 @@ router.get('/', (req, res) => {
   // Upcoming until the competition's last day has passed, as on the coach Home page.
   const lastDay = '(SELECT MAX(d.event_date) FROM competition_dates d WHERE d.competition_id = c.id)';
   const competitions = db
-    .prepare(`SELECT c.* FROM competitions c WHERE c.status IN ('open', 'closed') AND ${lastDay} >= ? ORDER BY c.status = 'closed', c.event_date`)
+    .prepare(`SELECT c.* FROM competitions c WHERE c.status IN ('open', 'closed') AND ${lastDay} >= ? ORDER BY c.event_date, c.id`)
     .all(today())
     .map((c) => ({ ...c, photos: listCompetitionPhotos(db, c.id), hasResults: competitionResults(db, c, { published: true }).divisions.length > 0 }));
   // Finished ones, newest first, each with a link to its results once any are published.

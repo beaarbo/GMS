@@ -91,11 +91,11 @@ function notifyApplicationApproved(ctx, applicationId) {
        JOIN users u ON u.id = a.user_id JOIN clubs c ON c.id = a.club_id WHERE a.id = ?`
     )
     .get(applicationId);
-  addNotifications(ctx.db, [row.id], `You're approved as a coach for ${row.club}. You can now register its athletes.`, '/club');
+  addNotifications(ctx.db, [row.id], `You're approved as a coach for ${row.club}. You can now add its athletes and enter them into competitions.`, '/club');
   return ctx.mailer.send({
     to: row.email,
     subject: `You're approved for ${row.club}`,
-    text: `An admin approved you as a coach for ${row.club}. You can now register its athletes:\n\n${ctx.publicUrl}/club`,
+    text: `An admin approved you as a coach for ${row.club}. You can now add its athletes and enter them into competitions:\n\n${ctx.publicUrl}/club`,
   });
 }
 
@@ -120,7 +120,7 @@ function notifyCoachRemoved(ctx, email, clubName) {
   return ctx.mailer.send({
     to: email,
     subject: `You were removed from ${clubName}`,
-    text: `An admin removed you as a coach for ${clubName}, so you can no longer register its athletes.\n\nYou can apply to a club here: ${ctx.publicUrl}/coach`,
+    text: `An admin removed you as a coach for ${clubName}, so you can no longer enter its athletes.\n\nYou can apply to a club here: ${ctx.publicUrl}/coach`,
   });
 }
 

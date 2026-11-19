@@ -1284,7 +1284,7 @@ test('coaches see a bout list only once published, limited to their divisions', 
 
   const page = await club.get(coachPage).redirects(1);
   assert.equal(page.status, 200);
-  assert.match(page.text, /Your competitors/);
+  assert.match(page.text, /Your athletes/);
   assert.match(page.text, /Reyes|Alpha/);
   assert.match(page.text, /<td class="nowrap">Bout \d+<\/td>\s*<td class="nowrap">\d\d:\d\d<\/td>/);
   assert.equal((await club.get(`${coachPage}.pdf`)).headers['content-type'], 'application/pdf');
@@ -3100,7 +3100,11 @@ test('officials reach each court\'s mat and every judge seat in one tap from the
   // Results lists the mats too, so no day and court filter is needed first.
   assert.match((await official.get(`/admin/competitions/${compId}/results`)).text, new RegExp(`Record at a mat[\\s\\S]*href="/admin/competitions/${compId}/mat/1/1"`));
   // The mat's way back goes to the official's start page.
-  assert.match((await official.get(`/admin/competitions/${compId}/mat/1/1`)).text, /href="\/official">Competition day</);
+  const mat = (await official.get(`/admin/competitions/${compId}/mat/1/1`)).text;
+  assert.match(mat, /href="\/official">Competition day</);
+  // Standing rules are folded into one section, not repeated under each block.
+  assert.match(mat, /<details class="card fold how-page">\s*<summary><h2>How this page works<\/h2><\/summary>[\s\S]*only be undone while the next bout has no result/);
+  assert.match((await official.get(`/admin/competitions/${compId}/weigh-in`)).text, /How this page works[\s\S]*Weights aren&#39;t saved, only the result/);
 });
 
 test('coaches follow their club on the shared bout list, and uploads return to the entry page', async () => {

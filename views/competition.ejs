@@ -108,7 +108,7 @@
 <% if (hasKyorugi(competition)) { %>
 <details class="card fold">
   <summary><h2>Kyorugi divisions</h2></summary>
-  <p class="sub">Fighters are grouped by gender, age, belt and weight.
+  <p class="sub">Athletes are grouped by gender, age, belt and weight.
     <%= competition.age_basis === 'year' ? 'Age is the competition year minus the birth year.' : 'Age is taken on the first day of the event.' %>
     <% if (competition.max_per_club_division) { %>Each club can enter at most <strong><%= competition.max_per_club_division %></strong> athlete<%= competition.max_per_club_division === 1 ? '' : 's' %> per division.<% } %></p>
   <div class="table-wrap">

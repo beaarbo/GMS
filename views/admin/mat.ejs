@@ -39,7 +39,6 @@
         <div class="win-details">
           <label>How <select name="win_type" aria-label="How bout <%= now.number %> was won"><option value="">Not recorded</option><% Object.entries(WIN_TYPES).forEach(([code, label]) => { %><option value="<%= code %>"><%= code %>: <%= label %></option><% }) %></select></label>
           <label>Score <input name="score" inputmode="numeric" autocomplete="off" placeholder="2-1" maxlength="7" aria-label="Score of bout <%= now.number %>"></label>
-          <span class="hint">Optional. Choose these first, then tap the winner.</span>
         </div>
         <button class="mat-winner blue" type="submit" name="winner" value="blue" aria-label="<%= now.blue.name %> wins bout <%= now.number %>">
           <span class="mat-corner">Blue wins</span>
@@ -85,11 +84,16 @@
             <input type="hidden" name="action" value="clear">
             <button class="btn danger" type="submit">Undo this result</button>
           </form>
-          <p class="hint">It can only be undone while the next bout has no result.</p>
         <% } %>
       <% } %>
     </section>
   </div>
 </main>
+<div class="mat-how"><%- include('../partials/how_page', { points: [
+  'Tap the winner. They move into their next bout, and the court screen updates at once.',
+  'How the bout was won and the score are optional: choose them first, then tap the winner.',
+  'A result can only be undone while the next bout has no result.',
+  'Walkovers from the weigh-in can\'t be changed here: undo the weigh-in instead.',
+] }) %></div>
 </body>
 </html>

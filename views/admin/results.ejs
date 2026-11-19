@@ -58,7 +58,6 @@
   <% if (total === 0) { %>
     <section class="card"><p class="empty">There are no bouts to record. <% if (isAdmin) { %><a href="/admin/competitions/<%= competition.id %>/bouts">Draw the bout list</a> first.<% } else { %>The organiser needs to draw the bout list first.<% } %></p></section>
   <% } else { %>
-    <p class="hint">Tap the winner. They move into their next bout automatically. Choosing how it was won and the score is optional.</p>
     <section class="card">
       <form method="get" class="filters">
         <% if (event) { %><input type="hidden" name="event" value="<%= event %>"><% } %>
@@ -153,4 +152,10 @@
 <% } %>
 
 <% if (showPoomsae) { %><%- include('../partials/poomsae_results', { poomsaeDivisions, poomsaeMedals, marks }) %><% } %>
+<%- include('../partials/how_page', { points: [
+  'Tap the winner. They move into their next bout automatically.',
+  'How a bout was won and its score are optional.',
+  'To record at one court, open its mat from Record at a mat.',
+  isAdmin ? 'Results are public as soon as they\'re recorded, once the bout list is published.' : null,
+] }) %>
 <%- include('../partials/bottom') %>

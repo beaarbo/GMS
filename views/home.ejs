@@ -11,9 +11,15 @@
   <% if (competitions.length === 0) { %>
     <%- include('partials/empty', past.length > 0 ? { message: 'No competitions are coming up right now.', href: '#past', label: 'Past results' } : { message: 'No competitions have been posted yet. Check back soon.' }) %>
   <% } else { %>
-    <div class="card-grid">
-      <% competitions.forEach((c) => { %><%- include('partials/competition_card', { c }) %><% }) %>
-    </div>
+    <%# On now: its first day has come (its last hasn't passed, or it would be under Past results). %>
+    <% const onNow = competitions.filter((c) => c.event_date <= today()); %>
+    <% const comingUp = competitions.filter((c) => c.event_date > today()); %>
+    <% [['On now', onNow], ['Coming up', comingUp]].filter(([, list]) => list.length > 0).forEach(([heading, list]) => { %>
+      <div class="section-head"><h2><%= heading %></h2></div>
+      <div class="card-grid">
+        <% list.forEach((c) => { %><%- include('partials/competition_card', { c }) %><% }) %>
+      </div>
+    <% }) %>
   <% } %>
 </section>
 

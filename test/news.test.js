@@ -117,8 +117,12 @@ test('the front page lists finished competitions apart, newest first, with their
   createCompetition(db, { name: 'Coming Cup', event_date: `${year + 1}-05-01`, registration_deadline: `${year + 1}-04-01`, venue: 'Hall', status: 'open' });
   createCompetition(db, { name: 'Old Open', event_date: `${year - 2}-05-01`, registration_deadline: `${year - 2}-04-01`, venue: 'Hall', status: 'closed' });
   createCompetition(db, { name: 'Last Open', event_date: `${year - 1}-05-01`, registration_deadline: `${year - 1}-04-01`, venue: 'Hall', status: 'closed' });
+  const todayText = new Date().toLocaleDateString('en-CA');
+  createCompetition(db, { name: 'Today Open', event_date: todayText, registration_deadline: todayText, venue: 'Hall', status: 'closed' });
   const app = createApp({ db, sessionSecret: 'test-secret', mailer: { configured: false, send: async () => {} } });
   const page = (await request(app).get('/')).text;
+  // A competition on today is under On now, ahead of the ones Coming up.
+  assert.match(page, /<h2>On now<\/h2>[\s\S]*Today Open[\s\S]*<h2>Coming up<\/h2>[\s\S]*Coming Cup/);
   const past = page.slice(page.indexOf('Past results'));
   assert.ok(page.indexOf('Coming Cup') < page.indexOf('Past results'), 'upcoming ones stay at the top');
   assert.ok(past.indexOf('Last Open') < past.indexOf('Old Open'), 'newest finished one first');

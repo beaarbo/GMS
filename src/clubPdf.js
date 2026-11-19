@@ -9,7 +9,7 @@ const MUTED = '#5b6474';
 const RULE = '#d5d9e0';
 const MARGIN = 36;
 const COLUMNS = [
-  ['Competitor', 'name', 120],
+  ['Athlete', 'name', 120],
   ['Event', 'event', 55],
   ['Division', 'division', 170],
   ['Day', 'dayLabel', 75],
@@ -40,7 +40,7 @@ function drawHeaderRow(doc, y) {
 }
 
 function writeClubCompetitorsPdf(stream, { competition, clubName, event = null, rows, dateLabel, printedAt }) {
-  const title = `${clubName}: our ${event ? `${event.toLowerCase()} ` : ''}competitors`;
+  const title = `${clubName}: our ${event ? `${event.toLowerCase()} ` : ''}athletes`;
   const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: MARGIN, info: { Title: `${title} - ${competition.name}` } });
   doc.pipe(stream);
   const pageBottom = doc.page.height - MARGIN - 18;
@@ -52,7 +52,7 @@ function writeClubCompetitorsPdf(stream, { competition, clubName, event = null, 
   let y = doc.y + 12;
 
   if (rows.length === 0) {
-    doc.font('Helvetica').fontSize(11).fillColor(INK).text('None of your competitors are on the published bout list yet.', MARGIN, y);
+    doc.font('Helvetica').fontSize(11).fillColor(INK).text('None of your athletes are on the published bout list yet.', MARGIN, y);
     doc.end();
     return;
   }

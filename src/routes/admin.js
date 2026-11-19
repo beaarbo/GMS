@@ -648,7 +648,7 @@ router.post('/competitions/:id(\\d+)/setup', (req, res) => {
   const { db } = req.app.locals;
   const competition = req.competition;
   if (countRegistrations(db, competition.id) > 0) {
-    req.flash('error', 'Divisions are locked because clubs have already registered fighters.');
+    req.flash('error', 'Divisions are locked because clubs have already entered athletes.');
     return res.redirect(`/admin/competitions/${competition.id}/setup`);
   }
   const current = loadDivisionSetup(db, competition.id);
@@ -997,7 +997,7 @@ router.post('/competitions/:id(\\d+)/bouts/generate', (req, res) => {
   if (fighters > 0) {
     req.logActivity(
       redraw ? 'bouts.redrawn' : 'bouts.generated',
-      `${redraw ? 'Redrew' : 'Generated'} the bout list for ${req.competition.name} (${fighters} fighters)`,
+      `${redraw ? 'Redrew' : 'Generated'} the bout list for ${req.competition.name} (${fighters} athletes)`,
       req.competition.id
     );
   }

@@ -18,8 +18,6 @@
 
 <% if (competition.status !== 'closed') { %>
   <div class="notice info">Close registration in <a href="/admin/competitions/<%= competition.id %>/edit#open-registration">Setup</a> before the weigh-in. Only approved athletes are weighed.</div>
-<% } else if (drawn) { %>
-  <div class="notice info">The bout list is drawn, so athletes stay in their weight class. An athlete over their class, or under it and not kept in it, is disqualified, and a no-show or disqualified athlete gives their opponent a walkover.</div>
 <% } %>
 
 <section class="card">
@@ -124,6 +122,10 @@
       </table>
     </div>
   <% } %>
-  <p class="hint">Weights aren't saved, only the result. <% if (drawn) { %>Athletes marked as no-show or disqualified lose their bout by walkover; if they had a bye, their next opponent gets the walkover as soon as they are known.<% } else { %>Athletes marked as no-show or disqualified are left out of the draw. You can also draw the bout list first and weigh in afterwards: anyone out then gives their opponent a walkover.<% } %></p>
 </section>
+<%- include('../partials/how_page', { points: [
+  'Weights aren\'t saved, only the result.',
+  drawn ? 'The bout list is drawn, so athletes stay in their weight class. An athlete over their class, or under it and not kept in it, is disqualified.' : 'An athlete outside their class can move to the class they fit, or be kept in theirs when they\'re lighter.',
+  drawn ? 'A no-show or disqualified athlete gives their opponent a walkover; if they had a bye, their next opponent gets it as soon as they are known.' : 'No-shows and disqualified athletes are left out of the draw. You can also draw the bout list first and weigh in afterwards: anyone out then gives their opponent a walkover.',
+] }) %>
 <%- include('../partials/bottom') %>

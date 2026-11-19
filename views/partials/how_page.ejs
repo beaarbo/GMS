@@ -1,0 +1,7 @@
+<%# A page's standing rules, folded so they don't repeat on every visit. Pass points: a list of sentences. %>
+<details class="card fold how-page">
+  <summary><h2>How this page works</h2></summary>
+  <ul class="how-list">
+    <% points.filter(Boolean).forEach((point) => { %><li><%= point %></li><% }) %>
+  </ul>
+</details>
