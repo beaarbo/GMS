@@ -122,6 +122,17 @@ router.get('/competitions/:id(\\d+)/athletes/:fighterId(\\d+)', (req, res) => {
   });
 });
 
+// Where the weigh-in's Scan card goes: that athlete's row on the weigh-in.
+router.get('/competitions/:id(\\d+)/weigh-in/athlete/:fighterId(\\d+)', (req, res) => {
+  const { db } = req.app.locals;
+  const row = db.prepare(
+    `SELECT r.id, f.first_name, f.last_name FROM registrations r JOIN fighters f ON f.id = r.fighter_id
+     WHERE r.competition_id = ? AND r.fighter_id = ? AND r.status = 'approved'`
+  ).get(req.competition.id, Number(req.params.fighterId));
+  if (!row) return notFound(res);
+  return res.redirect(weighInPath(req.competition, { q: `${row.first_name} ${row.last_name}` }, row.id));
+});
+
 // The photo on that page, only for athletes entered in this competition.
 router.get('/competitions/:id(\\d+)/athletes/:fighterId(\\d+)/photo', (req, res) => {
   const { db } = req.app.locals;

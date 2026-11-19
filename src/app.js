@@ -141,6 +141,8 @@ function createApp({
     })
   );
   app.use(express.static(path.join(__dirname, '..', 'public')));
+  // The QR decoder for the weigh-in's Scan card, for browsers without BarcodeDetector.
+  app.get('/vendor/jsQR.js', (req, res) => res.sendFile(require.resolve('jsqr/dist/jsQR.js'), { maxAge: '7d' }));
   app.use(express.urlencoded({ extended: true, limit: '1mb', parameterLimit: 10000 }));
 
   app.use(

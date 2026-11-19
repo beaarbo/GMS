@@ -563,6 +563,8 @@ label.check { display: flex; align-items: center; gap: var(--space-2); font-weig
 /* Weigh-in */
 .weight-input { width: 90px; min-height: var(--control-height-sm); padding: var(--space-1) var(--space-2); }
 tr.row-attention td, tbody tr.row-attention:hover td { background: var(--warn-soft); }
+tbody tr:target td { background: var(--chung-soft); }
+tbody tr:target { scroll-margin-top: var(--space-6); }
 
 /* Manual bracket changes */
 .division-edit { margin-top: var(--space-4); border-top: 1px solid var(--line); padding-top: var(--space-3); }
@@ -959,3 +961,8 @@ html.screen-page { font-size: clamp(16px, 1.15vw, 30px); }
 .stat-bar-cell { width: 40%; padding-left: var(--space-2); }
 .stat-bar { display: block; width: 100%; height: 8px; border-radius: 4px; background: var(--neutral-soft); overflow: hidden; }
 .stat-bar rect { fill: var(--chung); }
+.scan-dialog { width: min(480px, calc(100vw - 32px)); padding: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); color: var(--ink); text-align: center; }
+.scan-dialog::backdrop { background: var(--photo-scrim); }
+.scan-dialog h2 { font-size: var(--text-lg); margin: 0 0 var(--space-3); }
+.scan-video { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: var(--radius); background: var(--line); }
+.scan-status { margin: var(--space-3) 0; color: var(--muted); }

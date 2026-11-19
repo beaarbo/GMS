@@ -426,3 +426,130 @@ document.addEventListener('change', (event) => {
   setInterval(check, 60000);
   document.addEventListener('visibilitychange', check);
 })();
+
+// Weigh-in "Scan card": reads an athlete card's QR code with the camera and opens
+// that athlete's weigh-in row. Uses the browser's BarcodeDetector where it has
+// one, else jsQR (loaded only when needed). Without a camera the button stays hidden.
+(function scanCard() {
+  const button = document.querySelector('[data-scan-card]');
+  if (!button || !window.HTMLDialogElement || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+  const competitionId = button.dataset.scanCard;
+  button.hidden = false;
+
+  let jsQRLoaded = null;
+  const loadJsQR = () => jsQRLoaded || (jsQRLoaded = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = '/vendor/jsQR.js';
+    script.onload = () => resolve(window.jsQR);
+    script.onerror = reject;
+    document.head.append(script);
+  }));
+
+  // A reader that takes a video frame and returns the QR text, or null.
+  const makeReader = async () => {
+    if (window.BarcodeDetector) {
+      try {
+        const formats = await window.BarcodeDetector.getSupportedFormats();
+        if (formats.includes('qr_code')) {
+          const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+          return async (video) => ((await detector.detect(video))[0] || {}).rawValue || null;
+        }
+      } catch (error) { /* fall back to jsQR */ }
+    }
+    const jsQR = await loadJsQR();
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    return async (video) => {
+      const scale = Math.min(1, 640 / video.videoWidth);
+      canvas.width = Math.round(video.videoWidth * scale);
+      canvas.height = Math.round(video.videoHeight * scale);
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const found = jsQR(context.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height, { inversionAttempts: 'dontInvert' });
+      return found ? found.data : null;
+    };
+  };
+
+  // Only athlete cards: /admin/competitions/<id>/athletes/<fighter>, from any host.
+  const readCard = (text) => {
+    let url;
+    try { url = new URL(text); } catch (error) { return null; }
+    const match = url.pathname.match(/^\/admin\/competitions\/(\d+)\/athletes\/(\d+)\/?$/);
+    return match ? { competitionId: match[1], fighterId: match[2] } : null;
+  };
+
+  button.addEventListener('click', async () => {
+    const dialog = document.createElement('dialog');
+    dialog.className = 'scan-dialog';
+    const heading = document.createElement('h2');
+    heading.textContent = 'Scan an athlete card';
+    const video = document.createElement('video');
+    video.className = 'scan-video';
+    video.muted = true;
+    video.playsInline = true;
+    video.setAttribute('playsinline', '');
+    video.setAttribute('aria-hidden', 'true');
+    const status = document.createElement('p');
+    status.className = 'scan-status';
+    status.setAttribute('aria-live', 'polite');
+    status.textContent = 'Starting the camera…';
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'btn secondary';
+    close.textContent = 'Close';
+    dialog.append(heading, video, status, close);
+    document.body.append(dialog);
+    dialog.showModal();
+
+    let stream = null;
+    let running = true;
+    const stop = () => {
+      running = false;
+      if (stream) stream.getTracks().forEach((track) => track.stop());
+    };
+    close.addEventListener('click', () => dialog.close());
+    dialog.addEventListener('close', () => { stop(); dialog.remove(); });
+
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+      if (!running) return stop();
+      video.srcObject = stream;
+      await video.play();
+    } catch (error) {
+      video.hidden = true;
+      status.textContent = error && error.name === 'NotAllowedError'
+        ? 'The camera is blocked. Allow it for this site in the browser, or search by name instead.'
+        : 'No camera could be started. Search by name instead.';
+      return undefined;
+    }
+    let read;
+    try {
+      read = await makeReader();
+    } catch (error) {
+      status.textContent = 'The scanner could not load. Check the connection, or search by name instead.';
+      return stop();
+    }
+    status.textContent = 'Hold the card’s QR code in front of the camera.';
+
+    let lastWrong = '';
+    const tick = async () => {
+      if (!running) return;
+      let text = null;
+      if (video.readyState >= 2 && video.videoWidth) {
+        try { text = await read(video); } catch (error) { text = null; }
+      }
+      const card = text && readCard(text);
+      if (card && card.competitionId === competitionId) {
+        status.textContent = 'Found. Opening their weigh-in…';
+        stop();
+        window.location.assign(`/admin/competitions/${competitionId}/weigh-in/athlete/${card.fighterId}`);
+        return;
+      }
+      if (text && text !== lastWrong) {
+        lastWrong = text;
+        status.textContent = card ? 'This card is for a different competition.' : 'That QR code isn’t an athlete card.';
+      }
+      setTimeout(tick, 150);
+    };
+    tick();
+  });
+})();

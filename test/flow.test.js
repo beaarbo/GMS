@@ -1800,6 +1800,17 @@ test('officials run the weigh-in and results, and nothing else', async () => {
   const alpha = regOf(db, 'Alpha');
   await post(official, `/admin/competitions/${compId}/weigh-in/${alpha.id}`, { action: 'no_show' }, `/admin/competitions/${compId}/weigh-in`);
   assert.equal(regOf(db, 'Alpha').weigh_status, 'no_show');
+  // Scan card: the weigh-in offers it, and a scanned athlete opens their row.
+  const weighPage = (await official.get(`/admin/competitions/${compId}/weigh-in`)).text;
+  assert.match(weighPage, new RegExp(`data-scan-card="${compId}" hidden>Scan card<`));
+  const scanned = await official.get(`/admin/competitions/${compId}/weigh-in/athlete/${alpha.fighter_id}`);
+  assert.equal(scanned.status, 302);
+  assert.equal(scanned.headers.location, `/admin/competitions/${compId}/weigh-in?q=Ana+Alpha#reg-${alpha.id}`);
+  assert.equal((await official.get(`/admin/competitions/${compId}/weigh-in/athlete/999999`)).status, 404);
+  assert.equal((await request(app).get(`/admin/competitions/${compId}/weigh-in/athlete/${alpha.fighter_id}`)).headers.location, '/login');
+  const decoder = await request(app).get('/vendor/jsQR.js');
+  assert.equal(decoder.status, 200);
+  assert.match(decoder.headers['content-type'], /javascript/);
   const results = await official.get(`/admin/competitions/${compId}/results`);
   assert.equal(results.status, 200);
   // The competition's tabs show officials only their pages.

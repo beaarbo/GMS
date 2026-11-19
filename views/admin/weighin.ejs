@@ -10,6 +10,7 @@
     </div>
   </div>
   <div class="actions">
+    <% if (competition.status === 'closed') { %><button class="btn" type="button" data-scan-card="<%= competition.id %>" hidden>Scan card</button><% } %>
     <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/weigh-in/list.xlsx">Download list (Excel)</a>
     <% if (isAdmin) { %><a class="btn secondary" href="/admin/competitions/<%= competition.id %>/bouts">Bout list</a><% } %>
   </div>
