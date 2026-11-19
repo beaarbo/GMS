@@ -53,4 +53,4 @@ function summary(text, length = 220) {
   return `${flat.slice(0, flat.lastIndexOf(' ', length) > 0 ? flat.lastIndexOf(' ', length) : length)}…`;
 }
 
-module.exports = { AUDIENCES, MAX_TITLE, MAX_BODY, readPost, formatBody, summary };
+module.exports = { AUDIENCES, readPost, formatBody, summary };

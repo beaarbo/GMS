@@ -74,6 +74,8 @@ function competitionStats(db, competitionId) {
     UNION SELECT m.fighter_id, e.club_id FROM poomsae_members m JOIN poomsae_entries e ON e.id = m.entry_id
     WHERE e.competition_id = ? AND e.status != 'rejected'`;
   const rows = (sql, ...params) => db.prepare(sql).all(...params).map((r) => ({ label: r.label, count: r.count }));
+  // Rows grouped by a code (gender, event), named from the same lists the rest of the site uses.
+  const named = (names, sql, ...params) => db.prepare(sql).all(...params).map((r) => ({ label: names[r.code], count: r.count }));
 
   const byClub = db
     .prepare(
@@ -94,8 +96,9 @@ function competitionStats(db, competitionId) {
     clubs: byClub.length,
     byClub,
     kyorugiBy: {
-      gender: rows(
-        `SELECT CASE f.gender WHEN 'M' THEN 'Male' ELSE 'Female' END AS label, COUNT(*) AS count
+      gender: named(
+        GENDERS,
+        `SELECT f.gender AS code, COUNT(*) AS count
          FROM registrations r JOIN fighters f ON f.id = r.fighter_id
          WHERE r.competition_id = ? AND r.status != 'rejected' GROUP BY f.gender ORDER BY f.gender DESC`,
         id
@@ -114,14 +117,16 @@ function competitionStats(db, competitionId) {
       ),
     },
     poomsaeBy: {
-      event: rows(
-        `SELECT CASE event WHEN 'individual' THEN 'Individual' WHEN 'pair' THEN 'Pair' ELSE 'Team' END AS label, COUNT(*) AS count
+      event: named(
+        Object.fromEntries(Object.entries(POOMSAE_EVENTS).map(([code, e]) => [code, e.label])),
+        `SELECT event AS code, COUNT(*) AS count
          FROM poomsae_entries WHERE competition_id = ? AND status != 'rejected'
          GROUP BY event ORDER BY CASE event WHEN 'individual' THEN 1 WHEN 'pair' THEN 2 ELSE 3 END`,
         id
       ),
-      gender: rows(
-        `SELECT CASE gender WHEN 'M' THEN 'Male' WHEN 'F' THEN 'Female' ELSE 'Mixed' END AS label, COUNT(*) AS count
+      gender: named(
+        POOMSAE_GENDERS,
+        `SELECT gender AS code, COUNT(*) AS count
          FROM poomsae_entries WHERE competition_id = ? AND status != 'rejected'
          GROUP BY gender ORDER BY CASE gender WHEN 'M' THEN 1 WHEN 'F' THEN 2 ELSE 3 END`,
         id
@@ -2527,12 +2532,10 @@ module.exports = {
   unmergeRegistration,
   listWeighIns,
   weighInCounts,
-  classesForRegistration,
   recordWeighIn,
   loadDivisionDays,
   loadDivisionCourts,
   saveDivisionCourts,
-  poomsaeCourtCount,
   saveDivisionDays,
   loadBoutList,
   listBouts,
@@ -2558,7 +2561,6 @@ module.exports = {
   approveApplication,
   rejectApplication,
   removeCoach,
-  localNow,
   deadlinePassed,
   closeExpiredCompetitions,
   timeLeft,

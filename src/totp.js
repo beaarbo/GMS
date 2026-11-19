@@ -71,4 +71,4 @@ function hashRecoveryCode(code) {
   return crypto.createHash('sha256').update(String(code).trim().toLowerCase().replace(/[^0-9a-f]/g, '')).digest('hex');
 }
 
-module.exports = { newSecret, currentCode, verifyCode, otpauthUrl, groupSecret, newRecoveryCodes, hashRecoveryCode, base32Encode, base32Decode };
+module.exports = { newSecret, currentCode, verifyCode, otpauthUrl, groupSecret, newRecoveryCodes, hashRecoveryCode };

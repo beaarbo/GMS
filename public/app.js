@@ -275,7 +275,7 @@ document.addEventListener('change', (event) => {
 
   function wheelDialog(title, names) {
     const dialog = document.createElement('dialog');
-    dialog.className = 'wheel-dialog';
+    dialog.className = 'modal';
     const heading = document.createElement('h2');
     heading.textContent = title;
     const canvas = document.createElement('canvas');
@@ -483,7 +483,7 @@ document.addEventListener('change', (event) => {
   };
 
   button.addEventListener('click', async () => {
-    const dialog = element('dialog', 'scan-dialog');
+    const dialog = element('dialog', 'modal scan-dialog');
     const heading = element('h2', '', 'Scan an athlete card');
     const video = element('video', 'scan-video');
     video.muted = true;

@@ -816,9 +816,10 @@ body.mat { background: var(--page); }
 .designated-form { display: flex; gap: var(--space-2); align-items: flex-start; }
 .designated-form textarea { flex: 1; min-width: 12rem; }
 .screen-poomsae { font-size: 1.5rem; margin: 0 0 var(--space-3); }
-.wheel-dialog { width: min(420px, calc(100vw - 32px)); padding: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); color: var(--ink); text-align: center; }
-.wheel-dialog::backdrop { background: var(--photo-scrim); }
-.wheel-dialog h2 { font-size: var(--text-lg); margin: 0 0 var(--space-3); }
+/* Dialogs opened by public/app.js (the poomsae draw wheel, Scan card). */
+.modal { width: min(420px, calc(100vw - 32px)); padding: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); color: var(--ink); text-align: center; }
+.modal::backdrop { background: var(--photo-scrim); }
+.modal h2 { font-size: var(--text-lg); margin: 0 0 var(--space-3); }
 .wheel-canvas { display: block; width: 100%; max-width: 340px; height: auto; margin: 0 auto; }
 .wheel-status { margin: var(--space-3) 0 var(--space-2); color: var(--muted); }
 .wheel-picked { display: flex; justify-content: center; gap: var(--space-4); margin: 0 0 var(--space-4); padding: 0; list-style-position: inside; font-size: var(--text-lg); font-weight: 700; }
@@ -961,9 +962,7 @@ html.screen-page { font-size: clamp(16px, 1.15vw, 30px); }
 .stat-bar-cell { width: 40%; padding-left: var(--space-2); }
 .stat-bar { display: block; width: 100%; height: 8px; border-radius: 4px; background: var(--neutral-soft); overflow: hidden; }
 .stat-bar rect { fill: var(--chung); }
-.scan-dialog { width: min(480px, calc(100vw - 32px)); padding: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); color: var(--ink); text-align: center; }
-.scan-dialog::backdrop { background: var(--photo-scrim); }
-.scan-dialog h2 { font-size: var(--text-lg); margin: 0 0 var(--space-3); }
+.scan-dialog { width: min(480px, calc(100vw - 32px)); }
 .scan-video { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: var(--radius); background: var(--line); }
 .scan-status { margin: var(--space-3) 0; color: var(--muted); }
 .scan-video.scan-mirror { transform: scaleX(-1); }

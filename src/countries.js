@@ -36,4 +36,4 @@ function readCountry(value) {
   return COUNTRIES[code] ? code : '';
 }
 
-module.exports = { COUNTRIES, COUNTRY_OPTIONS, readCountry };
+module.exports = { COUNTRY_OPTIONS, readCountry };

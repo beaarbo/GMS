@@ -235,7 +235,6 @@ function readCompetitionDefaults(body, { kyorugiAges, poomsaeAges }) {
 }
 
 module.exports = {
-  DEFAULTS,
   DOCUMENT_TYPES,
   PUBLIC_NAMES,
   loadSettings,
@@ -243,9 +242,7 @@ module.exports = {
   readSiteSettings,
   readCompetitionDefaults,
   applyTimeZone,
-  validTimeZone,
   backupKeep,
-  shortName,
   shortenNames,
   forVisitor,
 };

@@ -190,4 +190,4 @@ function createMailer({
   };
 }
 
-module.exports = { createMailer, explainMailError, maskUser, parseSender };
+module.exports = { createMailer, explainMailError, maskUser };

@@ -255,7 +255,6 @@ module.exports = {
   parseDate,
   readRows,
   previewImport,
-  athleteErrors,
   templateXlsx,
   templateCsv,
 };

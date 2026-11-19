@@ -393,7 +393,6 @@ module.exports = {
   scheduleCourt,
   formatTime,
   layoutBracket,
-  splitByClub,
   computeMedals,
   medalTable,
   divisionMedalists,
