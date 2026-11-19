@@ -114,6 +114,8 @@ function createApp({
   app.locals.live = live;
   app.set('views', path.join(__dirname, '..', 'views'));
   app.set('view engine', 'ejs');
+  // For templates that build HTML in a string: the same escaping as <%= %>.
+  app.locals.escapeHtml = require('ejs').escapeXML;
   app.locals.db = db;
   // Links in emails use this set address, never the request's Host header, which
   // a caller could fake to send a reset link pointing at their own site.

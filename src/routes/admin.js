@@ -21,20 +21,16 @@ const {
   hasBoutList,
   deleteBoutList,
   generateBoutList,
-  applySchedule,
+  applyAllSchedules,
   loadDivisionDays,
   loadDivisionCourts,
   saveDivisionCourts,
   saveDivisionDays,
   loadBoutList,
   hasResults,
-  recordResult,
-  clearResult,
   clearAllResults,
   getFighterDocument,
-  listWeighIns,
   weighInCounts,
-  recordWeighIn,
   saveCompetitionLogo,
   hasCompetitionLogo,
   listCompetitionPhotos,
@@ -68,10 +64,10 @@ const {
   listDesignatedPoomsae,
   getClubIcon,
 } = require('../services');
-const { sendDocument, detectIconType, detectAttachmentType, safeFilename, MAX_ICON_BYTES, MAX_NEW_COMPETITION_FILES, MAX_COMPETITION_PHOTOS, MAX_COMPETITION_PHOTO_BYTES } = require('../documents');
+const { sendDocument, detectIconType, detectAttachmentType, safeFilename, MAX_ICON_BYTES, MAX_COMPETITION_PHOTOS, MAX_COMPETITION_PHOTO_BYTES } = require('../documents');
 const { ACTIVITY_CATEGORIES, listActivity, countActivity, formatActivityTime } = require('../activity');
 const { notifyRegistrationDecisions, notifyBoutListPublished, notifyDivisionMerged, notifyAccountChange, sendAdminInvite } = require('../notifications');
-const { layoutBracket, computeMedals } = require('../bracket');
+const { layoutBracket } = require('../bracket');
 const { writeBoutListPdf } = require('../boutlistPdf');
 const { entriesSheets, sendXlsx } = require('../exports');
 const { cardAthletes, cardClubs, writeAthleteCards } = require('../athleteCards');
@@ -397,7 +393,7 @@ router.post('/competitions/:id(\\d+)', (req, res) => {
     ).run({ ...fields, id: req.competition.id });
     saveEventDates(db, req.competition.id, eventDates);
     // Keeps the draw, but moves bouts onto the new list of days.
-    if (hasBoutList(db, req.competition.id)) applySchedule(db, req.competition.id);
+    if (hasBoutList(db, req.competition.id)) applyAllSchedules(db, req.competition.id);
   })();
   const changes = [];
   if (values.name !== req.competition.name) changes.push(`name to ${values.name}`);
@@ -1093,7 +1089,7 @@ router.post('/competitions/:id(\\d+)/bouts/redraw-division', (req, res) => {
 // Changes courts and times only. The draw stays the same.
 router.post('/competitions/:id(\\d+)/bouts/schedule', (req, res) => {
   if (saveSchedule(req, res)) {
-    applySchedule(req.app.locals.db, req.competition.id);
+    applyAllSchedules(req.app.locals.db, req.competition.id);
     const { bout_courts: courts, bout_start: start, bout_minutes: minutes, bout_rest_minutes: rest } = req.app.locals.db
       .prepare('SELECT bout_courts, bout_start, bout_minutes, bout_rest_minutes FROM competitions WHERE id = ?')
       .get(req.competition.id);
@@ -1127,7 +1123,7 @@ router.post('/competitions/:id(\\d+)/bouts/days', (req, res) => {
       .map(([name, value]) => [name.slice(6), clean(value, 3)])
   );
   const onCourts = saveDivisionCourts(db, req.competition.id, courtChoices);
-  applySchedule(db, req.competition.id);
+  applyAllSchedules(db, req.competition.id);
   req.logActivity(
     'bouts.days_set',
     `Set division days and courts for ${req.competition.name}: ${pinned} on a chosen day, ${onCourts} on a chosen court, the rest automatic`,

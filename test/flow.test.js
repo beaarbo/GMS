@@ -1089,12 +1089,10 @@ test('coaches and admins see their notifications, even with the email turned off
   await post(coach, '/coach/apply', { club_id: String(clubId) }, '/coach');
   let page = await admin.get('/admin');
   assert.match(page.text, /Notifications<span class="nav-count">1</, 'admins see an unread count');
-  assert.deepEqual((await admin.get('/notifications/count')).body, { unread: 1 }, 'the count pages check for updates');
   page = await admin.get('/notifications');
   assert.match(page.text, /class="unread"[\s\S]*has applied to join Tigers/);
   assert.doesNotMatch(page.text, /class="nav-count"/, 'opening the page marks them read');
   assert.doesNotMatch((await admin.get('/notifications')).text, /class="unread"/);
-  assert.deepEqual((await admin.get('/notifications/count')).body, { unread: 0 });
 
   const application = db.prepare('SELECT id FROM club_applications').get();
   await post(admin, `/admin/clubs/applications/${application.id}/approve`, {}, '/admin/clubs');
@@ -1109,7 +1107,6 @@ test('coaches and admins see their notifications, even with the email turned off
   assert.match(page.text, /1 registration for Open approved: [^<]*Reyes/, 'in-app notices ignore email opt-outs');
   assert.match(page.text, /You&#39;re approved as a coach for Tigers/);
   assert.equal((await request(app).get('/notifications')).status, 302, 'visitors are sent to log in');
-  assert.equal((await request(app).get('/notifications/count')).status, 302);
 });
 
 test('notifications reach open pages live, without a reload', async () => {

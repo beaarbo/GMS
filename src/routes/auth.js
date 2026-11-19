@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
-const { createCoachAccount, createPasswordReset, findPasswordReset, completePasswordReset } = require('../services');
+const { createCoachAccount, createPasswordReset, findPasswordReset, completePasswordReset, PASSWORD_COST } = require('../services');
 const { sendPasswordReset } = require('../notifications');
 const { logActivity } = require('../activity');
 const { clean, wrap, homeFor, afterLogin, passwordError } = require('./helpers');
@@ -13,7 +13,7 @@ const TWO_STEP_WINDOW_MS = 5 * 60 * 1000;
 const router = express.Router();
 
 // Compared against when an email is unknown, so response time doesn't reveal which emails exist.
-const DUMMY_HASH = bcrypt.hashSync('not-a-real-password', 12);
+const DUMMY_HASH = bcrypt.hashSync('not-a-real-password', PASSWORD_COST);
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,

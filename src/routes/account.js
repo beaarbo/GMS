@@ -3,7 +3,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
-const { applyToClub } = require('../services');
+const { applyToClub, PASSWORD_COST } = require('../services');
 const { notifyAdminsOfApplication, notifyAccountChange, EMAIL_KINDS } = require('../notifications');
 const { newSecret, verifyCode, otpauthUrl, groupSecret, newRecoveryCodes, hashRecoveryCode } = require('../totp');
 const { clean, passwordError, wrap } = require('./helpers');
@@ -126,7 +126,7 @@ router.post(
       return render(req, res, 401, { password: 'Your current password is incorrect.' });
     }
 
-    const hash = await bcrypt.hash(password, 12);
+    const hash = await bcrypt.hash(password, PASSWORD_COST);
     db.transaction(() => {
       db.prepare('UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?').run(hash, req.user.id);
       // Logs out every other device, in case the old password was known to someone.

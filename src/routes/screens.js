@@ -7,12 +7,11 @@ const express = require('express');
 const { listBouts, getEventDates, poomsaeCourtItems, poomsaeCourtQueue, listBoutCalls, calledBouts, calledDivision, callTime, callText } = require('../services');
 const { formatDay } = require('../divisions');
 const { hasPoomsae } = require('../poomsae');
-const { shortenNames } = require('../settings');
+const { forVisitor } = require('../settings');
+const { eventStream } = require('../live');
 const { notFound } = require('./helpers');
 
 const router = express.Router();
-// Visitors get the public pages' name setting ("Rossi A." when the organiser chose initials).
-const forVisitor = (req, data) => (!req.user && req.site.publicNames === 'initials' ? shortenNames(data) : data);
 const REFRESH_SECONDS = 15;
 
 // Visitors (no account) see screens like coaches: published stages only, never photos.
@@ -217,37 +216,12 @@ router.get('/:id(\\d+)/poomsae/:day(\\d+)/:court(\\d+)', screenCompetition('poom
   }));
 });
 
-const HEARTBEAT_MS = 25000;
-const COALESCE_MS = 300;
-
-// A server-sent event stream for one court screen. It sends "change" whenever
-// the competition changes; the page then fetches its new content. Comments keep
-// the connection open through proxies, and the browser reconnects on its own.
+// A server-sent event stream for one screen: "change" whenever the competition
+// changes (a result and the bout it fills become one), and the page then fetches
+// its new content.
 function changeStream(req, res) {
   const { live } = req.app.locals;
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream; charset=utf-8',
-    'Cache-Control': 'no-cache, no-transform',
-    Connection: 'keep-alive',
-    'X-Accel-Buffering': 'no',
-  });
-  res.write('retry: 5000\n\n');
-
-  // Several changes in a burst (a result and the bout it fills) become one update.
-  let pending = null;
-  const unsubscribe = live.subscribe(req.competition.id, () => {
-    if (pending) return;
-    pending = setTimeout(() => {
-      pending = null;
-      res.write(`event: change\ndata: ${Date.now()}\n\n`);
-    }, COALESCE_MS);
-  });
-  const heartbeat = setInterval(() => res.write(': still here\n\n'), HEARTBEAT_MS);
-  req.on('close', () => {
-    clearInterval(heartbeat);
-    clearTimeout(pending);
-    unsubscribe();
-  });
+  eventStream(req, res, (onChange) => live.subscribe(req.competition.id, onChange), () => res.write(`event: change\ndata: ${Date.now()}\n\n`));
 }
 
 router.get('/:id(\\d+)/:day(\\d+)/:court(\\d+)/events', screenCompetition('kyorugi'), changeStream);

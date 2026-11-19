@@ -323,25 +323,23 @@ function divisionMedalists(division) {
   };
 }
 
-// Returns each division's medalists plus a club table, ranked gold, silver, bronze.
-function computeMedals(divisions) {
+// The club medal table for any event: medals is [{ clubId, club, medal }], medal
+// being gold, silver or bronze. Ranked by gold, then silver, then bronze, then name.
+function medalTable(medals) {
   const clubs = new Map();
-  const award = (fighter, medal) => {
-    if (!fighter) return;
-    if (!clubs.has(fighter.clubId)) clubs.set(fighter.clubId, { clubId: fighter.clubId, club: fighter.club, gold: 0, silver: 0, bronze: 0 });
-    clubs.get(fighter.clubId)[medal] += 1;
-  };
-  const results = divisions.map((division) => {
-    const medalists = divisionMedalists(division);
-    award(medalists.gold, 'gold');
-    award(medalists.silver, 'silver');
-    medalists.bronze.forEach((fighter) => award(fighter, 'bronze'));
-    return { title: division.title, ...medalists };
+  medals.forEach(({ clubId, club, medal }) => {
+    if (!clubs.has(clubId)) clubs.set(clubId, { clubId, club, gold: 0, silver: 0, bronze: 0 });
+    clubs.get(clubId)[medal] += 1;
   });
-  const table = [...clubs.values()].sort(
-    (a, b) => b.gold - a.gold || b.silver - a.silver || b.bronze - a.bronze || a.club.localeCompare(b.club)
-  );
-  return { table, divisions: results };
+  return [...clubs.values()].sort((a, b) => b.gold - a.gold || b.silver - a.silver || b.bronze - a.bronze || a.club.localeCompare(b.club));
+}
+
+// Returns each division's medalists plus the club medal table.
+function computeMedals(divisions) {
+  const results = divisions.map((division) => ({ title: division.title, ...divisionMedalists(division) }));
+  const won = results.flatMap((d) => [['gold', [d.gold]], ['silver', [d.silver]], ['bronze', d.bronze]]
+    .flatMap(([medal, fighters]) => fighters.filter(Boolean).map((f) => ({ clubId: f.clubId, club: f.club, medal }))));
+  return { table: medalTable(won), divisions: results };
 }
 
 // One row per athlete of a club: where they are next, or how they finished.
@@ -397,6 +395,7 @@ module.exports = {
   layoutBracket,
   splitByClub,
   computeMedals,
+  medalTable,
   divisionMedalists,
   WIN_TYPES,
   readBoutScore,

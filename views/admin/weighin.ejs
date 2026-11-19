@@ -65,8 +65,7 @@
   <% } else { %>
     <% const canEdit = competition.status === 'closed'; %>
     <%# Keeps the official's filters across each step. Search text is escaped, as it's free text. %>
-    <% const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); %>
-    <% const keep = () => Object.entries(filters).filter(([, v]) => v).map(([k, v]) => `<input type="hidden" name="${k}" value="${esc(v)}">`).join(''); %>
+    <% const keep = () => Object.entries(filters).filter(([, v]) => v).map(([k, v]) => `<input type="hidden" name="${k}" value="${escapeHtml(v)}">`).join(''); %>
     <div class="table-wrap">
       <table>
         <thead><tr><th>Athlete</th><th>Division</th><th>Weight class</th><th>Result</th><th></th></tr></thead>

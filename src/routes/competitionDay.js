@@ -90,11 +90,7 @@ router.get('/competitions/:id(\\d+)/athletes/:fighterId(\\d+)', (req, res) => {
   const { db } = req.app.locals;
   const competition = req.competition;
   const fighterId = Number(req.params.fighterId);
-  const registration = db.prepare(
-    `${REGISTRATION_SELECT.replace('FROM registrations r', ', ew.label AS entered_weight_class FROM registrations r')}
-     LEFT JOIN weight_classes ew ON ew.id = r.entered_weight_class_id
-     WHERE r.competition_id = ? AND r.fighter_id = ?`
-  ).get(competition.id, fighterId) || null;
+  const registration = db.prepare(`${REGISTRATION_SELECT} WHERE r.competition_id = ? AND r.fighter_id = ?`).get(competition.id, fighterId) || null;
   const entries = listPoomsaeEntries(db, competition.id).filter((e) => e.athletes.some((a) => a.id === fighterId));
   if (!registration && entries.length === 0) return notFound(res);
   const fighter = db.prepare('SELECT f.first_name, f.last_name, c.name AS club FROM fighters f JOIN clubs c ON c.id = f.club_id WHERE f.id = ?').get(fighterId);

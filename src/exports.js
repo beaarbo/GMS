@@ -5,7 +5,8 @@ const { GENDERS, beltName } = require('./divisions');
 const { POOMSAE_EVENTS, POOMSAE_GENDERS, formatScore } = require('./poomsae');
 const { REGISTRATION_SELECT, listWeighIns, listPoomsaeEntries, competitionResults } = require('./services');
 
-const WEIGH_LABELS = { passed: 'Made weight', moved: 'Moved class', no_show: 'No-show', disqualified: 'Disqualified' };
+// A moved athlete is stored as passed, with the coach's class kept in entered_weight_class.
+const WEIGH_LABELS = { passed: 'Made weight', no_show: 'No-show', disqualified: 'Disqualified' };
 
 function weighLabel(row) {
   if (!row.weigh_status) return 'Waiting';

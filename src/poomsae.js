@@ -2,7 +2,7 @@
 // gender + age group + belt group; there are no weight classes.
 
 const { competitionAge, findAgeGroup, findBeltGroup, beltName } = require('./divisions');
-const { divisionMedalists, scheduleCourt } = require('./bracket');
+const { divisionMedalists, scheduleCourt, medalTable } = require('./bracket');
 
 const EVENT_TYPES = { kyorugi: 'Kyorugi', poomsae: 'Poomsae', both: 'Kyorugi and poomsae' };
 
@@ -139,18 +139,16 @@ function poomsaeMedalists(mode, ranked, bouts) {
   return { gold: ids([m.gold]), silver: ids([m.silver]), bronze: ids(m.bronze) };
 }
 
-// Club medal table across divisions, ranked gold, then silver, then bronze.
+// Club medal table across divisions, with the club text the bout list uses
+// (club_label), the same as kyorugi's.
 function poomsaeMedalTable(divisions) {
-  const clubs = new Map();
-  divisions.forEach((d) => {
+  return medalTable(divisions.flatMap((d) => {
     const byId = new Map(d.entries.map((e) => [e.id, e]));
-    ['gold', 'silver', 'bronze'].forEach((medal) => d.medalists[medal].forEach((id) => {
+    return ['gold', 'silver', 'bronze'].flatMap((medal) => d.medalists[medal].map((id) => {
       const entry = byId.get(id);
-      if (!clubs.has(entry.club_id)) clubs.set(entry.club_id, { clubId: entry.club_id, club: entry.club_name, gold: 0, silver: 0, bronze: 0 });
-      clubs.get(entry.club_id)[medal] += 1;
+      return { clubId: entry.club_id, club: entry.club_label || entry.club_name, medal };
     }));
-  });
-  return [...clubs.values()].sort((a, b) => b.gold - a.gold || b.silver - a.silver || b.bronze - a.bronze || a.club.localeCompare(b.club));
+  }));
 }
 
 // How an entry stands, in a few words, for its coach.

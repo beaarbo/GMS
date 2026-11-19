@@ -405,26 +405,11 @@ document.addEventListener('change', (event) => {
     shown = unread;
   };
 
-  // Live: the server sends the count as soon as a notice is added or read.
-  if (window.EventSource) {
-    const events = new EventSource('/notifications/events');
-    events.addEventListener('unread', (event) => show(Number(event.data)));
-    return;
-  }
-
-  // Without event streams, check once a minute while the tab is visible.
-  const check = async () => {
-    if (document.visibilityState !== 'visible') return;
-    try {
-      const response = await fetch('/notifications/count', { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
-      if (!response.ok || !(response.headers.get('content-type') || '').includes('json')) return;
-      show((await response.json()).unread);
-    } catch (error) {
-      // Offline or logged out: try again next time.
-    }
-  };
-  setInterval(check, 60000);
-  document.addEventListener('visibilitychange', check);
+  // The server sends the count when the stream opens (or reopens) and as soon as
+  // a notice is added or read. Every supported browser has EventSource.
+  if (!window.EventSource) return;
+  const events = new EventSource('/notifications/events');
+  events.addEventListener('unread', (event) => show(Number(event.data)));
 })();
 
 // Weigh-in "Scan card": reads an athlete card's QR code with a phone camera or a

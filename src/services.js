@@ -2,6 +2,10 @@
 
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
+
+// bcrypt cost for every password hash. The login page's stand-in hash for unknown
+// emails uses it too, so a wrong email takes as long to check as a wrong password.
+const PASSWORD_COST = 12;
 const {
   DEFAULT_BELT_GROUPS,
   GENDERS,
@@ -10,13 +14,13 @@ const {
   parseWeightLimits,
   formatDay,
 } = require('./divisions');
-const { buildBracket, roundsFromSlots, seededSlots, slotsAreValid, assignCourts, scheduleCourt, formatTime, layoutBracket, computeMedals, clubAthleteSummary } = require('./bracket');
+const { buildBracket, roundsFromSlots, seededSlots, slotsAreValid, assignCourts, scheduleCourt, formatTime, layoutBracket, computeMedals, medalTable, clubAthleteSummary } = require('./bracket');
 const {
   placeEntry, POOMSAE_EVENTS, POOMSAE_GENDERS, poomsaeDivisionTitle, rankEntries, divisionMode, bracketEntrants, poomsaeMedalists, schedulePoomsae, hasKyorugi, hasPoomsae, judgesScore,
   defaultDesignated, pickPoomsae, entryResult,
 } = require('./poomsae');
 const { logActivity } = require('./activity');
-const { signalUsers } = require('./noticeSignals');
+const { signalUsers } = require('./live');
 const { documentLabel, documentTypeFor } = require('./documents');
 const { loadSettings } = require('./settings');
 
@@ -51,7 +55,7 @@ function addNotifications(db, userIds, text, link = null) {
     [...new Set(userIds)].forEach((id) => insert.run(id, text, link));
     db.prepare("DELETE FROM notifications WHERE at < datetime('now', '-90 days')").run();
   })();
-  signalUsers(userIds);
+  signalUsers(db, userIds);
 }
 
 const adminIds = (db) => db.prepare("SELECT id FROM users WHERE role = 'admin'").all().map((u) => u.id);
@@ -852,7 +856,7 @@ function drawPoomsaeBracket(db, competition, key, rng = secureRandom) {
       `INSERT INTO poomsae_divisions (competition_id, division_key, bracket_seq) VALUES (?, ?, ?)
        ON CONFLICT(competition_id, division_key) DO UPDATE SET bracket_seq = excluded.bracket_seq`
     ).run(competition.id, key, nextPoomsaeSeq(db, competition.id));
-    applyPoomsaeSchedule(db, competition.id);
+    applyAllSchedules(db, competition.id);
     return { ok: true, entrants: draw.entrants.length, title: division.title };
   })();
 }
@@ -864,7 +868,7 @@ function deletePoomsaeBracket(db, competitionId, key) {
   }
   const removed = db.prepare('DELETE FROM poomsae_bouts WHERE competition_id = ? AND division_key = ?').run(competitionId, key).changes;
   if (removed === 0) return { ok: false, error: 'That division has no bracket.' };
-  applyPoomsaeSchedule(db, competitionId);
+  applyAllSchedules(db, competitionId);
   return { ok: true };
 }
 
@@ -906,16 +910,20 @@ function poomsaeCourtEnds(db, competition) {
   return ends;
 }
 
-// Times everything again in the right order: the event that goes first on the
-// courts, then the other after it.
+// Times both events again, the one that goes first on the courts before the
+// other: on shared courts the second starts where the first ends, its numbers
+// carrying on. Each part only rewrites days, courts, numbers and times, so it's
+// safe to call after any change to either event.
 function applyAllSchedules(db, competitionId) {
-  const competition = db.prepare('SELECT * FROM competitions WHERE id = ?').get(competitionId);
-  const hasBouts = Boolean(db.prepare('SELECT 1 FROM bouts WHERE competition_id = ? LIMIT 1').get(competitionId));
-  if (competition.court_order === 'poomsae' || !hasBouts) applyPoomsaeSchedule(db, competitionId);
-  else applySchedule(db, competitionId);
+  const { court_order: first } = db.prepare('SELECT court_order FROM competitions WHERE id = ?').get(competitionId);
+  const kyorugi = () => { if (hasBoutList(db, competitionId)) timeKyorugi(db, competitionId); };
+  const poomsae = () => timePoomsae(db, competitionId);
+  if (first === 'poomsae') { poomsae(); kyorugi(); } else { kyorugi(); poomsae(); }
 }
 
-function applyPoomsaeSchedule(db, competitionId) {
+// Poomsae's part of applyAllSchedules: each bracket and performance list's day,
+// court, numbers and times.
+function timePoomsae(db, competitionId) {
   const competition = db.prepare('SELECT * FROM competitions WHERE id = ?').get(competitionId);
   const settings = loadPoomsaeSettings(db, competitionId);
   const setting = (key) => settings.get(key) || {};
@@ -962,8 +970,6 @@ function applyPoomsaeSchedule(db, competitionId) {
       if (unit.list) listPlace.run(places.get(unit.key).day, places.get(unit.key).court, competitionId, unit.division);
     });
   })();
-  // Poomsae first: kyorugi starts where poomsae now ends.
-  if (sharesCourts(competition) && competition.court_order === 'poomsae') applySchedule(db, competitionId, { kyorugiOnly: true });
 }
 
 // A random performance order for ranked divisions and score rounds: key, or
@@ -995,7 +1001,7 @@ function generatePoomsaeOrder(db, competition, key, rng = secureRandom) {
       ids.forEach((id, i) => order.run(i + 1, id));
       seq.run(competition.id, d.key, nextPoomsaeSeq(db, competition.id));
     });
-    applyPoomsaeSchedule(db, competition.id);
+    applyAllSchedules(db, competition.id);
     return { ok: true, titles: targets.map((d) => d.title) };
   })();
 }
@@ -1271,12 +1277,7 @@ function competitionResults(db, competition, { published = false, event = null }
       divisions.push({ event: 'Poomsae', title: boutListTitle(d), gold: people(d.medalists.gold), silver: people(d.medalists.silver), bronze: people(d.medalists.bronze) });
     });
   }
-  const clubs = new Map();
-  divisions.forEach((d) => ['gold', 'silver', 'bronze'].forEach((medal) => d[medal].forEach((m) => {
-    if (!clubs.has(m.clubId)) clubs.set(m.clubId, { clubId: m.clubId, club: m.club, gold: 0, silver: 0, bronze: 0 });
-    clubs.get(m.clubId)[medal] += 1;
-  })));
-  const table = [...clubs.values()].sort((a, b) => b.gold - a.gold || b.silver - a.silver || b.bronze - a.bronze || a.club.localeCompare(b.club));
+  const table = medalTable(divisions.flatMap((d) => ['gold', 'silver', 'bronze'].flatMap((medal) => d[medal].map((m) => ({ clubId: m.clubId, club: m.club, medal })))));
   return { divisions, table };
 }
 
@@ -1312,7 +1313,7 @@ function clearPoomsaeOrder(db, competition, key) {
     if (entries.some((e) => e.score !== null)) return { ok: false, error: 'Clear the scores first.' };
     entries.forEach((e) => db.prepare('UPDATE poomsae_entries SET perform_order = NULL, perform_time = NULL WHERE id = ?').run(e.id));
     db.prepare('UPDATE poomsae_divisions SET list_seq = NULL, list_day = NULL, list_court = NULL WHERE competition_id = ? AND division_key = ?').run(competition.id, key);
-    applyPoomsaeSchedule(db, competition.id);
+    applyAllSchedules(db, competition.id);
     return { ok: true, title: poomsaeDivisionTitle(entries[0]) };
   })();
 }
@@ -1379,7 +1380,7 @@ function savePoomsaeDivision(db, competition, key, choice) {
       `INSERT INTO poomsae_divisions (competition_id, division_key, format, cut, day) VALUES (?, ?, ?, ?, ?)
        ON CONFLICT(competition_id, division_key) DO UPDATE SET format = excluded.format, cut = excluded.cut, day = excluded.day`
     ).run(competition.id, key, format, cut, day);
-    applyPoomsaeSchedule(db, competition.id);
+    applyAllSchedules(db, competition.id);
   })();
   return { ok: true, title: division.title, kept, format, cut, day };
 }
@@ -1418,6 +1419,7 @@ const REGISTRATION_SELECT = `
   SELECT r.*, f.first_name, f.last_name, f.gender, f.date_of_birth, f.belt_rank,
          c.name AS club_name, c.country AS club_country, a.name AS age_group, a.min_age,
          b.name AS belt_group, b.min_rank, w.label AS weight_class, w.max_kg,
+         ew.label AS entered_weight_class,
          (SELECT d.doc_type FROM fighter_documents d WHERE d.fighter_id = r.fighter_id) AS document_type,
          (SELECT p.uploaded_at FROM fighter_photos p WHERE p.fighter_id = r.fighter_id) AS photo_at
   FROM registrations r
@@ -1425,7 +1427,8 @@ const REGISTRATION_SELECT = `
   JOIN clubs c ON c.id = r.club_id
   JOIN age_groups a ON a.id = r.age_group_id
   JOIN belt_groups b ON b.id = r.belt_group_id
-  JOIN weight_classes w ON w.id = r.weight_class_id`;
+  JOIN weight_classes w ON w.id = r.weight_class_id
+  LEFT JOIN weight_classes ew ON ew.id = r.entered_weight_class_id`;
 
 const DIVISION_ORDER = `a.min_age, f.gender DESC, b.min_rank, w.max_kg IS NULL, w.max_kg, f.last_name, f.first_name`;
 
@@ -1436,8 +1439,7 @@ function hasBoutList(db, competitionId) {
 function deleteBoutList(db, competitionId) {
   db.prepare('DELETE FROM bouts WHERE competition_id = ?').run(competitionId);
   // Poomsae no longer waits for kyorugi on the shared courts.
-  const competition = db.prepare('SELECT * FROM competitions WHERE id = ?').get(competitionId);
-  if (competition && sharesCourts(competition) && competition.court_order === 'kyorugi') applyPoomsaeSchedule(db, competitionId);
+  applyAllSchedules(db, competitionId);
 }
 
 function secureRandom() {
@@ -1529,9 +1531,8 @@ function saveDivisionDays(db, competitionId, choices) {
 
 // Sets each division's day and court, then numbers and times its bouts, keeping
 // each fighter's rest between bouts. Numbering restarts for each court on each
-// day. Doesn't change who fights whom.
-// kyorugiOnly: called back by the poomsae schedule, so don't call it again.
-function applySchedule(db, competitionId, { kyorugiOnly = false } = {}) {
+// day. Doesn't change who fights whom. Kyorugi's part of applyAllSchedules.
+function timeKyorugi(db, competitionId) {
   const competition = db.prepare('SELECT * FROM competitions WHERE id = ?').get(competitionId);
   const rows = db
     .prepare(
@@ -1593,8 +1594,6 @@ function applySchedule(db, competitionId, { kyorugiOnly = false } = {}) {
       });
     });
   })();
-  // Kyorugi first: poomsae starts where kyorugi now ends.
-  if (!kyorugiOnly && sharesCourts(competition) && competition.court_order === 'kyorugi') applyPoomsaeSchedule(db, competitionId);
 }
 
 // Athletes who didn't turn up or were disqualified at weigh-in aren't drawn.
@@ -1604,9 +1603,7 @@ const DRAWN = "r.status = 'approved' AND (r.weigh_status IS NULL OR r.weigh_stat
 function listWeighIns(db, competitionId) {
   return db
     .prepare(
-      `${REGISTRATION_SELECT.replace('FROM registrations r', ', ew.label AS entered_weight_class FROM registrations r')}
-       LEFT JOIN weight_classes ew ON ew.id = r.entered_weight_class_id
-       WHERE r.competition_id = ? AND r.status = 'approved' ORDER BY ${DIVISION_ORDER}`
+      `${REGISTRATION_SELECT} WHERE r.competition_id = ? AND r.status = 'approved' ORDER BY ${DIVISION_ORDER}`
     )
     .all(competitionId);
 }
@@ -1793,7 +1790,7 @@ function generateBoutList(db, competitionId, rng = secureRandom) {
       const entries = registrations.map((r) => ({ registrationId: r.id, clubId: r.club_id }));
       writeDivisionBouts(db, competitionId, registrations[0], buildBracket(entries, rng));
     });
-    applySchedule(db, competitionId);
+    applyAllSchedules(db, competitionId);
   })();
   return approved.length;
 }
@@ -1824,7 +1821,7 @@ function replaceDivision(db, competitionId, division, ids, slots) {
     db.prepare(`DELETE FROM bouts WHERE ${DIVISION_WHERE}`).run(...ids);
     const real = slots.filter(Boolean);
     if (real.length > 0) writeDivisionBouts(db, competitionId, division, roundsFromSlots(slotsAreValid(slots) ? slots : seededSlots(real)));
-    applySchedule(db, competitionId);
+    applyAllSchedules(db, competitionId);
   })();
 }
 
@@ -1899,7 +1896,7 @@ function redrawDivision(db, competition, key, rng = secureRandom) {
   db.transaction(() => {
     db.prepare(`DELETE FROM bouts WHERE ${DIVISION_WHERE}`).run(...ids);
     if (entries.length > 0) writeDivisionBouts(db, competition.id, division, buildBracket(entries, rng));
-    applySchedule(db, competition.id);
+    applyAllSchedules(db, competition.id);
   })();
   return { ok: true, athletes: entries.length };
 }
@@ -2236,7 +2233,7 @@ function findPasswordReset(db, token, now = Date.now()) {
 async function completePasswordReset(db, token, password) {
   const reset = findPasswordReset(db, token);
   if (!reset) return false;
-  const hash = await bcrypt.hash(password, 12);
+  const hash = await bcrypt.hash(password, PASSWORD_COST);
   db.transaction(() => {
     db.prepare('UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?').run(hash, reset.user_id);
     db.prepare('DELETE FROM password_resets WHERE user_id = ?').run(reset.user_id);
@@ -2247,7 +2244,7 @@ async function completePasswordReset(db, token, password) {
 
 // The site's first admin, made at start-up, is its owner.
 async function createAdmin(db, email, password) {
-  const hash = await bcrypt.hash(password, 12);
+  const hash = await bcrypt.hash(password, PASSWORD_COST);
   const owner = db.prepare('SELECT 1 FROM users WHERE owner = 1').get() ? 0 : 1;
   db.prepare("INSERT INTO users (email, password_hash, role, owner) VALUES (?, ?, 'admin', ?)").run(email, hash, owner);
 }
@@ -2264,7 +2261,7 @@ function oneTimePassword() {
 // Returns { id, password }.
 async function createSubAdmin(db, { full_name, email }) {
   const password = oneTimePassword();
-  const hash = await bcrypt.hash(password, 12);
+  const hash = await bcrypt.hash(password, PASSWORD_COST);
   const id = Number(db.prepare("INSERT INTO users (email, password_hash, role, full_name, must_change_password) VALUES (?, ?, 'admin', ?, 1)")
     .run(email, hash, full_name).lastInsertRowid);
   return { id, password };
@@ -2291,7 +2288,7 @@ function createClub(db, { name, city = '', country = '' }) {
 }
 
 async function createCoachAccount(db, { full_name, phone, email, password }) {
-  const hash = await bcrypt.hash(password, 12);
+  const hash = await bcrypt.hash(password, PASSWORD_COST);
   return Number(
     db
       .prepare("INSERT INTO users (email, password_hash, role, full_name, phone) VALUES (?, ?, 'coach', ?, ?)")
@@ -2302,7 +2299,7 @@ async function createCoachAccount(db, { full_name, phone, email, password }) {
 // Officials run the weigh-in, record results and use court screens. An admin
 // creates them with a starting password, which they can change on My account.
 async function createOfficialAccount(db, { full_name, email, password }) {
-  const hash = await bcrypt.hash(password, 12);
+  const hash = await bcrypt.hash(password, PASSWORD_COST);
   return Number(
     db
       .prepare("INSERT INTO users (email, password_hash, role, full_name) VALUES (?, ?, 'official', ?)")
@@ -2432,6 +2429,7 @@ function cleanUpDocuments(db, days) {
 }
 
 module.exports = {
+  PASSWORD_COST,
   competitionStats,
   addNotifications,
   adminIds,
@@ -2505,7 +2503,6 @@ module.exports = {
   loadPoomsaeSettings,
   savePoomsaeSchedule,
   savePoomsaeDivision,
-  applyPoomsaeSchedule,
   generatePoomsaeOrder,
   clearPoomsaeOrder,
   poomsaeBoutList,
@@ -2532,7 +2529,6 @@ module.exports = {
   weighInCounts,
   classesForRegistration,
   recordWeighIn,
-  applySchedule,
   loadDivisionDays,
   loadDivisionCourts,
   saveDivisionCourts,

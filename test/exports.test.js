@@ -63,6 +63,13 @@ test('the entries and results workbooks hold every entry and medallist, as plain
   assert.deepEqual(rows[0].slice(0, 5), ['Club', 'Last name', 'First name', 'Gender', 'Date of birth']);
   // A club name starting with "=" stays text, never a formula.
   assert.deepEqual(rows.slice(1).map((r) => [r[0], r[1], r[11]]), [['=Lions', 'Lee', 'Waiting'], ['Tigers', 'Reyes', 'Waiting']]);
+  // An athlete moved at the weigh-in shows where they came from, as on the weigh-in list.
+  const reyes = db.prepare("SELECT r.id, r.weight_class_id FROM registrations r JOIN fighters f ON f.id = r.fighter_id WHERE f.last_name = 'Reyes'").get();
+  const from = db.prepare('SELECT label FROM weight_classes WHERE id = ?').get(reyes.weight_class_id).label;
+  const to = db.prepare('SELECT id FROM weight_classes WHERE id != ? LIMIT 1').get(reyes.weight_class_id).id;
+  db.prepare("UPDATE registrations SET weigh_status = 'passed', entered_weight_class_id = weight_class_id, weight_class_id = ? WHERE id = ?").run(to, reyes.id);
+  assert.equal(entriesSheets(db, competition)[0].data.find((r) => r[1].value === 'Reyes')[11].value, `Moved from ${from}`);
+  db.prepare("UPDATE registrations SET weigh_status = NULL, weight_class_id = entered_weight_class_id, entered_weight_class_id = NULL WHERE id = ?").run(reyes.id);
 
   const [bout] = listBouts(db, compId);
   recordResult(db, compId, bout.id, 'blue');

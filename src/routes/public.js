@@ -7,10 +7,7 @@ const { formatEventDates } = require('../divisions');
 const { hasKyorugi, hasPoomsae } = require('../poomsae');
 const { writeBoutListPdf } = require('../boutlistPdf');
 const { writeClubCompetitorsPdf } = require('../clubPdf');
-const { shortenNames } = require('../settings');
-
-// Visitors without an account see shortened names when the Settings page says so.
-const forVisitor = (req, data) => (!req.user && req.site.publicNames === 'initials' ? shortenNames(data) : data);
+const { forVisitor } = require('../settings');
 const { sendAttachment } = require('../documents');
 const { notFound } = require('./helpers');
 

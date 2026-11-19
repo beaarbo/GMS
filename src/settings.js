@@ -154,6 +154,10 @@ function shortenNames(value) {
   return out;
 }
 
+// A page's data as a visitor without an account sees it: shortened names
+// ("Rossi A.") when the organiser chose initials. Used by every public page and screen.
+const forVisitor = (req, data) => (!req.user && req.site.publicNames === 'initials' ? shortenNames(data) : data);
+
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 const whole = (text, min, max) => /^\d{1,4}$/.test(String(text ?? '').trim()) && Number(text) >= min && Number(text) <= max;
 
@@ -243,4 +247,5 @@ module.exports = {
   backupKeep,
   shortName,
   shortenNames,
+  forVisitor,
 };

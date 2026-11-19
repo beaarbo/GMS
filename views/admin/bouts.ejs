@@ -210,7 +210,7 @@
       <% if (divisionHasResults) { %>
         <p class="hint">This division has results, so its bracket can't change. Undo its results on the Results page first.</p>
       <% } else { %>
-        <% const athleteOptions = (selected = 0) => athletes.map((a, i) => `<option value="${a.registrationId}"${i === selected ? ' selected' : ''}>${a.name.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])} (${String(a.club).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])})</option>`).join(''); %>
+        <% const athleteOptions = (selected = 0) => athletes.map((a, i) => `<option value="${a.registrationId}"${i === selected ? ' selected' : ''}>${escapeHtml(a.name)} (${escapeHtml(a.club)})</option>`).join(''); %>
         <% if (athletes.length >= 2) { %>
           <form class="division-edit-row" method="post" action="/admin/competitions/<%= competition.id %>/bouts/swap">
             <input type="hidden" name="_csrf" value="<%= csrf %>">
