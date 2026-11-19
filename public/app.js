@@ -427,21 +427,26 @@ document.addEventListener('change', (event) => {
   document.addEventListener('visibilitychange', check);
 })();
 
-// Weigh-in "Scan card": reads an athlete card's QR code with the camera and opens
-// that athlete's weigh-in row. Uses the browser's BarcodeDetector where it has
-// one, else jsQR (loaded only when needed). Without a camera the button stays hidden.
+// Weigh-in "Scan card": reads an athlete card's QR code with a phone camera or a
+// laptop/USB webcam and opens that athlete's weigh-in row. Uses the browser's
+// BarcodeDetector where it has one, else jsQR (loaded only when needed). Without
+// a camera the button stays hidden.
 (function scanCard() {
   const button = document.querySelector('[data-scan-card]');
   if (!button || !window.HTMLDialogElement || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
   const competitionId = button.dataset.scanCard;
+  const CAMERA_KEY = 'gms-scan-camera';
   button.hidden = false;
+
+  const remembered = () => { try { return localStorage.getItem(CAMERA_KEY) || ''; } catch (error) { return ''; } };
+  const remember = (id) => { try { localStorage.setItem(CAMERA_KEY, id); } catch (error) { /* private window */ } };
 
   let jsQRLoaded = null;
   const loadJsQR = () => jsQRLoaded || (jsQRLoaded = new Promise((resolve, reject) => {
     const script = document.createElement('script');
     script.src = '/vendor/jsQR.js';
     script.onload = () => resolve(window.jsQR);
-    script.onerror = reject;
+    script.onerror = () => { jsQRLoaded = null; reject(new Error('jsQR')); };
     document.head.append(script);
   }));
 
@@ -459,12 +464,20 @@ document.addEventListener('change', (event) => {
     const jsQR = await loadJsQR();
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d', { willReadFrequently: true });
+    let turn = 0;
+    // Alternates the whole frame with its middle at full detail: a webcam's card
+    // QR is small in the picture, and shrinking the whole frame blurs it away.
     return async (video) => {
-      const scale = Math.min(1, 640 / video.videoWidth);
-      canvas.width = Math.round(video.videoWidth * scale);
-      canvas.height = Math.round(video.videoHeight * scale);
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const found = jsQR(context.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height, { inversionAttempts: 'dontInvert' });
+      const w = video.videoWidth;
+      const h = video.videoHeight;
+      const side = Math.min(w, h);
+      turn += 1;
+      const [sx, sy, sw, sh] = turn % 2 ? [0, 0, w, h] : [(w - side) / 2, (h - side) / 2, side, side];
+      const scale = Math.min(1, 960 / Math.max(sw, sh));
+      canvas.width = Math.round(sw * scale);
+      canvas.height = Math.round(sh * scale);
+      context.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+      const found = jsQR(context.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height, { inversionAttempts: 'attemptBoth' });
       return found ? found.data : null;
     };
   };
@@ -477,56 +490,114 @@ document.addEventListener('change', (event) => {
     return match ? { competitionId: match[1], fighterId: match[2] } : null;
   };
 
+  const element = (tag, className, text) => {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text) node.textContent = text;
+    return node;
+  };
+
   button.addEventListener('click', async () => {
-    const dialog = document.createElement('dialog');
-    dialog.className = 'scan-dialog';
-    const heading = document.createElement('h2');
-    heading.textContent = 'Scan an athlete card';
-    const video = document.createElement('video');
-    video.className = 'scan-video';
+    const dialog = element('dialog', 'scan-dialog');
+    const heading = element('h2', '', 'Scan an athlete card');
+    const video = element('video', 'scan-video');
     video.muted = true;
     video.playsInline = true;
     video.setAttribute('playsinline', '');
     video.setAttribute('aria-hidden', 'true');
-    const status = document.createElement('p');
-    status.className = 'scan-status';
+    const status = element('p', 'scan-status', 'Starting the camera…');
     status.setAttribute('aria-live', 'polite');
-    status.textContent = 'Starting the camera…';
-    const close = document.createElement('button');
+    const pickerRow = element('p', 'scan-camera');
+    pickerRow.hidden = true;
+    const picker = element('select');
+    picker.id = 'scan-camera';
+    const pickerLabel = element('label', '', 'Camera');
+    pickerLabel.htmlFor = picker.id;
+    pickerRow.append(pickerLabel, picker);
+    const close = element('button', 'btn secondary', 'Close');
     close.type = 'button';
-    close.className = 'btn secondary';
-    close.textContent = 'Close';
-    dialog.append(heading, video, status, close);
+    dialog.append(heading, video, status, pickerRow, close);
     document.body.append(dialog);
     dialog.showModal();
 
     let stream = null;
     let running = true;
-    const stop = () => {
-      running = false;
+    const stopStream = () => {
       if (stream) stream.getTracks().forEach((track) => track.stop());
+      stream = null;
     };
     close.addEventListener('click', () => dialog.close());
-    dialog.addEventListener('close', () => { stop(); dialog.remove(); });
+    dialog.addEventListener('close', () => { running = false; stopStream(); dialog.remove(); });
 
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
-      if (!running) return stop();
+    // Starts the chosen camera, or else the back camera on a phone. A large
+    // picture is asked for, since a card held up to a webcam is small in it.
+    const size = { width: { ideal: 1920 }, height: { ideal: 1080 } };
+    const anyCamera = { facingMode: { ideal: 'environment' }, ...size };
+    const start = async (deviceId) => {
+      stopStream();
+      let next;
+      try {
+        next = await navigator.mediaDevices.getUserMedia({ video: deviceId ? { deviceId: { exact: deviceId }, ...size } : anyCamera, audio: false });
+      } catch (error) {
+        // A remembered camera that's since been unplugged: use any camera.
+        if (!deviceId || !['OverconstrainedError', 'NotFoundError', 'NotReadableError'].includes(error.name)) throw error;
+        next = await navigator.mediaDevices.getUserMedia({ video: anyCamera, audio: false });
+      }
+      if (!running) {
+        next.getTracks().forEach((track) => track.stop());
+        return '';
+      }
+      stream = next;
+      const settings = stream.getVideoTracks()[0].getSettings();
+      // A webcam faces the official, so it's shown like a mirror; a phone's back camera isn't.
+      video.classList.toggle('scan-mirror', settings.facingMode !== 'environment');
       video.srcObject = stream;
       await video.play();
+      return settings.deviceId || '';
+    };
+
+    let current;
+    try {
+      current = await start(remembered());
     } catch (error) {
       video.hidden = true;
       status.textContent = error && error.name === 'NotAllowedError'
         ? 'The camera is blocked. Allow it for this site in the browser, or search by name instead.'
-        : 'No camera could be started. Search by name instead.';
-      return undefined;
+        : 'No camera could be started. Check it isn’t in use by another app, or search by name instead.';
+      return;
     }
+    if (!running) return;
+
+    // Camera names are only given once the camera is allowed, so list them now.
+    try {
+      const cameras = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput');
+      if (cameras.length > 1) {
+        cameras.forEach((camera, i) => {
+          const option = element('option', '', camera.label || `Camera ${i + 1}`);
+          option.value = camera.deviceId;
+          option.selected = camera.deviceId === current;
+          picker.append(option);
+        });
+        pickerRow.hidden = false;
+        picker.addEventListener('change', async () => {
+          status.textContent = 'Switching camera…';
+          try {
+            await start(picker.value);
+            remember(picker.value);
+            status.textContent = 'Hold the card’s QR code in front of the camera.';
+          } catch (error) {
+            status.textContent = 'That camera could not be started. Try another one.';
+          }
+        });
+      }
+    } catch (error) { /* no camera list: keep the one that started */ }
+
     let read;
     try {
       read = await makeReader();
     } catch (error) {
       status.textContent = 'The scanner could not load. Check the connection, or search by name instead.';
-      return stop();
+      return;
     }
     status.textContent = 'Hold the card’s QR code in front of the camera.';
 
@@ -534,13 +605,14 @@ document.addEventListener('change', (event) => {
     const tick = async () => {
       if (!running) return;
       let text = null;
-      if (video.readyState >= 2 && video.videoWidth) {
+      if (stream && video.readyState >= 2 && video.videoWidth) {
         try { text = await read(video); } catch (error) { text = null; }
       }
       const card = text && readCard(text);
       if (card && card.competitionId === competitionId) {
         status.textContent = 'Found. Opening their weigh-in…';
-        stop();
+        running = false;
+        stopStream();
         window.location.assign(`/admin/competitions/${competitionId}/weigh-in/athlete/${card.fighterId}`);
         return;
       }
@@ -548,7 +620,7 @@ document.addEventListener('change', (event) => {
         lastWrong = text;
         status.textContent = card ? 'This card is for a different competition.' : 'That QR code isn’t an athlete card.';
       }
-      setTimeout(tick, 150);
+      setTimeout(tick, 120);
     };
     tick();
   });

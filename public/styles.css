@@ -966,3 +966,6 @@ html.screen-page { font-size: clamp(16px, 1.15vw, 30px); }
 .scan-dialog h2 { font-size: var(--text-lg); margin: 0 0 var(--space-3); }
 .scan-video { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: var(--radius); background: var(--line); }
 .scan-status { margin: var(--space-3) 0; color: var(--muted); }
+.scan-video.scan-mirror { transform: scaleX(-1); }
+.scan-camera { display: flex; align-items: center; justify-content: center; gap: var(--space-2); margin: 0 0 var(--space-3); }
+.scan-camera select { max-width: 100%; }
