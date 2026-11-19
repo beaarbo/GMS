@@ -40,7 +40,7 @@
   <% if (!closed) { %>
     <section class="card">
       <h2>Registration is still open</h2>
-      <p class="empty">Close registration on the <a href="/admin/competitions">Competitions</a> page to make the performance lists and draw the brackets.</p>
+      <p class="empty">Close registration in <a href="/admin/competitions/<%= competition.id %>/edit#open-registration">Setup</a> to make the performance lists and draw the brackets.</p>
     </section>
   <% } else { %>
     <details class="card fold"<%= poomsae.orderable > 0 || poomsae.drawable > 0 || poomsae.pending > 0 || lists + brackets === 0 ? ' open' : '' %>>

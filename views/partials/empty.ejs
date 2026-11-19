@@ -1,0 +1,5 @@
+<%# An empty state with the way forward: pass message, and optionally href and label for the next step. %>
+<div class="card empty-state">
+  <p class="empty"><%= message %></p>
+  <% if (locals.href) { %><a class="btn secondary" href="<%= href %>"><%= label %></a><% } %>
+</div>

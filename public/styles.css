@@ -940,7 +940,18 @@ html.screen-page { font-size: clamp(16px, 1.15vw, 30px); }
 .comp-tabs > a[aria-current="page"], .comp-tabs > .menu.current > summary { color: var(--chung-dark); border-bottom-color: var(--chung); }
 .comp-tabs .menu-list { left: 0; right: auto; }
 @media (max-width: 600px) { .comp-tabs > a, .comp-tabs > .menu > summary { padding: 8px 7px; } }
-@media print { .comp-nav { display: none; } }
+.comp-tabs > .comp-tab-off { display: inline-block; padding: 10px 12px; margin-bottom: -1px; border-bottom: 2px solid transparent; color: var(--muted); font-size: var(--text-sm); opacity: 0.6; cursor: not-allowed; }
+@media (max-width: 600px) { .comp-tabs > .comp-tab-off { padding: 8px 7px; } }
+/* Setup's own pages, under its tab. */
+.comp-subtabs { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); padding: var(--space-2) 0; font-size: var(--text-sm); }
+.comp-subtabs a { padding: 4px 10px; border-radius: 999px; color: var(--ink-2); text-decoration: none; }
+.comp-subtabs a:hover { background: var(--neutral-soft); color: var(--ink); }
+.comp-subtabs a[aria-current="page"] { background: var(--chung-soft); color: var(--chung-dark); font-weight: 600; }
+/* Where the competition is and the one thing to do next, under its tabs. */
+.next-step { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4); margin: calc(var(--space-5) * -1 + var(--space-3)) 0 var(--space-5); padding: var(--space-3) var(--space-4); border: 1px solid var(--line); border-left: 4px solid var(--chung); border-radius: var(--radius); background: var(--surface); }
+.next-step p { margin: 0; color: var(--ink-2); }
+.next-step[data-stage="finished"] { border-left-color: var(--ok); }
+@media print { .comp-nav, .next-step { display: none; } }
 
 /* Touch screens: tick boxes and the fold toggles get at least the 24px a finger
    needs (WCAG 2.2 target size). Mouse users keep the compact sizes. */
@@ -968,3 +979,34 @@ html.screen-page { font-size: clamp(16px, 1.15vw, 30px); }
 .scan-video.scan-mirror { transform: scaleX(-1); }
 .scan-camera { display: flex; align-items: center; justify-content: center; gap: var(--space-2); margin: 0 0 var(--space-3); }
 .scan-camera select { max-width: 100%; }
+/* Setup › Details: what must be ready before registration opens. */
+.checklist { list-style: none; margin: 0 0 var(--space-4); padding: 0; display: grid; gap: var(--space-2); }
+.checklist li { padding-left: 28px; position: relative; }
+.checklist li::before { position: absolute; left: 0; width: 20px; text-align: center; font-weight: 700; }
+.checklist li.done::before { content: "✓"; color: var(--ok); }
+.checklist li.todo::before { content: "✗"; color: var(--hong); }
+.checklist li.check::before { content: "?"; color: var(--chung); }
+/* Competition day: one tap from the start page to a court's mat. */
+.official-comp { margin-bottom: var(--space-5); }
+.mat-day { margin: var(--space-4) 0 var(--space-2); font-size: var(--text-base); }
+.mat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--space-3); }
+.mat-tile { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.mat-link { display: flex; flex-direction: column; gap: 2px; padding: var(--space-3) var(--space-4); color: var(--ink); text-decoration: none; min-height: 64px; justify-content: center; }
+.mat-link:hover { background: var(--chung-soft); }
+.mat-link span { color: var(--muted); font-size: var(--text-sm); }
+.mat-judges { margin: 0; padding: var(--space-2) var(--space-4); border-top: 1px solid var(--line); font-size: var(--text-sm); color: var(--muted); display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.mat-judges a { display: inline-flex; align-items: center; justify-content: center; min-width: 36px; min-height: 36px; border: 1px solid var(--line-strong); border-radius: var(--radius); color: var(--ink); text-decoration: none; font-weight: 600; }
+.empty-state { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); justify-content: space-between; }
+.empty-state .empty { margin: 0; }
+.mats h2 { margin-bottom: var(--space-2); }
+.mat-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-2); }
+.mat-row > .hint { min-width: 9em; }
+.athletes-summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.athletes-summary p { margin: 0; }
+.next-list { margin: 0 0 var(--space-3); padding-left: 1.25em; display: grid; gap: var(--space-1); }
+@media (max-width: 600px) { .wide-only { display: none; } }
+/* Visitors have three links, so the bar stays open on phones (there is no Menu button for it). */
+@media (max-width: 640px) { .has-menu-toggle .nav.visitor-nav { display: flex; width: auto; flex-direction: row; align-items: center; padding-bottom: 0; } .has-menu-toggle .visitor-nav a { min-height: var(--control-height-sm); } }
+.visitor-nav { margin-left: auto; }
+.programme-search { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-2); }
+.programme-search input[type="search"] { flex: 1 1 200px; max-width: 360px; min-height: var(--control-height-sm); }

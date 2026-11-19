@@ -20,7 +20,7 @@
     <span class="screen-status" id="screen-status" hidden></span>
     <a class="btn secondary small" href="/admin/competitions/<%= competition.id %>/results?day=<%= day %>&court=<%= court %>">All bouts</a>
     <a class="btn secondary small" href="/screens/<%= competition.id %>/<%= day %>/<%= court %>">Court screen</a>
-    <a class="btn secondary small" href="<%= user.role === 'admin' ? `/admin/competitions/${competition.id}/bouts` : '/official' %>"><%= user.role === 'admin' ? 'Bout list' : 'Competition day' %></a>
+    <a class="btn secondary small" href="<%= user.role === 'admin' ? `/admin/competitions/${competition.id}/results` : '/official' %>"><%= user.role === 'admin' ? 'Results' : 'Competition day' %></a>
   </nav>
 </header>
 

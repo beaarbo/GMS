@@ -1,6 +1,6 @@
 <%- include('../partials/top') %>
 <% const staff = user && user.role !== 'coach'; %>
-<p class="breadcrumb"><% if (!user) { %><a href="/competitions/<%= competition.id %>"><%= competition.name %></a><% } else if (user.role === 'coach' && competition.bouts_published_at) { %><a href="/club/competitions/<%= competition.id %>/bouts">Bout list</a><% } else if (user.role === 'coach') { %><a href="/club/competitions/<%= competition.id %>/poomsae">Poomsae</a><% } else if (user.role === 'admin') { %><a href="/admin/competitions">Competitions</a><% } else { %><a href="/official">Competition day</a><% } %></p>
+<p class="breadcrumb"><% if (!user) { %><a href="/competitions/<%= competition.id %>"><%= competition.name %></a><% } else if (user.role === 'coach') { %><a href="/competitions/<%= competition.id %>/bouts?club=mine">Our bouts</a><% } else if (user.role === 'admin') { %><a href="/admin/competitions">Competitions</a><% } else { %><a href="/official">Competition day</a><% } %></p>
 <div class="page-head">
   <div class="title-row">
     <%- include('../partials/comp_logo', { competition, size: 'md' }) %>
@@ -40,7 +40,7 @@
           <div class="actions">
             <a class="btn" href="/screens/<%= competition.id %>/<%= poomsae ? 'poomsae/' : '' %><%= c.day %>/<%= c.court %>">Open screen</a>
             <% if (staff) { %><a class="btn secondary" href="/admin/competitions/<%= competition.id %>/<%= poomsae ? 'poomsae/mat' : 'mat' %>/<%= c.day %>/<%= c.court %>">Record results</a><% } %>
-            <% if (staff && poomsae && competition.poomsae_judges > 1) { %><a class="btn secondary" href="/admin/competitions/<%= competition.id %>/poomsae/mat/<%= c.day %>/<%= c.court %>#judges">Judge</a><% } %>
+            <% if (staff && poomsae && competition.poomsae_judges > 1) { %><span class="mat-judges">Judge: <% for (let j = 1; j <= competition.poomsae_judges; j += 1) { %><a href="/admin/competitions/<%= competition.id %>/poomsae/judge/<%= c.day %>/<%= c.court %>/<%= j %>" aria-label="Judge <%= j %>, court <%= c.court %>"><%= j %></a><% } %></span><% } %>
           </div>
         </article>
       <% }) %>

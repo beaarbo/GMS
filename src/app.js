@@ -13,7 +13,7 @@ const { logActivity } = require('./activity');
 const { createLiveUpdates } = require('./live');
 const { MAX_DOCUMENT_BYTES, MAX_ICON_BYTES, MAX_ATTACHMENT_BYTES, MAX_NEW_COMPETITION_FILES, MAX_COMPETITION_PHOTOS, MAX_COMPETITION_PHOTO_BYTES, documentLabel, documentTypeFor, clubInitials } = require('./documents');
 const { MAX_IMPORT_BYTES } = require('./athleteImport');
-const { isRegistrationOpen, today, timeLeft, closeExpiredCompetitions, getEventDates, getClubIcon, clubIconVersions, competitionLogoVersions } = require('./services');
+const { competitionStage, isRegistrationOpen, today, timeLeft, closeExpiredCompetitions, getEventDates, getClubIcon, clubIconVersions, competitionLogoVersions } = require('./services');
 const publicRoutes = require('./routes/public');
 const authRoutes = require('./routes/auth');
 const clubRoutes = require('./routes/club');
@@ -270,6 +270,8 @@ function createApp({
       postDate: (value) => new Date(`${String(value).replace(' ', 'T')}Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
       eventDatesText: (c) => formatEventDates(getEventDates(db, c.competition_id ?? c.id)),
       deadlineText: (c) => `${formatDate(c.registration_deadline)}, ${c.registration_deadline_time}`,
+      // Where a competition is and what to do next, for the bar under its tabs.
+      stageOf: (c) => competitionStage(db, c),
     };
   }
 

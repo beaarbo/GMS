@@ -4,6 +4,7 @@
 const express = require('express');
 const { formatEventDates, formatDay, GENDERS } = require('../divisions');
 const {
+  courtList,
   hasBoutList,
   loadBoutList,
   recordResult,
@@ -294,6 +295,8 @@ router.get('/competitions/:id(\\d+)/results', (req, res) => {
   res.render('admin/results', {
     title: 'Results',
     competition: req.competition,
+    // Every court's mat, each day, so recording at a court is one tap from here.
+    mats: courtList(req.app.locals.db, req.competition),
     bothEvents,
     // One event at a time (?event=kyorugi or poomsae), or both.
     event: bothEvents && ['kyorugi', 'poomsae'].includes(req.query.event) ? req.query.event : null,

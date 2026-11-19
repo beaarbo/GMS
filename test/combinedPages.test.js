@@ -188,8 +188,9 @@ test('Divisions and Bout list show one event at a time, stay on it after saving,
   const withList = (await admin.get(`/admin/competitions/${id}/bouts?event=poomsae`)).text;
   assert.match(withList, /Publish poomsae bout list/);
 
-  // The card download lists only clubs with approved athletes, and prints one club's cards.
-  assert.match(withList, /All clubs<\/option>\s*<option value="\d+">Tigers<\/option>\s*<\/select>/);
+  // The card download (on Registrations) lists only clubs with approved athletes, and prints one club's cards.
+  const registrations = (await admin.get(`/admin/competitions/${id}/registrations`)).text;
+  assert.match(registrations, /All clubs<\/option>\s*<option value="\d+">Tigers<\/option>\s*<\/select>/);
   const cards = await admin.get(`/admin/competitions/${id}/cards.pdf?club=${clubId}`);
   assert.equal(cards.status, 200);
   assert.match(cards.headers['content-disposition'], new RegExp(`club-${clubId}\.pdf`));

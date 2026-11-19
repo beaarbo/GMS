@@ -751,6 +751,85 @@ function hasPoomsaeResults(db, competitionId) {
     || Boolean(db.prepare('SELECT 1 FROM poomsae_entries WHERE competition_id = ? AND perform_order IS NOT NULL LIMIT 1').get(competitionId));
 }
 
+// Each competition day's courts, with how many bouts or performances each holds
+// and how many are done: [{ day, label, courts: [{ kind, day, court, total, done }] }].
+// kyorugi / poomsae say which events to count; published counts only published
+// poomsae stages (for coaches and visitors on the screens page).
+function courtList(db, competition, { kyorugi = true, poomsae = true, published = false } = {}) {
+  const dates = getEventDates(db, competition.id);
+  const courts = new Map();
+  const count = (kind, item) => {
+    const key = `${item.day}:${kind}:${item.court}`;
+    const entry = courts.get(key) || { kind, day: item.day, court: item.court, total: 0, done: 0 };
+    entry.total += 1;
+    if (item.kind === 'perform' ? item.done : item.winner || item.noContest) entry.done += 1;
+    courts.set(key, entry);
+  };
+  if (kyorugi && hasKyorugi(competition)) listBouts(db, competition.id).forEach((b) => count('kyorugi', b));
+  if (poomsae && hasPoomsae(competition)) poomsaeCourtItems(db, competition, { published }).forEach((item) => count('poomsae', item));
+  return [...new Set([...courts.values()].map((c) => c.day))].sort((a, b) => a - b).map((day) => ({
+    day,
+    label: dates[day - 1] ? `Day ${day} (${formatDay(dates[day - 1])})` : `Day ${day}`,
+    courts: [...courts.values()].filter((c) => c.day === day && c.court).sort((a, b) => a.kind.localeCompare(b.kind) || a.court - b.court),
+  }));
+}
+
+// Where a competition is, and the one thing to do next: the next-step bar on its
+// pages and the admin dashboard read it. stage is draft, open, closed (weigh-in
+// and draw), drawn (not published yet), running or finished (its days are over).
+// next is { href, label, staff } or null; staff marks a page officials reach too.
+function competitionStage(db, competition) {
+  const id = competition.id;
+  const base = `/admin/competitions/${id}`;
+  const n = (sql) => db.prepare(sql).get(id).n;
+  const plural = (count, one, many) => `${count} ${count === 1 ? one : many}`;
+  const at = (stage, label, note, next = null) => ({ stage, label, note, next });
+  const go = (href, label, staff = false) => ({ href, label, staff });
+
+  if (competition.status === 'draft') {
+    if (!hasCompetitionLogo(db, id) || !String(competition.description || '').trim()) {
+      return at('draft', 'Draft', 'It needs a logo and a description before registration can open.', go(`${base}/files`, 'Add logo and description'));
+    }
+    return at('draft', 'Draft', 'Check the age and weight classes, then open registration. Classes lock at the first entry.', go(`${base}/edit#open-registration`, 'Open registration'));
+  }
+
+  const pending = n("SELECT COUNT(*) AS n FROM registrations WHERE competition_id = ? AND status = 'pending'")
+    + n("SELECT COUNT(*) AS n FROM poomsae_entries WHERE competition_id = ? AND status = 'pending'");
+  const review = pending > 0 ? go(`${base}/registrations?status=pending`, `Review ${plural(pending, 'entry', 'entries')}`) : null;
+  if (competition.status === 'open') {
+    return at('open', 'Registration open', `Clubs can enter until ${formatDay(competition.registration_deadline)}.`, review);
+  }
+  if (review) return at('closed', 'Registration closed', `${plural(pending, 'entry is', 'entries are')} still waiting for review.`, review);
+
+  const kyorugi = hasKyorugi(competition) && n("SELECT COUNT(*) AS n FROM registrations WHERE competition_id = ? AND status = 'approved'") > 0;
+  const drawn = hasBoutList(db, id);
+  if (kyorugi && !drawn) {
+    const waiting = weighInCounts(db, id).waiting;
+    return waiting > 0
+      ? at('closed', 'Registration closed', `${plural(waiting, 'athlete is', 'athletes are')} not weighed yet.`, go(`${base}/weigh-in`, 'Weigh-in', true))
+      : at('closed', 'Registration closed', 'The weigh-in is done. Draw the bout list next.', go(`${base}/bouts`, 'Draw the bout list'));
+  }
+  if (kyorugi && !competition.bouts_published_at) {
+    return at('drawn', 'Bout list drawn', 'Coaches and visitors can\'t see it until it\'s published.', go(`${base}/bouts`, 'Publish the bout list'));
+  }
+  const poomsae = hasPoomsae(competition) && n("SELECT COUNT(*) AS n FROM poomsae_entries WHERE competition_id = ? AND status = 'approved'") > 0;
+  if (poomsae && !hasPoomsaeResults(db, id)) {
+    return at('closed', 'Registration closed', 'Poomsae needs its performance lists or brackets.', go(`${base}/bouts?event=poomsae#poomsae`, 'Make the poomsae lists'));
+  }
+  if (poomsae && !competition.poomsae_published_at && !competition.poomsae_brackets_published_at) {
+    return at('drawn', 'Poomsae lists made', 'Coaches and visitors can\'t see them until they\'re published.', go(`${base}/bouts?event=poomsae#poomsae`, 'Publish the poomsae lists'));
+  }
+
+  const lastDay = getEventDates(db, id).slice(-1)[0] || competition.event_date;
+  if (lastDay < today()) {
+    return at('finished', 'Finished', 'Results are on the public results page.', go(`/competitions/${id}/results`, 'See the results', true));
+  }
+  const open = n('SELECT COUNT(*) AS n FROM bouts WHERE competition_id = ? AND is_bye = 0 AND winner_registration_id IS NULL AND no_contest = 0');
+  return at('running', 'Bout list published', open > 0
+    ? `${plural(open, 'bout is', 'bouts are')} still to fight. Results go public as soon as they're recorded.`
+    : 'Results go public as soon as they\'re recorded.', go(`${base}/results`, 'Record results', true));
+}
+
 // Every drawn poomsae bracket, by division key, in the shape bracket.js expects:
 // sides carry registrationId (here the entry id), name, club, clubId and seed.
 function loadPoomsaeBrackets(db, competitionId, entries) {
@@ -2434,6 +2513,8 @@ function cleanUpDocuments(db, days) {
 }
 
 module.exports = {
+  courtList,
+  competitionStage,
   PASSWORD_COST,
   competitionStats,
   addNotifications,

@@ -1,5 +1,5 @@
 <%- include('../partials/top') %>
-<p class="breadcrumb"><a href="/club">Club dashboard</a></p>
+<p class="breadcrumb"><a href="/club">Athletes</a></p>
 <div class="page-head">
   <div>
     <h1><%= competition.name %></h1>
@@ -8,7 +8,7 @@
   </div>
   <div class="actions">
     <% if (hasPoomsae(competition)) { %><a class="btn" href="/club/competitions/<%= competition.id %>/poomsae">Poomsae entries</a><% } %>
-    <% if (competition.bouts_published_at) { %><a class="btn" href="/club/competitions/<%= competition.id %>/bouts">View bout list</a><% } %>
+    <% if (competition.bouts_published_at || competition.poomsae_published_at || competition.poomsae_brackets_published_at) { %><a class="btn" href="/competitions/<%= competition.id %>/bouts?club=mine">Our bouts</a><% } %>
     <a class="btn secondary" href="/competitions/<%= competition.id %>">View division rules</a>
   </div>
 </div>
@@ -36,7 +36,7 @@
                 <td><%= beltName(f.belt_rank) %></td>
                 <td>
                   <% if (f.options.ok && !f.hasDocument) { %>
-                    <a class="btn small" href="/club/fighters/<%= f.id %>/document">Upload <%= documentLabel(documentTypeFor(f.belt_rank)) %> first</a>
+                    <a class="btn small" href="/club/fighters/<%= f.id %>/document?back=<%= encodeURIComponent(`/club/competitions/${competition.id}`) %>">Upload <%= documentLabel(documentTypeFor(f.belt_rank)) %> first</a>
                   <% } else if (f.options.ok) { %>
                     <select class="weight-select" name="weight_class_<%= f.id %>" aria-label="Weight class of <%= f.first_name %> <%= f.last_name %>">
                       <option value="">Select</option>
@@ -70,16 +70,19 @@
               <td><strong><%= r.last_name %>, <%= r.first_name %></strong></td>
               <td><%= GENDERS[r.gender] %> · <%= r.age_group %> · <%= r.belt_group %> · <%= r.weight_class %></td>
               <td>
-                <span class="badge <%= r.status %>"><%= statusLabel(r.status) %></span>
-                <% if (r.weigh_status === 'passed') { %><span class="badge approved"><%= r.entered_weight_class_id ? 'Moved at weigh-in' : 'Made weight' %></span>
-                <% } else if (r.weigh_status === 'no_show') { %><span class="badge closed">No-show at weigh-in</span>
-                <% } else if (r.weigh_status === 'disqualified') { %><span class="badge rejected">Disqualified at weigh-in</span><% } %>
+                <%# One badge for where the entry stands now, latest news first; the reasons underneath. %>
+                <% const [badgeClass, badgeText] = r.withdrawn_at ? ['closed', 'Withdrawn by the organiser']
+                  : r.weigh_status === 'disqualified' ? ['rejected', 'Disqualified at weigh-in']
+                  : r.weigh_status === 'no_show' ? ['closed', 'No-show at weigh-in']
+                  : r.weigh_status === 'passed' ? ['approved', r.entered_weight_class_id ? 'Moved at weigh-in' : 'Made weight']
+                  : [r.status, statusLabel(r.status)]; %>
+                <span class="badge <%= badgeClass %>"><%= badgeText %></span>
+                <% if (r.withdrawn_at && r.withdrawal_note) { %><div class="hint"><%= r.withdrawal_note %></div><% } %>
                 <% if (r.merged_from) { %><div class="hint">Moved to this division by the organiser, so they have an opponent.</div><% } %>
-                <% if (r.withdrawn_at) { %><span class="badge closed">Withdrawn by the organiser</span><% if (r.withdrawal_note) { %><div class="hint"><%= r.withdrawal_note %></div><% } %><% } %>
                 <% if (r.review_note) { %><div class="hint"><%= r.review_note %></div><% } %>
               </td>
               <td>
-                <% if (r.status !== 'approved') { %>
+                <% if (r.status === 'pending') { %>
                   <form method="post" action="/club/competitions/<%= competition.id %>/withdraw/<%= r.id %>" data-confirm="Withdraw <%= r.first_name %> <%= r.last_name %>?">
                     <input type="hidden" name="_csrf" value="<%= csrf %>">
                     <button class="btn danger small" type="submit">Withdraw</button>

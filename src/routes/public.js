@@ -7,7 +7,7 @@ const { formatEventDates } = require('../divisions');
 const { hasKyorugi, hasPoomsae } = require('../poomsae');
 const { writeBoutListPdf } = require('../boutlistPdf');
 const { writeClubCompetitorsPdf } = require('../clubPdf');
-const { forVisitor } = require('../settings');
+const { forVisitor, namesMatch } = require('../settings');
 const { sendAttachment } = require('../documents');
 const { notFound } = require('./helpers');
 
@@ -21,7 +21,7 @@ router.get('/', (req, res) => {
   const competitions = db
     .prepare(`SELECT c.* FROM competitions c WHERE c.status IN ('open', 'closed') AND ${lastDay} >= ? ORDER BY c.status = 'closed', c.event_date`)
     .all(today())
-    .map((c) => ({ ...c, photos: listCompetitionPhotos(db, c.id) }));
+    .map((c) => ({ ...c, photos: listCompetitionPhotos(db, c.id), hasResults: competitionResults(db, c, { published: true }).divisions.length > 0 }));
   // Finished ones, newest first, each with a link to its results once any are published.
   const past = db
     .prepare(`SELECT c.* FROM competitions c WHERE c.status IN ('open', 'closed') AND ${lastDay} < ? ORDER BY ${lastDay} DESC, c.id DESC`)
@@ -77,12 +77,17 @@ function pdfHeaders(res, name, competition) {
 }
 
 // The bout list and results share their filters: one event (?event=kyorugi or
-// poomsae), and for a coach, only their club's divisions (?club=mine).
+// poomsae), for a coach only their club's divisions (?club=mine), and a search for
+// an athlete or club by name (?q=), matched on the names as shown (see namesMatch).
 function programmeFilters(req, competition) {
   const event = ['kyorugi', 'poomsae'].includes(req.query.event) && hasKyorugi(competition) && hasPoomsae(competition) ? req.query.event : null;
   const clubId = req.query.club === 'mine' && req.user && req.user.club_id ? req.user.club_id : null;
-  return { event, clubId };
+  const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 60) : '';
+  return { event, clubId, q };
 }
+
+// The parts (or divisions) with someone matching the search, or all of them without one.
+const searched = (list, q) => (q ? list.filter((item) => namesMatch(item, q.toLowerCase())) : list);
 
 function programmeLocals(req, competition, filters, page) {
   return {
@@ -110,7 +115,7 @@ router.get('/competitions/:id(\\d+)/results', (req, res) => {
     title: `${competition.name}: results`,
     ...programmeLocals(req, competition, filters, 'results'),
     table: results.table,
-    divisions: filters.clubId ? results.divisions.filter(mine) : results.divisions,
+    divisions: searched(filters.clubId ? results.divisions.filter(mine) : results.divisions, filters.q),
     staff,
   });
 });
@@ -126,7 +131,7 @@ router.get('/competitions/:id(\\d+)/bouts', (req, res) => {
   return res.render('programme', {
     title: `${competition.name}: bout list`,
     ...programmeLocals(req, competition, filters, 'bouts'),
-    parts: forVisitor(req, competitionProgramme(db, competition, { published: true, ...filters })),
+    parts: searched(forVisitor(req, competitionProgramme(db, competition, { published: true, event: filters.event, clubId: filters.clubId })), filters.q),
     // My club: the coach's own competitors, listed first.
     competitors: filters.clubId ? clubCompetitors(db, competition, filters.clubId, { event: filters.event }) : null,
   });
@@ -136,7 +141,8 @@ router.get('/competitions/:id(\\d+)/bouts.pdf', (req, res) => {
   const competition = visibleCompetition(req);
   if (!competition) return notFound(res);
   const { db } = req.app.locals;
-  const parts = forVisitor(req, competitionProgramme(db, competition, { published: true, ...programmeFilters(req, competition) }));
+  const { event, clubId } = programmeFilters(req, competition);
+  const parts = forVisitor(req, competitionProgramme(db, competition, { published: true, event, clubId }));
   if (parts.length === 0) return notFound(res);
   pdfHeaders(res, 'bout-list', competition);
   return writeBoutListPdf(res, { competition, divisions: parts, dateLabel: dateLabel(db, competition) });

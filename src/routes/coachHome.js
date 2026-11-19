@@ -1,6 +1,7 @@
-// The coach's main page: upcoming competitions first, then news.
+// The coach's main page: their competitions (coming up, and finished in the last
+// 30 days, each with the one thing to do next), their athletes, then news.
 const express = require('express');
-const { today, isRegistrationOpen, listNews, listCompetitionPhotos } = require('../services');
+const { today, isRegistrationOpen, listNews, listCompetitionPhotos, competitionResults } = require('../services');
 const { homeFor } = require('./helpers');
 
 const router = express.Router();
@@ -14,15 +15,18 @@ router.get('/', (req, res) => {
 
   const { db } = req.app.locals;
   const clubId = req.user.club_id;
-  // Upcoming means the competition's last day hasn't passed. Drafts stay hidden.
+  // Coming up (the last day hasn't passed) and finished in the last 30 days, so results
+  // stay a tap away after the event. Drafts stay hidden.
+  const monthAgo = new Date(`${today()}T00:00:00Z`);
+  monthAgo.setUTCDate(monthAgo.getUTCDate() - 30);
   const competitions = db
     .prepare(
-      `SELECT c.* FROM competitions c
-       WHERE c.status IN ('open', 'closed')
-         AND (SELECT MAX(d.event_date) FROM competition_dates d WHERE d.competition_id = c.id) >= ?
-       ORDER BY c.event_date, c.id`
+      `SELECT c.*, (SELECT MAX(d.event_date) FROM competition_dates d WHERE d.competition_id = c.id) AS last_day
+       FROM competitions c
+       WHERE c.status IN ('open', 'closed') AND last_day >= ?
+       ORDER BY last_day < ?, c.event_date, c.id`
     )
-    .all(today());
+    .all(monthAgo.toISOString().slice(0, 10), today());
 
   const entries = new Map();
   if (clubId) {
@@ -40,14 +44,30 @@ router.get('/', (req, res) => {
       });
   }
 
+  // The club's athletes, and how many still need a document before they can be entered.
+  const athletes = clubId
+    ? db.prepare(
+      `SELECT COUNT(*) AS total,
+         COALESCE(SUM(NOT EXISTS (SELECT 1 FROM fighter_documents d WHERE d.fighter_id = f.id)), 0) AS missing
+       FROM fighters f WHERE f.club_id = ?`
+    ).get(clubId)
+    : null;
+
   return res.render('coach/home', {
     title: 'Home',
-    competitions: competitions.map((c) => ({
-      ...c,
-      open: isRegistrationOpen(c),
-      entries: entries.get(c.id) || { pending: 0, approved: 0, rejected: 0 },
-      photos: listCompetitionPhotos(db, c.id),
-    })),
+    competitions: competitions.map((c) => {
+      const finished = c.last_day < today();
+      return {
+        ...c,
+        open: isRegistrationOpen(c),
+        finished,
+        hasResults: finished && competitionResults(db, c, { published: true }).divisions.length > 0,
+        entries: entries.get(c.id) || { pending: 0, approved: 0, rejected: 0 },
+        photos: finished ? [] : listCompetitionPhotos(db, c.id),
+      };
+    }),
+    athletes,
+    needDocument: req.site.requireDocument,
     news: listNews(db, { signedIn: true, limit: 10 }),
   });
 });

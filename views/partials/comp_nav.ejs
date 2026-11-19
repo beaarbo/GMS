@@ -1,29 +1,43 @@
-<%# A competition's pages as tabs, at the top of every admin and official page for it. Pass page: the current tab's key (null for none). Staff see only the pages their role reaches. %>
+<%# A competition's pages as tabs, at the top of every admin and official page for it, then the
+    next-step bar. Pass page: the current tab's key (null for none). Staff see only the pages their
+    role reaches; a page that isn't ready yet shows greyed with the reason, rather than vanishing. %>
 <% const navAdmin = user.role === 'admin'; %>
 <% const navClosed = competition.status === 'closed'; %>
 <% const navBase = `/admin/competitions/${competition.id}`; %>
+<% const afterClose = navClosed ? null : 'after registration closes'; %>
+<% const setupPages = [['edit', 'Details'], ['setup', hasKyorugi(competition) ? 'Age and weight classes' : 'Age groups'], ['files', 'Logo and files']]; %>
+<% const inSetup = setupPages.some(([path]) => path === page) || page === 'delete'; %>
 <% const navTabs = [
-  ['registrations', 'Registrations', navAdmin],
-  ['divisions', 'Divisions', navAdmin],
-  ['weigh-in', 'Weigh-in', hasKyorugi(competition) && navClosed],
-  ['bouts', 'Bout list', navAdmin && navClosed],
-  ['results', 'Results', navClosed],
-  ['calls', 'Bout calling', navClosed],
-  ['stats', 'Stats', navAdmin],
+  // [path, label, shown to this user, why it isn't ready yet (null when it is)]
+  ['edit', 'Setup', navAdmin, null],
+  ['registrations', 'Registrations', navAdmin, competition.status === 'draft' ? 'once registration opens' : null],
+  ['divisions', 'Divisions', navAdmin, null],
+  ['weigh-in', 'Weigh-in', hasKyorugi(competition), afterClose],
+  ['bouts', 'Bout list', navAdmin, afterClose],
+  ['results', 'Results', true, afterClose],
+  ['calls', 'Bout calling', true, afterClose],
+  ['stats', 'Stats', navAdmin, null],
 ].filter(([, , shown]) => shown); %>
-<% const navSettings = [['edit', 'Details'], ['setup', 'Division setup'], ['files', 'Logo and files']]; %>
 <nav class="comp-nav" aria-label="<%= competition.name %> pages">
   <p class="breadcrumb"><% if (navAdmin) { %><a href="/admin/competitions">Competitions</a><% } else { %><a href="/official">Competition day</a><% } %> <span aria-hidden="true">›</span> <%= competition.name %></p>
   <div class="comp-tabs">
-    <% navTabs.forEach(([path, label]) => { %><a href="<%= navBase %>/<%= path %>"<%- page === path ? ' aria-current="page"' : '' %>><%= label %></a><% }) %>
-    <% if (navAdmin) { %>
-      <details class="menu<%= navSettings.some(([path]) => path === page) || page === 'delete' ? ' current' : '' %>">
-        <summary>Settings</summary>
-        <div class="menu-list">
-          <% navSettings.forEach(([path, label]) => { %><a href="<%= navBase %>/<%= path %>"<%- page === path ? ' aria-current="page"' : '' %>><%= label %></a><% }) %>
-          <a href="/competitions/<%= competition.id %>">Public page</a>
-        </div>
-      </details>
-    <% } %>
+    <% navTabs.forEach(([path, label, , notYet]) => { %>
+      <% const here = path === page || (path === 'edit' && inSetup); %>
+      <% if (notYet) { %><span class="comp-tab-off" aria-disabled="true" title="Available <%= notYet %>"><%= label %><span class="visually-hidden"> (available <%= notYet %>)</span></span><% } else { %><a href="<%= navBase %>/<%= path %>"<%- here ? ' aria-current="page"' : '' %>><%= label %></a><% } %>
+    <% }) %>
   </div>
+  <% if (navAdmin && inSetup) { %>
+    <div class="comp-subtabs">
+      <% setupPages.forEach(([path, label]) => { %><a href="<%= navBase %>/<%= path %>"<%- page === path ? ' aria-current="page"' : '' %>><%= label %></a><% }) %>
+      <a href="/competitions/<%= competition.id %>">Public page</a>
+    </div>
+  <% } %>
 </nav>
+<% const navStage = stageOf(competition); %>
+<% const navNext = navStage.next && (navAdmin || navStage.next.staff) ? navStage.next : null; %>
+<% if (navAdmin || navNext) { %>
+  <div class="next-step" data-stage="<%= navStage.stage %>">
+    <p><strong><%= navStage.label %></strong> · <%= navStage.note %></p>
+    <% if (navNext && navNext.href.split(/[?#]/)[0] !== currentPath) { %><a class="btn small" href="<%= navNext.href %>"><%= navNext.label %> <span aria-hidden="true">→</span></a><% } %>
+  </div>
+<% } %>

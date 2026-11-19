@@ -1,4 +1,6 @@
-<%# One competition as a card, used on the Competitions page and the coach Home page. Pass c; c.entries (the club's counts) is optional. %>
+<%# One competition as a card, used on the Competitions page and the coach Home page. Pass c; c.entries
+    (the club's counts), c.finished and c.hasResults are optional. One main button for where the
+    competition is: enter athletes, the bout list, or the results. %>
 <% const cardOpen = isRegistrationOpen(c); %>
 <% const clubCoach = user && user.club_id; %>
 <% const e = c.entries; %>
@@ -6,11 +8,11 @@
 <article class="card">
   <div class="title-row">
     <%- include('comp_logo', { competition: c, size: 'md' }) %>
-    <span class="badge <%= cardOpen ? 'open' : 'closed' %>"><%= cardOpen ? `Open · ${timeLeft(c)}` : 'Registration closed' %></span>
+    <span class="badge <%= cardOpen ? 'open' : 'closed' %>"><%= c.finished ? 'Finished' : cardOpen ? `Open · ${timeLeft(c)}` : 'Registration closed' %></span>
   </div>
   <h3 class="card-title"><a class="title-link" href="/competitions/<%= c.id %>"><%= c.name %></a></h3>
   <p class="sub"><%= eventDatesText(c) %> · <%= c.venue %></p>
-  <p class="sub">Registration deadline: <%= deadlineText(c) %></p>
+  <% if (cardOpen) { %><p class="sub">Registration deadline: <%= deadlineText(c) %></p><% } %>
   <%# Up to four of the competition's photos; the last says how many more are on its page. %>
   <% if (c.photos && c.photos.length > 0) { const shown = c.photos.slice(0, 4); const more = c.photos.length - shown.length; %>
     <div class="card-photos">
@@ -30,16 +32,21 @@
       <% } %>
     </p>
   <% } %>
+  <%# The bout list and results cover kyorugi and poomsae together; a coach with entries sees their club's first. %>
+  <% const published = c.bouts_published_at || c.poomsae_published_at || c.poomsae_brackets_published_at; %>
+  <% const mine = clubCoach && entered > 0 ? '?club=mine' : ''; %>
+  <% const entriesLink = ['Your entries', `/club/competitions/${c.id}`]; %>
+  <% const main = c.finished ? (c.hasResults || published ? ['Results', `/competitions/${c.id}/results${mine}`] : null)
+    : clubCoach && cardOpen ? ['Enter athletes', `/club/competitions/${c.id}`]
+    : published ? [mine ? 'Our bouts' : 'Bout list', `/competitions/${c.id}/bouts${mine}`]
+    : clubCoach && entered > 0 ? entriesLink : null; %>
+  <% const more = [
+    clubCoach && entered > 0 && main !== entriesLink && !(cardOpen && !c.finished) ? entriesLink : null,
+    !c.finished && c.hasResults ? ['Results', `/competitions/${c.id}/results${mine}`] : null,
+    ['Details', `/competitions/${c.id}`],
+  ].filter(Boolean); %>
   <div class="actions">
-    <% if (clubCoach && cardOpen) { %>
-      <a class="btn" href="/club/competitions/<%= c.id %>">Register athletes</a>
-    <% } else if (clubCoach && entered > 0) { %>
-      <a class="btn secondary" href="/club/competitions/<%= c.id %>">Your entries</a>
-    <% } %>
-    <%# The shared bout list: kyorugi and poomsae together, with tabs for either event (and My club for coaches). %>
-    <% const published = c.bouts_published_at || c.poomsae_published_at || c.poomsae_brackets_published_at; %>
-    <% if (published) { %><a class="btn secondary" href="/competitions/<%= c.id %>/bouts">Bout list</a><% } %>
-    <% if (clubCoach && published && c.status === 'closed') { %><a class="btn secondary" href="/screens/<%= c.id %>">Court screens</a><% } %>
-    <a class="btn secondary" href="/competitions/<%= c.id %>">Details</a>
+    <% if (main) { %><a class="btn" href="<%= main[1] %>"><%= main[0] %></a><% } %>
+    <% more.forEach(([label, href]) => { %><a class="btn secondary" href="<%= href %>"><%= label %></a><% }) %>
   </div>
 </article>

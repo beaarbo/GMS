@@ -1,5 +1,5 @@
 <%# Shared by the bout list and results: links between them, and the same filters on both. Expects competition, filters, page, bothEvents and ownClubId. %>
-<% const link = (path, over) => { const params = new URLSearchParams(Object.entries({ event: filters.event, club: filters.clubId ? 'mine' : null, ...over }).filter(([, v]) => v)).toString(); return `/competitions/${competition.id}/${path}${params ? `?${params}` : ''}`; }; %>
+<% const link = (path, over) => { const params = new URLSearchParams(Object.entries({ event: filters.event, club: filters.clubId ? 'mine' : null, q: filters.q || null, ...over }).filter(([, v]) => v)).toString(); return `/competitions/${competition.id}/${path}${params ? `?${params}` : ''}`; }; %>
 <% const current = (on) => (on ? ' class="current-filter" aria-current="page"' : ''); %>
 <nav class="card programme-nav" aria-label="Bout list and results">
   <p class="stats">
@@ -19,4 +19,12 @@
       <% } %>
     </p>
   <% } %>
+  <form class="programme-search" method="get" action="/competitions/<%= competition.id %>/<%= page %>" role="search">
+    <% if (filters.event) { %><input type="hidden" name="event" value="<%= filters.event %>"><% } %>
+    <% if (filters.clubId) { %><input type="hidden" name="club" value="mine"><% } %>
+    <label for="programme-q" class="visually-hidden">Find an athlete or club</label>
+    <input id="programme-q" name="q" type="search" value="<%= filters.q %>" placeholder="Find an athlete or club" autocomplete="off">
+    <button class="btn secondary small" type="submit">Find</button>
+    <% if (filters.q) { %><a href="<%= link(page, { q: null }) %>">Clear</a><% } %>
+  </form>
 </nav>

@@ -1,4 +1,6 @@
-<%# Club medal table. Pass medals ({ table }), and optionally medalTitle and medalHint. %>
+<%# The club medal table, wherever medals are shown. Pass medals ({ table }), and optionally medalTitle,
+    medalHint and highlightClubId (a coach's own club, highlighted). %>
+<% const ownClub = typeof highlightClubId === 'undefined' ? null : highlightClubId; %>
 <section class="card">
   <h2><%= typeof medalTitle === 'undefined' ? 'Medal standings' : medalTitle %></h2>
   <% if (medals.table.length === 0) { %>
@@ -6,14 +8,15 @@
   <% } else { %>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Club</th><th class="medal-count">Gold</th><th class="medal-count">Silver</th><th class="medal-count">Bronze</th></tr></thead>
+        <thead><tr><th>Club</th><th class="medal-count">Gold</th><th class="medal-count">Silver</th><th class="medal-count">Bronze</th><th class="medal-count">Total</th></tr></thead>
         <tbody>
           <% medals.table.forEach((row) => { %>
-            <tr>
+            <tr<%- ownClub && ownClub === row.clubId ? ' class="own-row"' : '' %>>
               <td><span class="club-name"><%- include('club_icon', { clubId: row.clubId, name: row.club, size: 'sm' }) %><strong><%= row.club %></strong></span></td>
               <td class="medal-count"><%= row.gold %></td>
               <td class="medal-count"><%= row.silver %></td>
               <td class="medal-count"><%= row.bronze %></td>
+              <td class="medal-count"><strong><%= row.gold + row.silver + row.bronze %></strong></td>
             </tr>
           <% }) %>
         </tbody>

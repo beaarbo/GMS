@@ -4,12 +4,12 @@
   <div class="page-head">
     <div>
       <h1>Taekwondo competitions</h1>
-      <p class="sub">Kyorugi and poomsae events open for club registration.</p>
+      <p class="sub">Kyorugi and poomsae: entries, bout lists and results.</p>
     </div>
   </div>
 
   <% if (competitions.length === 0) { %>
-    <div class="card"><p class="empty"><%= past.length > 0 ? 'No competitions are coming up right now. Check back soon.' : 'No competitions have been posted yet. Check back soon.' %></p></div>
+    <%- include('partials/empty', past.length > 0 ? { message: 'No competitions are coming up right now.', href: '#past', label: 'Past results' } : { message: 'No competitions have been posted yet. Check back soon.' }) %>
   <% } else { %>
     <div class="card-grid">
       <% competitions.forEach((c) => { %><%- include('partials/competition_card', { c }) %><% }) %>
@@ -17,22 +17,9 @@
   <% } %>
 </section>
 
-<section class="section" id="news">
-  <div class="section-head">
-    <h2>News</h2>
-    <div class="actions">
-      <% if (moreNews) { %><a href="/news">All news</a><% } %>
-      <% if (user && user.role === 'admin') { %><a href="/admin/news">Manage posts</a><% } %>
-    </div>
-  </div>
-  <% if (news.length === 0) { %>
-    <div class="card"><p class="empty">No news yet. Check back soon.</p></div>
-  <% } %>
-  <% news.forEach((post) => { %><%- include('partials/news_card', { post }) %><% }) %>
-</section>
 <% if (past.length > 0) { %>
   <section class="section" id="past">
-    <div class="section-head"><h2>Past competitions</h2></div>
+    <div class="section-head"><h2>Past results</h2></div>
     <ul class="past-list">
       <% past.forEach((c) => { %>
         <li>
@@ -47,4 +34,17 @@
     </ul>
   </section>
 <% } %>
+<section class="section" id="news">
+  <div class="section-head">
+    <h2>News</h2>
+    <div class="actions">
+      <% if (moreNews) { %><a href="/news">All news</a><% } %>
+      <% if (user && user.role === 'admin') { %><a href="/admin/news">Manage posts</a><% } %>
+    </div>
+  </div>
+  <% if (news.length === 0) { %>
+    <div class="card"><p class="empty">No news yet. Check back soon.</p></div>
+  <% } %>
+  <% news.forEach((post) => { %><%- include('partials/news_card', { post }) %><% }) %>
+</section>
 <%- include('partials/bottom') %>

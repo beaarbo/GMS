@@ -10,7 +10,7 @@
     </div>
   </div>
   <% if (user && user.club_id) { %>
-    <a class="btn" href="/club/competitions/<%= competition.id %>"><%= open ? 'Register athletes' : 'View your entries' %></a>
+    <a class="btn" href="/club/competitions/<%= competition.id %>"><%= open ? 'Enter athletes' : 'Your entries' %></a>
   <% } else if (user && user.role === 'coach') { %>
     <a class="btn" href="/coach">Join a club to enter</a>
   <% } else if (!user && open && site.coachSignup) { %>
@@ -24,9 +24,14 @@
     <p class="sub">Who competes when, on which court, and who won<%= hasKyorugi(competition) && hasPoomsae(competition) ? ', for kyorugi and poomsae together' : '' %>.</p>
     <div class="actions">
       <a class="btn" href="/competitions/<%= competition.id %>/bouts">Bout list</a>
-      <% if (hasResults) { %><a class="btn approve" href="/competitions/<%= competition.id %>/results">Results and medals</a><% } %>
-      <a class="btn secondary" href="/competitions/<%= competition.id %>/bouts.pdf">Download PDF</a>
-      <% if (competition.status === 'closed') { %><a class="btn secondary" href="/screens/<%= competition.id %>">Court screens</a><% } %>
+      <% if (hasResults) { %><a class="btn secondary" href="/competitions/<%= competition.id %>/results">Results and medals</a><% } %>
+      <details class="menu">
+        <summary class="btn secondary">More</summary>
+        <div class="menu-list">
+          <a href="/competitions/<%= competition.id %>/bouts.pdf">Download PDF</a>
+          <% if (competition.status === 'closed') { %><a href="/screens/<%= competition.id %>">Court screens</a><% } %>
+        </div>
+      </details>
     </div>
   </section>
 <% } %>

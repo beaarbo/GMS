@@ -17,7 +17,7 @@
 </div>
 
 <% if (competition.status !== 'closed') { %>
-  <div class="notice info">Close registration before the weigh-in. Only approved athletes are weighed.</div>
+  <div class="notice info">Close registration in <a href="/admin/competitions/<%= competition.id %>/edit#open-registration">Setup</a> before the weigh-in. Only approved athletes are weighed.</div>
 <% } else if (drawn) { %>
   <div class="notice info">The bout list is drawn, so athletes stay in their weight class. An athlete over their class, or under it and not kept in it, is disqualified, and a no-show or disqualified athlete gives their opponent a walkover.</div>
 <% } %>

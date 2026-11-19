@@ -1,5 +1,5 @@
 <%- include('../partials/top') %>
-<p class="breadcrumb"><a href="/club">Club dashboard</a></p>
+<p class="breadcrumb"><a href="/club">Athletes</a></p>
 <div class="card narrow">
   <h1><%= fighter.first_name %> <%= fighter.last_name %></h1>
   <p class="sub"><%= beltName(fighter.belt_rank) %> belt · needs a <%= label %></p>
@@ -20,7 +20,7 @@
   <% if (locked) { %>
     <div class="notice info">This athlete has an approved registration, so their document is locked. Ask the organiser if it needs changing.</div>
   <% } else { %>
-    <form method="post" action="/club/fighters/<%= fighter.id %>/document" enctype="multipart/form-data">
+    <form method="post" action="/club/fighters/<%= fighter.id %>/document<%= back ? `?back=${encodeURIComponent(back)}` : '' %>" enctype="multipart/form-data">
       <input type="hidden" name="_csrf" value="<%= csrf %>">
       <div class="field">
         <label for="document"><%= document ? 'Replace with a new file' : `Choose a photo or scan of the ${label}` %></label>
@@ -29,7 +29,7 @@
       </div>
       <div class="actions">
         <button class="btn" type="submit"><%= document ? 'Replace' : 'Upload' %></button>
-        <a class="btn secondary" href="/club">Back</a>
+        <a class="btn secondary" href="<%= back || '/club' %>">Back</a>
       </div>
     </form>
   <% } %>

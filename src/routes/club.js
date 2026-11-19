@@ -28,7 +28,6 @@ const {
 } = require('../services');
 const { POOMSAE_EVENTS, hasKyorugi, hasPoomsae, placeEntry, entryResult } = require('../poomsae');
 const { documentLabel, documentTypeFor, detectFileType, detectIconType, detectPhotoType, sendDocument, sendPhoto } = require('../documents');
-const { layoutBracket, computeMedals, clubAthleteSummary } = require('../bracket');
 const { writeBoutListPdf } = require('../boutlistPdf');
 const { clean, toArray, requireRole, notFound, wrap } = require('./helpers');
 const { COLUMNS, MAX_IMPORT_ROWS, ImportError, readRows, previewImport, templateXlsx, templateCsv } = require('../athleteImport');
@@ -68,22 +67,17 @@ router.get('/', (req, res) => {
   const { db } = req.app.locals;
   const clubId = req.user.club_id;
   res.render('club/dashboard', {
-    title: 'Club dashboard',
+    title: 'Athletes',
     fighters: db
       .prepare(
         `SELECT f.*, (SELECT d.doc_type FROM fighter_documents d WHERE d.fighter_id = f.id) AS document_type,
            (SELECT p.uploaded_at FROM fighter_photos p WHERE p.fighter_id = f.id) AS photo_at
          FROM fighters f WHERE f.club_id = ? ORDER BY f.last_name, f.first_name`
       )
-      .all(clubId),
-    competitions: db.prepare("SELECT * FROM competitions WHERE status = 'open' ORDER BY event_date").all().filter(isRegistrationOpen),
-    registrations: db
-      .prepare(
-        `SELECT r.status, comp.id AS competition_id, comp.name, comp.event_date, COUNT(*) AS n
-         FROM registrations r JOIN competitions comp ON comp.id = r.competition_id
-         WHERE r.club_id = ? GROUP BY comp.id, r.status ORDER BY comp.event_date`
-      )
-      .all(clubId),
+      .all(clubId)
+      // Edit is refused while an athlete has an active entry, and Remove once they have any
+      // entry history, so neither is offered then.
+      .map((f) => ({ ...f, entered: hasActiveRegistration(db, f.id), kept: hasEntryHistory(db, f.id) })),
   });
 });
 
@@ -228,10 +222,16 @@ function documentLocked(db, fighterId) {
   return hasApprovedRegistration(db, fighterId) && Boolean(db.prepare('SELECT 1 FROM fighter_documents WHERE fighter_id = ?').get(fighterId));
 }
 
+// Where a document upload returns: the entry page it was opened from (?back=), so the
+// coach can enter the athlete straight away, else the athlete list. Only club entry
+// pages are accepted, so the value can't send anyone elsewhere.
+const entryPageBack = (value) => (/^\/club\/competitions\/\d+(\/poomsae)?$/.test(String(value || '')) ? value : null);
+
 function documentPage(req, res, fighter, status = 200, error = null) {
   const document = getFighterDocument(req.app.locals.db, fighter.id);
   return res.status(status).render('club/document', {
     title: 'Athlete document',
+    back: entryPageBack(req.query.back),
     fighter,
     label: documentLabel(documentTypeFor(fighter.belt_rank)),
     document,
@@ -315,7 +315,7 @@ router.post('/fighters/:id(\\d+)/document', (req, res) => {
   const label = documentLabel(documentTypeFor(fighter.belt_rank));
   req.logActivity('document.uploaded', `Uploaded the ${label} for ${fighter.first_name} ${fighter.last_name} (${req.user.club_name})`);
   req.flash('success', `${label[0].toUpperCase()}${label.slice(1)} saved for ${fighter.first_name} ${fighter.last_name}.`);
-  return res.redirect('/club');
+  return res.redirect(entryPageBack(req.query.back) || '/club');
 });
 
 router.get('/fighters/:id(\\d+)/edit', (req, res) => {
@@ -600,18 +600,12 @@ function clubDivisions(req, competition) {
   return { all, mine };
 }
 
+// The club's bouts live on the shared bout list, filtered to the club (both events,
+// with each athlete's next bout). This address stays for links already sent.
 router.get('/competitions/:id(\\d+)/bouts', (req, res) => {
   const competition = publishedCompetition(req);
   if (!competition) return notFound(res);
-  const { all, mine } = clubDivisions(req, competition);
-  return res.render('club/bouts', {
-    title: 'Bout list',
-    competition,
-    athletes: clubAthleteSummary(mine, req.user.club_id),
-    divisions: mine.map((division) => ({ ...division, layout: layoutBracket(division.bouts, { slotHeight: 30, top: 4 }) })),
-    medals: computeMedals(all),
-    highlightClubId: req.user.club_id,
-  });
+  return res.redirect(`/competitions/${competition.id}/bouts?club=mine`);
 });
 
 router.get('/competitions/:id(\\d+)/bouts.pdf', (req, res) => {

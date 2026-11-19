@@ -67,9 +67,10 @@
             <div class="title-row">
               <%- include('../partials/comp_logo', { competition: c, size: 'md' }) %>
               <div>
-                <a class="title-link" href="/admin/competitions#competition-<%= c.id %>"><strong><%= c.name %></strong></a>
-                <span class="badge <%= c.status %>"><%= statusLabel(c.status) %></span>
+                <a class="title-link" href="<%= c.stage.next && c.stage.next.href.startsWith('/admin/') ? c.stage.next.href : `/admin/competitions/${c.id}/registrations` %>"><strong><%= c.name %></strong></a>
+                <span class="badge <%= c.status %>"><%= c.stage.label %></span>
                 <div class="hint"><%= eventDatesText(c) %> · <%= c.approved || 0 %> approved, <%= c.pending || 0 %> pending<%= isRegistrationOpen(c) ? ` · ${timeLeft(c)}` : '' %></div>
+                <% if (c.stage.next) { %><div class="hint">Next: <a href="<%= c.stage.next.href %>"><%= c.stage.next.label %></a></div><% } %>
               </div>
             </div>
           </li>

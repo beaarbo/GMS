@@ -4,7 +4,14 @@
   <% const pending = application && application.status === 'pending'; %>
   <% if (pending) { %>
     <p><span class="badge pending">Waiting for approval</span></p>
-    <p>You applied to <strong><%= application.club_name %></strong>. You can register athletes once an admin approves you.</p>
+    <p>You applied to <strong><%= application.club_name %></strong>. You can enter athletes once an admin approves you.</p>
+    <h2>What happens next</h2>
+    <ol class="next-list">
+      <li>An organiser checks your application. This usually takes a day or two.</li>
+      <li>You get an email<%= user.email ? ` at ${user.email}` : '' %> and a notification here when you're approved.</li>
+      <li>Then log in, add your club's athletes and enter them into competitions.</li>
+    </ol>
+    <p class="hint">Meanwhile you can set up two-step login on <a href="/account">My account</a>.</p>
     <form method="post" action="/coach/withdraw" data-confirm="Withdraw your application?">
       <input type="hidden" name="_csrf" value="<%= csrf %>">
       <button class="btn danger" type="submit">Withdraw application</button>

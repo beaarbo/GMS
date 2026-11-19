@@ -52,7 +52,7 @@ test('coaches land on a home page with upcoming competitions, then news', async 
   const waitingHome = await waiting.get('/home');
   assert.equal(waitingHome.status, 200);
   assert.match(waitingHome.text, /must approve you for a club/);
-  assert.doesNotMatch(waitingHome.text, /Register athletes/);
+  assert.doesNotMatch(waitingHome.text, /Enter athletes/);
 
   const clubId = createClub(db, { name: 'Tigers', city: 'City' });
   await register(app, 'coach@test.test');
@@ -73,7 +73,7 @@ test('coaches land on a home page with upcoming competitions, then news', async 
   const spring = page.indexOf('Spring Open');
   assert.ok(winter > 0 && spring > winter, 'soonest first');
   assert.doesNotMatch(page, /Last Year Open|Secret Draft/);
-  assert.match(page, /Register athletes/);
+  assert.match(page, /Enter athletes/);
   // Competitions sit above the news, and members-only news shows to coaches.
   assert.ok(page.indexOf('Coaches briefing') > spring, 'news below competitions');
 

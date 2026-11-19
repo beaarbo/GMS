@@ -1,7 +1,7 @@
 // An official's start page: competitions past registration, with their
 // weigh-in, results and court screens.
 const express = require('express');
-const { today, weighInCounts, hasBoutList } = require('../services');
+const { today, weighInCounts, hasBoutList, courtList, getEventDates } = require('../services');
 const { requireRole, homeFor } = require('./helpers');
 
 const router = express.Router();
@@ -22,7 +22,10 @@ router.get('/', requireRole(['admin', 'official']), (req, res) => {
     .all(weekAgo.toISOString().slice(0, 10))
     .map((c) => {
       const bouts = db.prepare('SELECT COUNT(*) AS total, SUM(winner_registration_id IS NOT NULL OR no_contest = 1) AS done FROM bouts WHERE competition_id = ? AND is_bye = 0').get(c.id);
-      return { ...c, weighIn: weighInCounts(db, c.id), hasBouts: hasBoutList(db, c.id), bouts: { total: bouts.total, done: bouts.done || 0 } };
+      // Every court of every day, so an official taps straight to their mat; today's marked.
+      const dates = getEventDates(db, c.id);
+      const days = courtList(db, c).map((d) => ({ ...d, isToday: dates[d.day - 1] === today() }));
+      return { ...c, weighIn: weighInCounts(db, c.id), hasBouts: hasBoutList(db, c.id), bouts: { total: bouts.total, done: bouts.done || 0 }, days };
     });
   res.render('official/home', { title: 'Competition day', competitions });
 });

@@ -154,6 +154,17 @@ function shortenNames(value) {
   return out;
 }
 
+// Whether a page's data shows an athlete (an object with a club beside its name, as
+// shortenNames finds them) whose name or club contains text, ignoring case. Run it on
+// the data after forVisitor, so a search only ever matches what's shown.
+function namesMatch(value, text) {
+  if (Array.isArray(value)) return value.some((item) => namesMatch(item, text));
+  if (!value || typeof value !== 'object' || Object.getPrototypeOf(value) !== Object.prototype) return false;
+  if (typeof value.name === 'string' && 'club' in value
+    && `${value.name} ${value.club || ''}`.toLowerCase().includes(text)) return true;
+  return Object.values(value).some((item) => namesMatch(item, text));
+}
+
 // A page's data as a visitor without an account sees it: shortened names
 // ("Rossi A.") when the organiser chose initials. Used by every public page and screen.
 const forVisitor = (req, data) => (!req.user && req.site.publicNames === 'initials' ? shortenNames(data) : data);
@@ -245,4 +256,5 @@ module.exports = {
   backupKeep,
   shortenNames,
   forVisitor,
+  namesMatch,
 };

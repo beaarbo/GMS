@@ -2,40 +2,59 @@
 <div class="page-head">
   <div>
     <h1>Competition day</h1>
-    <p class="sub">Run the weigh-in, record results and open the court screens.</p>
+    <p class="sub">Tap your court to record results there.</p>
   </div>
 </div>
 
 <% if (competitions.length === 0) { %>
-  <div class="card"><p class="empty">No competitions are ready yet. They appear here once registration closes.</p></div>
+  <%- include('../partials/empty', { message: 'No competitions are ready yet. They appear here once registration closes.' }) %>
 <% } else { %>
-  <div class="card-grid">
-    <% competitions.forEach((c) => { %>
-      <article class="card">
-        <div class="title-row">
-          <%- include('../partials/comp_logo', { competition: c, size: 'md' }) %>
-          <span class="badge closed">Registration closed</span>
+  <% competitions.forEach((c) => { const base = `/admin/competitions/${c.id}`; %>
+    <section class="card official-comp">
+      <div class="title-row">
+        <%- include('../partials/comp_logo', { competition: c, size: 'md' }) %>
+        <div>
+          <h2 class="card-title"><%= c.name %></h2>
+          <p class="sub"><%= eventDatesText(c) %> · <%= c.venue %></p>
         </div>
-        <h3 class="card-title"><%= c.name %></h3>
-        <p class="sub"><%= eventDatesText(c) %> · <%= c.venue %></p>
-        <p class="stats card-stats">
-          <% if (hasKyorugi(c)) { %><span>Weighed <strong><%= c.weighIn.total - c.weighIn.waiting %>/<%= c.weighIn.total %></strong></span><% } %>
-          <% if (c.hasBouts) { %><span>Results <strong><%= c.bouts.done %>/<%= c.bouts.total %></strong></span><% } %>
-        </p>
-        <div class="actions">
-          <%# One Results page records kyorugi bouts and poomsae scores together, with a tab for each event. %>
-          <% const ready = c.hasBouts || hasPoomsae(c); %>
-          <% if (hasKyorugi(c)) { %><a class="btn<%= ready ? ' secondary' : '' %>" href="/admin/competitions/<%= c.id %>/weigh-in">Weigh-in</a><% } %>
-          <% if (ready) { %>
-            <a class="btn" href="/admin/competitions/<%= c.id %>/results">Record results</a>
-            <a class="btn secondary" href="/admin/competitions/<%= c.id %>/calls">Bout calling</a>
-            <a class="btn secondary" href="/screens/<%= c.id %>">Court screens</a>
-          <% } else { %>
-            <span class="hint">Results open once the organiser draws the bout list.</span>
-          <% } %>
+      </div>
+      <p class="stats card-stats">
+        <% if (hasKyorugi(c)) { %><span>Weighed <strong><%= c.weighIn.total - c.weighIn.waiting %>/<%= c.weighIn.total %></strong></span><% } %>
+        <% if (c.hasBouts) { %><span>Results <strong><%= c.bouts.done %>/<%= c.bouts.total %></strong></span><% } %>
+      </p>
+      <%# One Results page records kyorugi bouts and poomsae scores together; the mats below record one court each. %>
+      <% const ready = c.hasBouts || hasPoomsae(c); %>
+      <div class="actions">
+        <% if (hasKyorugi(c)) { %><a class="btn<%= ready ? ' secondary' : '' %>" href="<%= base %>/weigh-in">Weigh-in</a><% } %>
+        <% if (ready) { %>
+          <a class="btn<%= c.days.length > 0 ? ' secondary' : '' %>" href="<%= base %>/results">Record results</a>
+          <a class="btn secondary" href="<%= base %>/calls">Bout calling</a>
+          <a class="btn secondary" href="/screens/<%= c.id %>">Court screens</a>
+        <% } %>
+      </div>
+
+      <% if (c.days.length === 0) { %>
+        <p class="hint">The mats appear here once the organiser draws the bout list.</p>
+      <% } %>
+      <% c.days.forEach((d) => { %>
+        <h3 class="mat-day"><%= d.label %><% if (d.isToday) { %> <span class="badge open">Today</span><% } %></h3>
+        <div class="mat-grid">
+          <% d.courts.forEach((court) => { const poomsae = court.kind === 'poomsae'; %>
+            <div class="mat-tile">
+              <a class="mat-link" href="<%= base %>/<%= poomsae ? 'poomsae/mat' : 'mat' %>/<%= d.day %>/<%= court.court %>">
+                <strong>Court <%= court.court %><%= poomsae ? ' · Poomsae' : '' %></strong>
+                <span><%= court.done %> of <%= court.total %> done</span>
+              </a>
+              <% if (poomsae && c.poomsae_judges > 1) { %>
+                <p class="mat-judges">Judge:
+                  <% for (let j = 1; j <= c.poomsae_judges; j += 1) { %><a href="<%= base %>/poomsae/judge/<%= d.day %>/<%= court.court %>/<%= j %>" aria-label="Judge <%= j %>, court <%= court.court %>"><%= j %></a><% } %>
+                </p>
+              <% } %>
+            </div>
+          <% }) %>
         </div>
-      </article>
-    <% }) %>
-  </div>
+      <% }) %>
+    </section>
+  <% }) %>
 <% } %>
 <%- include('../partials/bottom') %>

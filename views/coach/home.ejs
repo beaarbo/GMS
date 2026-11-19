@@ -7,20 +7,27 @@
       <p class="sub"><%= user.club_id ? user.club_name : 'You are not in a club yet.' %></p>
     </div>
   </div>
-  <% if (user.club_id) { %><a class="btn secondary" href="/club">Club dashboard</a><% } %>
 </div>
 
 <% if (!user.club_id) { %>
-  <div class="notice info">An admin must approve you for a club before you can register athletes. <a href="/coach">Join a club</a></div>
+  <%- include('../partials/empty', { message: 'An admin must approve you for a club before you can enter athletes.', href: '/coach', label: 'Join a club' }) %>
+<% } else if (athletes) { %>
+  <%# The club's athletes at a glance, with what still needs doing. %>
+  <section class="card athletes-summary">
+    <p><strong><%= athletes.total %></strong> athlete<%= athletes.total === 1 ? '' : 's' %><% if (needDocument && athletes.missing > 0) { %> · <strong><%= athletes.missing %></strong> need<%= athletes.missing === 1 ? 's' : '' %> a document before entering<% } %></p>
+    <div class="actions">
+      <a class="btn<%= athletes.total === 0 ? '' : ' secondary' %>" href="<%= athletes.total === 0 ? '/club/fighters/new' : '/club' %>"><%= athletes.total === 0 ? 'Add your first athlete' : 'Athletes' %></a>
+    </div>
+  </section>
 <% } %>
 
 <section class="section">
   <div class="section-head">
-    <h2>Upcoming competitions</h2>
+    <h2>Your competitions</h2>
     <a href="/">All competitions</a>
   </div>
   <% if (competitions.length === 0) { %>
-    <div class="card"><p class="empty">No upcoming competitions yet. Check back soon.</p></div>
+    <%- include('../partials/empty', { message: 'No competitions are coming up yet. They appear here once the organiser opens registration.' }) %>
   <% } else { %>
     <div class="card-grid">
       <% competitions.forEach((c) => { %><%- include('../partials/competition_card', { c }) %><% }) %>

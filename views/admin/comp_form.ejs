@@ -1,6 +1,40 @@
 <%- include('../partials/top') %>
 <% if (competition.id) { %><%- include('../partials/comp_nav', { page: 'edit' }) %>
 <% } else { %><p class="breadcrumb"><a href="/admin/competitions">Competitions</a></p><% } %>
+<% const registration = locals.registration; %>
+<% if (competition.id && registration) { %>
+  <%# Opening, closing and reopening registration, with what must be ready first. %>
+  <section class="card medium" id="open-registration">
+    <h2>Registration</h2>
+    <% if (competition.status === 'draft') { %>
+      <ul class="checklist">
+        <li class="<%= registration.hasLogo ? 'done' : 'todo' %>">A logo<% if (!registration.hasLogo) { %>: <a href="/admin/competitions/<%= competition.id %>/files">add it</a><% } %></li>
+        <li class="<%= registration.hasDescription ? 'done' : 'todo' %>">A description<% if (!registration.hasDescription) { %>: add it below<% } %></li>
+        <li class="<%= registration.deadlinePassed ? 'todo' : 'done' %>">A registration deadline still ahead<% if (registration.deadlinePassed) { %>: set a later one below<% } %></li>
+        <li class="check">Age and weight classes checked: <a href="/admin/competitions/<%= competition.id %>/setup">review them</a>. They lock once anyone enters.</li>
+      </ul>
+      <form method="post" action="/admin/competitions/<%= competition.id %>/status">
+        <input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="back" value="edit">
+        <button class="btn approve" name="status" value="open" type="submit"<%= registration.ready ? '' : ' disabled' %>>Open registration</button>
+        <% if (!registration.ready) { %><span class="hint">Finish the list above first.</span><% } %>
+      </form>
+    <% } else if (competition.status === 'open') { %>
+      <p>Clubs can enter until <%= deadlineText(competition) %>. It closes by itself then, or close it now.</p>
+      <form method="post" action="/admin/competitions/<%= competition.id %>/status" data-confirm="Close registration now? Clubs can't enter or change entries after this.">
+        <input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="back" value="edit">
+        <button class="btn secondary" name="status" value="closed" type="submit">Close registration</button>
+      </form>
+    <% } else { %>
+      <p>Registration is closed.<% if (registration.drawn) { %> To reopen it, delete the bout list first.<% } %></p>
+      <% if (!registration.drawn) { %>
+        <form method="post" action="/admin/competitions/<%= competition.id %>/status">
+          <input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="back" value="edit">
+          <button class="btn secondary" name="status" value="open" type="submit">Reopen registration</button>
+        </form>
+      <% } %>
+    <% } %>
+  </section>
+<% } %>
 <div class="card medium">
   <h1><%= title %></h1>
   <%- include('../partials/errors') %>

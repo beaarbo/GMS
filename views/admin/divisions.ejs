@@ -7,10 +7,6 @@
     <h1>Divisions</h1>
     <p class="sub"><%= competition.name %> · divisions with entries</p>
   </div>
-  <div class="actions">
-    <a class="btn secondary" href="/admin/competitions/<%= competition.id %>/setup">Division setup</a>
-    <% if (kyorugi) { %><a class="btn secondary" href="/admin/competitions/<%= competition.id %>/export.csv">Export approved (CSV)</a><% } %>
-  </div>
 </div>
 
 <% if (bothEvents) { %><nav class="card programme-nav" aria-label="Divisions by event"><%- include('../partials/event_tabs', { page: 'divisions' }) %></nav><% } %>

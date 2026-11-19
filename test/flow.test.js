@@ -1282,17 +1282,17 @@ test('coaches see a bout list only once published, limited to their divisions', 
     ['dragons@test.test', 'tigers@test.test']
   );
 
-  const page = await club.get(coachPage);
+  const page = await club.get(coachPage).redirects(1);
   assert.equal(page.status, 200);
-  assert.match(page.text, /Your athletes/);
+  assert.match(page.text, /Your competitors/);
   assert.match(page.text, /Reyes|Alpha/);
-  assert.match(page.text, /Bout \d+, \d\d:\d\d/);
+  assert.match(page.text, /<td class="nowrap">Bout \d+<\/td>\s*<td class="nowrap">\d\d:\d\d<\/td>/);
   assert.equal((await club.get(`${coachPage}.pdf`)).headers['content-type'], 'application/pdf');
-  assert.match((await club.get(`/club/competitions/${compId}`)).text, /View bout list/);
+  assert.match((await club.get(`/club/competitions/${compId}`)).text, new RegExp(`href="/competitions/${compId}/bouts\\?club=mine">Our bouts`));
 
   // A club with no athletes in the draw sees none of its fighters.
   const other = await signUpClub(app, 'Phoenix', 'phoenix@test.test');
-  const outsider = await other.get(coachPage);
+  const outsider = await other.get(coachPage).redirects(1);
   assert.ok(!outsider.text.includes('Alpha'));
   assert.equal((await other.get(`${coachPage}.pdf`)).status, 404);
 
@@ -1317,7 +1317,7 @@ test('coaches see where each athlete stands as results come in', async () => {
   await post(admin, `${results}/${semiB.id}`, { winner: side(semiB) }, results);
   await post(admin, `${results}/${final.id}`, { winner: 'blue' }, results);
 
-  const page = await club.get(`/club/competitions/${compId}/bouts`);
+  const page = await club.get(`/club/competitions/${compId}/bouts`).redirects(1);
   assert.match(page.text, /<td>Gold<\/td>/);
   assert.match(page.text, /<td>Silver<\/td>/);
   assert.match(page.text, /class="winner/);
@@ -1816,7 +1816,8 @@ test('officials run the weigh-in and results, and nothing else', async () => {
   assert.match(tabs, /Weigh-in[\s\S]*Bout calling/);
   assert.doesNotMatch(tabs, /Registrations|Bout list|Stats|Settings/);
   const adminTabs = (await admin.get(`/admin/competitions/${compId}/registrations`)).text;
-  assert.match(adminTabs, /aria-current="page">Registrations<[\s\S]*Bout list[\s\S]*Stats[\s\S]*<summary>Settings</);
+  assert.match(adminTabs, />Setup<\/a>[\s\S]*aria-current="page">Registrations<[\s\S]*Bout list[\s\S]*Stats/);
+  assert.doesNotMatch(adminTabs, /<summary>Settings</, 'Setup is a tab now, not a menu');
 
   // The Stats page counts the competition's athletes and entries.
   const stats = await admin.get(`/admin/competitions/${compId}/stats`);
@@ -1940,13 +1941,13 @@ test('court screens show the bout on now, what is next and recent results', asyn
   assert.equal((await club.get(`/screens/${compId}/1/1`)).status, 404);
   await post(admin, `${bouts}/publish`, {}, bouts);
   assert.equal((await club.get(`/screens/${compId}/1/1`)).status, 200);
-  // Coaches find them from their bout list and their Home page.
+  // Coaches find them from their bout list, which Home leads to.
   const courtLink = new RegExp(`href="/screens/${compId}">Court screens`);
-  assert.match((await club.get(`/club/competitions/${compId}/bouts`)).text, courtLink);
-  assert.match((await club.get('/home')).text, courtLink);
+  assert.match((await club.get(`/club/competitions/${compId}/bouts`).redirects(1)).text, courtLink);
+  assert.match((await club.get('/home')).text, new RegExp(`href="/competitions/${compId}/bouts\\?club=mine">Our bouts`));
   const coachIndex = await club.get(`/screens/${compId}`);
   assert.equal(coachIndex.status, 200);
-  assert.match(coachIndex.text, new RegExp(`href="/club/competitions/${compId}/bouts">Bout list`), 'the way back goes to their bout list');
+  assert.match(coachIndex.text, new RegExp(`href="/competitions/${compId}/bouts\\?club=mine">Our bouts`), 'the way back goes to their bout list');
   // Visitors see the published screens too, without logging in.
   const visitorScreen = await request(app).get(`/screens/${compId}/1/1`);
   assert.equal(visitorScreen.status, 200);
@@ -2134,15 +2135,17 @@ test('the admin dashboard gives an overview, and competitions are managed on the
   assert.doesNotMatch(dash, /Review registrations/);
   // What needs doing, with links.
   assert.match(dash, /Needs attention/);
-  assert.match(dash, new RegExp(`Open is closed: run the weigh-in, then draw the bout list[\\s\\S]*href="/admin/competitions/${compId}/bouts"`));
-  assert.match(dash, new RegExp(`Spring Draft needs a logo and a description[\\s\\S]*href="/admin/competitions/${draft}/files"`));
+  // The same next step the competition's pages show: here, the weigh-in.
+  assert.match(dash, new RegExp(`Open: 2 athletes are not weighed yet\\.[\\s\\S]*href="/admin/competitions/${compId}/weigh-in"`));
+  assert.match(dash, new RegExp(`Spring Draft: It needs a logo and a description[\\s\\S]*href="/admin/competitions/${draft}/files"`));
   // Totals for the site.
   assert.match(dash, /Competitions<\/span>\s*<strong class="stat-value">2<\/strong>/);
   assert.match(dash, /0 open · 1 closed · 1 draft/);
   assert.match(dash, /Clubs<\/span>\s*<strong class="stat-value">2<\/strong>/);
   assert.match(dash, /Athletes<\/span>\s*<strong class="stat-value">2<\/strong>/);
   // Coming up, recent activity and news, each linking onwards.
-  assert.match(dash, new RegExp(`Coming up[\\s\\S]*href="/admin/competitions#competition-${compId}"`));
+  // Coming up links each competition to its next job, here the weigh-in.
+  assert.match(dash, new RegExp(`Coming up[\\s\\S]*class="title-link" href="/admin/competitions/${compId}/weigh-in"`));
   assert.match(dash, /Recent activity[\s\S]*href="\/admin\/activity"/);
   assert.match(dash, /Latest news[\s\S]*No news posted yet/);
   assert.match(dash, /<a href="\/admin" aria-current="page">Dashboard<\/a>/);
@@ -2156,7 +2159,13 @@ test('the admin dashboard gives an overview, and competitions are managed on the
   assert.match((await admin.get(`/admin/competitions/${compId}/registrations`)).text, /class="breadcrumb"><a href="\/admin\/competitions">Competitions<\/a>/);
   const status = await post(admin, `/admin/competitions/${draft}/status`, { status: 'open' }, '/admin/competitions');
   assert.equal(status.headers.location, `/admin/competitions/${draft}/files`, 'publishing without a logo sends you to add one');
-  assert.equal((await post(admin, `/admin/competitions/${compId}/status`, { status: 'closed' }, '/admin/competitions')).headers.location, '/admin/competitions');
+  // A status change goes straight on to the next job: closing leads to the weigh-in,
+  // and a refusal from Setup's Registration card goes back to that card.
+  assert.equal((await post(admin, `/admin/competitions/${compId}/status`, { status: 'closed' }, '/admin/competitions')).headers.location, `/admin/competitions/${compId}/weigh-in`);
+  assert.equal((await post(admin, `/admin/competitions/${compId}/status`, { status: 'draft', back: 'edit' }, '/admin/competitions')).headers.location, `/admin/competitions/${compId}/edit#open-registration`);
+  const setupPage = (await admin.get(`/admin/competitions/${draft}/edit`)).text;
+  assert.match(setupPage, /id="open-registration"[\s\S]*<li class="todo">A logo/, 'Setup lists what must be ready before registration opens');
+  assert.match(setupPage, /value="open" type="submit" disabled>Open registration</);
 
   // Coaches still see the public list under Competitions.
   const coachPage = (await (await login(app, 'tigers@test.test')).get('/home')).text;
@@ -3043,4 +3052,104 @@ test('poomsae judges score from their phones by logging in as officials, and the
   assert.doesNotMatch((await phones[1].get(seat(2))).text, new RegExp(`<h2>${firstName} Judo</h2>`));
   // The activity log names the official who scored.
   assert.ok(db.prepare("SELECT 1 FROM activity_log WHERE action = 'poomsae.judge_mark' AND actor LIKE '%Judge 3%'").get());
+});
+
+test('each competition page says where it stands and the one thing to do next', async () => {
+  const { competitionStage } = require('../src/services');
+  const { db, app } = await setup();
+  const stageOf = (id) => competitionStage(db, db.prepare('SELECT * FROM competitions WHERE id = ?').get(id));
+
+  // A draft without its logo is sent to add one; with it, to open registration.
+  const draft = createCompetition(db, { name: 'Draft Cup', event_date: `${EVENT_YEAR}-06-01`, registration_deadline: `${EVENT_YEAR}-05-01`, venue: 'Hall', description: 'x' });
+  assert.deepEqual([stageOf(draft).stage, stageOf(draft).next.href], ['draft', `/admin/competitions/${draft}/files`]);
+
+  const { compId, admin } = await closedCompetitionWithFighters(db, app, [['T', 'Alpha'], ['D', 'Bravo']]);
+  // Closed, nobody weighed: the weigh-in, which officials can reach too.
+  let stage = stageOf(compId);
+  assert.equal(stage.stage, 'closed');
+  assert.deepEqual([stage.next.href, stage.next.staff], [`/admin/competitions/${compId}/weigh-in`, true]);
+  const page = (await admin.get(`/admin/competitions/${compId}/registrations`)).text;
+  assert.match(page, /class="next-step" data-stage="closed"[\s\S]*2 athletes are not weighed yet[\s\S]*href="\/admin\/competitions\/\d+\/weigh-in">Weigh-in/);
+
+  // Weighed: draw; drawn: publish; published: record results.
+  db.prepare("UPDATE registrations SET weigh_status = 'passed'").run();
+  assert.equal(stageOf(compId).next.label, 'Draw the bout list');
+  await post(admin, `/admin/competitions/${compId}/bouts/generate`, { courts: '1', start: '09:00', minutes: '10', rest: '0' }, `/admin/competitions/${compId}/bouts`);
+  assert.deepEqual([stageOf(compId).stage, stageOf(compId).next.label], ['drawn', 'Publish the bout list']);
+  db.prepare("UPDATE competitions SET bouts_published_at = datetime('now') WHERE id = ?").run(compId);
+  assert.deepEqual([stageOf(compId).stage, stageOf(compId).next.label], ['running', 'Record results']);
+  // Once its days are over, it's finished and points at the results.
+  db.prepare("UPDATE competition_dates SET event_date = '2020-01-01' WHERE competition_id = ?").run(compId);
+  db.prepare("UPDATE competitions SET event_date = '2020-01-01' WHERE id = ?").run(compId);
+  assert.deepEqual([stageOf(compId).stage, stageOf(compId).next.href], ['finished', `/competitions/${compId}/results`]);
+
+  // Tabs that aren't ready yet show greyed with the reason, instead of vanishing.
+  const open = openCompetition(db, { name: 'Later' });
+  const tabs = (await admin.get(`/admin/competitions/${open}/registrations`)).text;
+  assert.match(tabs, /class="comp-tab-off" aria-disabled="true" title="Available after registration closes">Bout list/);
+});
+
+test('officials reach each court\'s mat and every judge seat in one tap from their start page', async () => {
+  const { db, app } = await setup();
+  const { compId, admin } = await closedCompetitionWithFighters(db, app, [['T', 'Alpha'], ['D', 'Bravo']]);
+  await post(admin, `/admin/competitions/${compId}/bouts/generate`, { courts: '1', start: '09:00', minutes: '10', rest: '0' }, `/admin/competitions/${compId}/bouts`);
+  assert.ok(await createOfficialAccount(db, { full_name: 'Olive', email: 'olive@test.test', password: PASSWORD }));
+  const official = await login(app, 'olive@test.test');
+  const home = (await official.get('/official')).text;
+  assert.match(home, new RegExp(`href="/admin/competitions/${compId}/mat/1/1">\\s*<strong>Court 1</strong>`));
+  // Results lists the mats too, so no day and court filter is needed first.
+  assert.match((await official.get(`/admin/competitions/${compId}/results`)).text, new RegExp(`Record at a mat[\\s\\S]*href="/admin/competitions/${compId}/mat/1/1"`));
+  // The mat's way back goes to the official's start page.
+  assert.match((await official.get(`/admin/competitions/${compId}/mat/1/1`)).text, /href="\/official">Competition day</);
+});
+
+test('coaches follow their club on the shared bout list, and uploads return to the entry page', async () => {
+  const { db, app } = await setup();
+  const { compId, admin, club } = await closedCompetitionWithFighters(db, app, [['T', 'Alpha'], ['D', 'Bravo']]);
+  await post(admin, `/admin/competitions/${compId}/bouts/generate`, { courts: '1', start: '09:00', minutes: '10', rest: '0' }, `/admin/competitions/${compId}/bouts`);
+  db.prepare("UPDATE competitions SET bouts_published_at = datetime('now') WHERE id = ?").run(compId);
+  // The old club bout page (still in older emails) leads to the one shared page.
+  assert.equal((await club.get(`/club/competitions/${compId}/bouts`)).headers.location, `/competitions/${compId}/bouts?club=mine`);
+  // Home is the hub: the published competition's one main button is the club's bouts.
+  const home = (await club.get('/home')).text;
+  assert.match(home, new RegExp(`class="btn" href="/competitions/${compId}/bouts\\?club=mine">Our bouts<`));
+  assert.match(home, /<strong>\d+<\/strong> athletes?/);
+
+  // A document opened from the entry page goes back there; anything else goes to the athlete list.
+  // A new athlete, not entered yet, so their document can still be uploaded.
+  await addFighter(club, { last_name: 'Charlie', date_of_birth: JUNIOR_DOB }, { withDocument: false });
+  const fighter = db.prepare("SELECT id FROM fighters WHERE last_name = 'Charlie'").get();
+  const back = `/club/competitions/${compId}`;
+  const form = (await club.get(`/club/fighters/${fighter.id}/document?back=${encodeURIComponent(back)}`)).text;
+  assert.match(form, new RegExp(`action="/club/fighters/${fighter.id}/document\\?back=${encodeURIComponent(back).replace(/%/g, '%')}"`));
+  assert.match(form, new RegExp(`class="btn secondary" href="${back}">Back<`));
+  const elsewhere = (await club.get(`/club/fighters/${fighter.id}/document?back=${encodeURIComponent('https://evil.test/')}`)).text;
+  assert.match(elsewhere, /class="btn secondary" href="\/club">Back</, 'only club entry pages are accepted');
+
+  // Once the event is over, Home keeps it with a Results button for a month.
+  db.prepare("UPDATE competition_dates SET event_date = date('now', '-3 days') WHERE competition_id = ?").run(compId);
+  db.prepare('UPDATE bouts SET winner_registration_id = blue_registration_id WHERE blue_registration_id IS NOT NULL AND red_registration_id IS NOT NULL').run();
+  const after = (await club.get('/home')).text;
+  assert.match(after, /badge closed">Finished</);
+  assert.match(after, new RegExp(`class="btn" href="/competitions/${compId}/results\\?club=mine">Results<`));
+});
+
+test('visitors find an athlete on the bout list, matching only names as shown', async () => {
+  const { saveSettings } = require('../src/settings');
+  const { db, app } = await setup();
+  const { compId, admin } = await closedCompetitionWithFighters(db, app, [['T', 'Alpha'], ['D', 'Bravo']]);
+  await post(admin, `/admin/competitions/${compId}/bouts/generate`, { courts: '1', start: '09:00', minutes: '10', rest: '0' }, `/admin/competitions/${compId}/bouts`);
+  db.prepare("UPDATE competitions SET bouts_published_at = datetime('now') WHERE id = ?").run(compId);
+  const visitor = request(app);
+  const find = async (q) => (await visitor.get(`/competitions/${compId}/bouts?q=${encodeURIComponent(q)}`)).text;
+  assert.match(await find('alpha'), /Alpha/);
+  assert.match(await find('dragons'), /Bravo/, 'a club name finds its athletes');
+  assert.match(await find('nobody here'), /No one called &#34;nobody here&#34; is on the published bout list/);
+
+  // With initials on, a visitor sees "Alpha A." for Ana Alpha, so her first name finds nothing.
+  saveSettings(db, { public_names: 'initials' });
+  assert.match(await find('alpha'), /Alpha A\./);
+  assert.doesNotMatch(await find('ana alpha'), /Alpha A\./, 'a hidden full name is never confirmed');
+  // Visitors get Competitions and News in the top bar.
+  assert.match((await visitor.get('/')).text, /class="nav visitor-nav"[\s\S]*href="\/news">News</);
 });

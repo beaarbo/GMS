@@ -4,7 +4,7 @@
 // see only what has been published (the kyorugi bout list, each poomsae stage),
 // with short names when the organiser chose them, and photos are for staff only.
 const express = require('express');
-const { listBouts, getEventDates, poomsaeCourtItems, poomsaeCourtQueue, listBoutCalls, calledBouts, calledDivision, callTime, callText } = require('../services');
+const { listBouts, getEventDates, poomsaeCourtItems, poomsaeCourtQueue, listBoutCalls, calledBouts, calledDivision, callTime, callText, courtList } = require('../services');
 const { formatDay } = require('../divisions');
 const { hasPoomsae } = require('../poomsae');
 const { forVisitor } = require('../settings');
@@ -82,24 +82,11 @@ const updatedAt = () => new Date().toLocaleTimeString('en-GB', { hour: '2-digit'
 router.get('/:id(\\d+)', screenCompetition('any'), (req, res) => {
   const { db } = req.app.locals;
   const competition = req.competition;
-  const dates = getEventDates(db, competition.id);
-  const courts = new Map();
-  const count = (kind, item) => {
-    const key = `${item.day}:${kind}:${item.court}`;
-    const entry = courts.get(key) || { kind, day: item.day, court: item.court, total: 0, done: 0 };
-    entry.total += 1;
-    if (item.kind === 'perform' ? item.done : item.winner || item.noContest) entry.done += 1;
-    courts.set(key, entry);
-  };
-  if (kyorugiVisible(req.user, competition)) listBouts(db, competition.id).forEach((b) => count('kyorugi', b));
-  if (poomsaeVisible(req.user, competition)) {
-    poomsaeCourtItems(db, competition, { published: !isStaff(req.user) }).forEach((item) => count('poomsae', item));
-  }
-  const days = [...new Set([...courts.values()].map((c) => c.day))].sort((a, b) => a - b).map((day) => ({
-    day,
-    label: dates[day - 1] ? `Day ${day} (${formatDay(dates[day - 1])})` : `Day ${day}`,
-    courts: [...courts.values()].filter((c) => c.day === day).sort((a, b) => a.kind.localeCompare(b.kind) || a.court - b.court),
-  }));
+  const days = courtList(db, competition, {
+    kyorugi: kyorugiVisible(req.user, competition),
+    poomsae: poomsaeVisible(req.user, competition),
+    published: !isStaff(req.user),
+  });
   res.render('screens/index', { title: 'Court screens', competition, days });
 });
 

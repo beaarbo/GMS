@@ -1,5 +1,5 @@
 <%- include('../partials/top') %>
-<p class="breadcrumb"><a href="/club">Club dashboard</a></p>
+<p class="breadcrumb"><a href="/club">Athletes</a></p>
 <div class="page-head">
   <div>
     <h1><%= competition.name %>: poomsae</h1>
@@ -39,7 +39,7 @@
                   <td><%= beltName(a.belt_rank) %></td>
                   <td>
                     <% if (!a.fits.ok) { %><span class="hint"><%= a.fits.error %></span>
-                    <% } else if (!a.has_document) { %><a class="btn small" href="/club/fighters/<%= a.id %>/document">Upload <%= documentLabel(documentTypeFor(a.belt_rank)) %> first</a>
+                    <% } else if (!a.has_document) { %><a class="btn small" href="/club/fighters/<%= a.id %>/document?back=<%= encodeURIComponent(`/club/competitions/${competition.id}/poomsae`) %>">Upload <%= documentLabel(documentTypeFor(a.belt_rank)) %> first</a>
                     <% } else if (!freeIds.has(a.id)) { %><span class="hint">Entered</span><% } %>
                   </td>
                 </tr>

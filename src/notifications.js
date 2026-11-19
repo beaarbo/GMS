@@ -195,12 +195,12 @@ function notifyBoutListPublished(ctx, competition) {
     )
     .all(competition.id);
   const emails = clubs.flatMap((club) => clubCoachEmails(db, club.club_id, 'published'));
-  addNotifications(db, clubs.flatMap((club) => clubCoachIds(db, club.club_id)), `The bout list for ${competition.name} is published.`, `/club/competitions/${competition.id}/bouts`);
+  addNotifications(db, clubs.flatMap((club) => clubCoachIds(db, club.club_id)), `The bout list for ${competition.name} is published.`, `/competitions/${competition.id}/bouts?club=mine`);
   return sendAll(
     ctx,
     emails,
     `Bout list published: ${competition.name}`,
-    `The bout list for ${competition.name} (${formatEventDates(getEventDates(db, competition.id))}) is ready.\n\nSee your athletes' bouts, courts and times: ${ctx.publicUrl}/club/competitions/${competition.id}/bouts`
+    `The bout list for ${competition.name} (${formatEventDates(getEventDates(db, competition.id))}) is ready.\n\nSee your athletes' bouts, courts and times: ${ctx.publicUrl}/competitions/${competition.id}/bouts?club=mine`
   );
 }
 

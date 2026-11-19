@@ -1,5 +1,6 @@
 <%- include('partials/top') %>
 <% const pdfQuery = new URLSearchParams(Object.entries({ event: filters.event, club: filters.clubId ? 'mine' : null }).filter(([, v]) => v)).toString(); %>
+<% const clearSearch = `/competitions/${competition.id}/bouts${filters.event ? `?event=${filters.event}` : ''}`; %>
 <p class="breadcrumb"><a href="/competitions/<%= competition.id %>"><%= competition.name %></a></p>
 <div class="page-head">
   <div>
@@ -8,7 +9,7 @@
   </div>
   <% if (parts.length > 0) { %>
     <div class="actions">
-      <a class="btn" href="/competitions/<%= competition.id %>/bouts.pdf<%= pdfQuery ? `?${pdfQuery}` : '' %>">Download PDF</a>
+      <a class="btn secondary" href="/competitions/<%= competition.id %>/bouts.pdf<%= pdfQuery ? `?${pdfQuery}` : '' %>">Download PDF</a>
       <% if (competition.status === 'closed') { %><a class="btn secondary" href="/screens/<%= competition.id %>">Court screens</a><% } %>
     </div>
   <% } %>
@@ -57,7 +58,7 @@
 <% } %>
 
 <% if (parts.length === 0) { %>
-  <% if (!competitors) { %><section class="card"><p class="empty">Nothing is published for these filters yet.</p></section><% } %>
+  <% if (!competitors) { %><%- include('partials/empty', filters.q ? { message: `No one called "${filters.q}" is on the published bout list.`, href: clearSearch, label: 'Show everyone' } : { message: 'Nothing is published for these filters yet.', href: `/competitions/${competition.id}/bouts`, label: 'Show everything' }) %><% } %>
 <% } else { %>
   <% const days = [...new Set(parts.map((p) => p.dayLabel || ''))]; %>
   <% if (!competitors) { %>

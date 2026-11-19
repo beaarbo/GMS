@@ -58,7 +58,7 @@
                           <button class="btn danger small" name="action" value="clear" type="submit">Undo</button>
                         </form>
                       <% } %>
-                    <% } else if (e.score !== null) { %><%= formatScore(e.score) %><% if (d.bouts) { %><div class="hint">Delete the bracket on the Bout list to undo</div><% } %><% } %>
+                    <% } else if (e.score !== null) { %><%= formatScore(e.score) %><% if (d.bouts && user.role === 'admin') { %><div class="hint">Delete the bracket on the Bout list to undo</div><% } %><% } %>
                   </td>
                 </tr>
               <% }) %>
@@ -110,7 +110,7 @@
           </table>
         </div>
       <% } else if (d.mode !== 'score') { %>
-        <p class="hint"><%= d.mode === 'cut' ? 'The final-round bracket is drawn once the score round is complete, on the Bout list.' : 'The bracket is drawn on the Bout list.' %></p>
+        <p class="hint"><%= d.mode === 'cut' ? 'The final-round bracket is drawn once the score round is complete' : 'The bracket isn\'t drawn yet' %><%= user.role === 'admin' ? ', on the Bout list.' : '.' %></p>
       <% } %>
     </section>
   <% }) %>

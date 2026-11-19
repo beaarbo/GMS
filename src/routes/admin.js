@@ -12,6 +12,7 @@ const {
   loadDivisionSetup,
   countRegistrations,
   competitionStats,
+  competitionStage,
   saveDivisionSetup,
   savePoomsaeAgeGroups,
   getEventDates,
@@ -176,14 +177,15 @@ function attentionItems(db, competitions, { emailConfigured, backupsDir }) {
     if (c.poomsae_pending > 0) {
       items.push({ level: 'info', text: `${c.poomsae_pending} poomsae entr${c.poomsae_pending === 1 ? 'y' : 'ies'} waiting for review in ${c.name}.`, href: `/admin/competitions/${c.id}/registrations#poomsae`, link: 'Review' });
     }
-    if (c.status === 'closed' && upcomingOrRunning(c) && c.approved > 0 && c.bout_count === 0) {
-      items.push({ level: 'info', text: `${c.name} is closed: run the weigh-in, then draw the bout list.`, href: `/admin/competitions/${c.id}/bouts`, link: 'Bout list' });
-    }
-    if (c.status === 'closed' && upcomingOrRunning(c) && c.bout_count > 0 && !c.bouts_published_at) {
-      items.push({ level: 'info', text: `The bout list for ${c.name} is drawn but coaches can't see it yet.`, href: `/admin/competitions/${c.id}/bouts`, link: 'Publish' });
-    }
-    if (c.status === 'draft' && (!hasCompetitionLogo(db, c.id) || !String(c.description || '').trim())) {
-      items.push({ level: 'info', text: `${c.name} needs a logo and a description before it can open.`, href: `/admin/competitions/${c.id}/files`, link: 'Add them' });
+    // Between registration and the event, the same next step its pages show (weigh-in,
+    // draw, publish, kyorugi and poomsae alike). Entry reviews are listed above; a draft
+    // only when it's missing what it needs to open.
+    if (c.status !== 'open' && (c.status === 'draft' || upcomingOrRunning(c))) {
+      const stage = competitionStage(db, c);
+      const wanted = { draft: stage.next && stage.next.href.endsWith('/files'), closed: true, drawn: true }[stage.stage];
+      if (wanted && stage.next && !stage.next.href.includes('/registrations')) {
+        items.push({ level: 'info', text: `${c.name}: ${stage.note}`, href: stage.next.href, link: stage.next.label });
+      }
     }
   });
   if (backupsDir) {
@@ -214,7 +216,8 @@ router.get('/', (req, res) => {
       athletes: count('SELECT COUNT(*) AS n FROM fighters'),
       news: count('SELECT COUNT(*) AS n FROM news_posts'),
     },
-    upcoming: competitions.filter((c) => c.status !== 'draft' && c.last_day && c.last_day >= today()).sort((a, b) => a.event_date.localeCompare(b.event_date)).slice(0, 4),
+    upcoming: competitions.filter((c) => c.status !== 'draft' && c.last_day && c.last_day >= today()).sort((a, b) => a.event_date.localeCompare(b.event_date)).slice(0, 4)
+      .map((c) => ({ ...c, stage: competitionStage(db, c) })),
     activity: listActivity(db, {}, { limit: 8, offset: 0 }),
     news: listNews(db, { signedIn: true, limit: 3 }),
     formatActivityTime,
@@ -349,8 +352,17 @@ router.get('/competitions/:id(\\d+)/edit', (req, res) => {
     action: `/admin/competitions/${req.competition.id}`,
     locked: countRegistrations(req.app.locals.db, req.competition.id) > 0,
     formatLocked: hasPoomsaeResults(req.app.locals.db, req.competition.id),
+    registration: registrationReadiness(req.app.locals.db, req.competition),
   });
 });
+
+// What the Registration card on Setup shows: what's ready before registration can open.
+function registrationReadiness(db, competition) {
+  const hasLogo = hasCompetitionLogo(db, competition.id);
+  const hasDescription = Boolean(String(competition.description || '').trim());
+  const passed = deadlinePassed(competition);
+  return { hasLogo, hasDescription, deadlinePassed: passed, ready: hasLogo && hasDescription && !passed, drawn: hasBoutList(db, competition.id) };
+}
 
 router.post('/competitions/:id(\\d+)', (req, res) => {
   const { db } = req.app.locals;
@@ -421,36 +433,43 @@ router.post('/competitions/:id(\\d+)/status', (req, res) => {
   const status = req.body.status;
   if (!['draft', 'open', 'closed'].includes(status)) return notFound(res);
   const { db } = req.app.locals;
+  const base = `/admin/competitions/${req.competition.id}`;
+  // Refusals go back where the button was: Setup's Registration card, or the list.
+  const back = req.body.back === 'edit' ? `${base}/edit#open-registration` : '/admin/competitions';
   if (status === 'draft' && countRegistrations(db, req.competition.id) > 0) {
     req.flash('error', 'A competition with registrations cannot go back to draft. Close it instead.');
-    return res.redirect('/admin/competitions');
+    return res.redirect(back);
   }
   if (status !== 'closed' && hasBoutList(db, req.competition.id)) {
     req.flash('error', 'Delete the bout list before reopening registration.');
-    return res.redirect('/admin/competitions');
+    return res.redirect(back);
   }
   if (status !== 'closed' && hasPoomsaeResults(db, req.competition.id)) {
     req.flash('error', 'Clear the poomsae scores and brackets before reopening registration.');
-    return res.redirect('/admin/competitions');
+    return res.redirect(back);
   }
   if (status === 'open' && (!hasCompetitionLogo(db, req.competition.id) || !req.competition.description.trim())) {
     req.flash('error', `${req.competition.name} needs a logo and a description before clubs can register. Add them first.`);
     return res.redirect(hasCompetitionLogo(db, req.competition.id) ? `/admin/competitions/${req.competition.id}/edit` : filesPath(req.competition));
   }
   if (status === 'open' && deadlinePassed(req.competition)) {
-    req.flash('error', 'The registration deadline has passed. Edit the competition to set a later deadline first.');
-    return res.redirect('/admin/competitions');
+    req.flash('error', 'The registration deadline has passed. Set a later deadline first.');
+    return res.redirect(`${base}/edit`);
   }
   db.prepare('UPDATE competitions SET status = ? WHERE id = ?').run(status, req.competition.id);
   const actions = { open: 'Opened registration for', closed: 'Closed registration for', draft: 'Moved to draft:' };
   req.logActivity('competition.status', `${actions[status]} ${req.competition.name}`, req.competition.id);
-  const messages = {
-    open: 'Competition published. Clubs can now register.',
-    closed: 'Registration closed. You can now generate the bout list.',
-    draft: 'Competition moved back to draft.',
-  };
-  req.flash('success', messages[status]);
-  return res.redirect('/admin/competitions');
+  // Then straight on to the next job: entries to review, the weigh-in or the draw.
+  const weighIn = hasKyorugi(req.competition) && db.prepare("SELECT 1 FROM registrations WHERE competition_id = ? AND status = 'approved' LIMIT 1").get(req.competition.id);
+  const next = {
+    open: [`${base}/registrations`, 'Registration is open. Clubs can now enter athletes, and their entries show up here.'],
+    closed: weighIn
+      ? [`${base}/weigh-in`, 'Registration closed. Run the weigh-in next, then draw the bout list.']
+      : [`${base}/bouts`, 'Registration closed. Draw the bout list next.'],
+    draft: [`${base}/edit`, 'Competition moved back to draft.'],
+  }[status];
+  req.flash('success', next[1]);
+  return res.redirect(next[0]);
 });
 
 function filesPage(req, res, status = 200, error = null) {

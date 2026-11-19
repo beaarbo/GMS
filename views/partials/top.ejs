@@ -40,8 +40,12 @@
       const link = (href, label) => `<a href="${href}"${current(href) ? ' aria-current="page"' : ''}>${label}</a>`;
     %>
     <% if (!user) { %>
-    <%# Visitors: the front page has competitions and news, so the bar only needs a way in. %>
-    <% if (!['/login', '/register', '/login/code'].includes(currentPath)) { %><a class="btn small topbar-login" href="/login">Log in</a><% } %>
+    <%# Visitors: the two public sections, then a way in. Short enough not to need a phone menu. %>
+    <nav class="nav visitor-nav" aria-label="Main">
+      <%- link('/', 'Competitions') %>
+      <%- link('/news', 'News') %>
+      <% if (!['/login', '/register', '/login/code'].includes(currentPath)) { %><a class="btn small topbar-login" href="/login">Log in</a><% } %>
+    </nav>
     <% } else { %>
     <%# On phones, public/app.js folds the menu behind this button. Without JavaScript the menu stays open. %>
     <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="main-nav" hidden><span class="nav-toggle-label">Menu</span><% if (user.role !== 'official' && user.unread > 0) { %><span class="nav-count"><%= user.unread > 99 ? '99+' : user.unread %><span class="visually-hidden"> unread notifications</span></span><% } %></button>
@@ -53,7 +57,7 @@
         <%- link('/official', 'Competition day') %>
       <% } else { %>
         <%- link('/home', 'Home') %>
-        <%- user.club_id ? link('/club', 'Club dashboard') : link('/coach', 'Join a club') %>
+        <%- user.club_id ? link('/club', 'Athletes') : link('/coach', 'Join a club') %>
       <% } %>
       <%# Admins manage competitions; coaches see the public list. Officials only need Competition day. %>
       <% if (user.role !== 'official') { %>

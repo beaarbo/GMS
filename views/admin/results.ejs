@@ -24,6 +24,21 @@
   <% if (bothEvents) { %><%- include('../partials/event_tabs', { page: 'results' }) %><% } %>
 </nav>
 
+<% if (mats.length > 0) { %>
+  <%# Record at a court: each court's mat, one tap away. %>
+  <section class="card mats">
+    <h2>Record at a mat</h2>
+    <% mats.forEach((d) => { %>
+      <div class="mat-row">
+        <% if (mats.length > 1) { %><span class="hint"><%= d.label %></span><% } %>
+        <% d.courts.forEach((c) => { const poomsae = c.kind === 'poomsae'; %>
+          <a class="btn secondary small" href="/admin/competitions/<%= competition.id %>/<%= poomsae ? 'poomsae/mat' : 'mat' %>/<%= d.day %>/<%= c.court %>">Court <%= c.court %><%= poomsae ? ' · Poomsae' : '' %> <span class="hint"><%= c.done %>/<%= c.total %></span></a>
+        <% }) %>
+      </div>
+    <% }) %>
+  </section>
+<% } %>
+
 <%# Kyorugi first, then poomsae. Both are laid out the same way: one card per division with its medallists and bouts, then the event's medal standings. %>
 <% if (showKyorugi) { %>
 <section id="kyorugi">
@@ -41,9 +56,9 @@
     </div>
   </div>
   <% if (total === 0) { %>
-    <section class="card"><p class="empty">There are no bouts to record. <% if (isAdmin) { %><a href="/admin/competitions/<%= competition.id %>/bouts">Generate the bout list</a> first.<% } else { %>The organiser needs to draw the bout list first.<% } %></p></section>
+    <section class="card"><p class="empty">There are no bouts to record. <% if (isAdmin) { %><a href="/admin/competitions/<%= competition.id %>/bouts">Draw the bout list</a> first.<% } else { %>The organiser needs to draw the bout list first.<% } %></p></section>
   <% } else { %>
-    <p class="hint">Click the winner. They move into their next bout automatically. Choosing how it was won and the score is optional.</p>
+    <p class="hint">Tap the winner. They move into their next bout automatically. Choosing how it was won and the score is optional.</p>
     <section class="card">
       <form method="get" class="filters">
         <% if (event) { %><input type="hidden" name="event" value="<%= event %>"><% } %>
